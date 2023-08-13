@@ -20,32 +20,28 @@ namespace {
 
 // To ensure correct resolution of symbols, add Psapi.lib to TARGETLIBS
 // and compile with -DPSAPI_VERSION=1
-Process GetProcNameAndId(DWORD processID) {
+Process GetProcNameAndId(DWORD pid) {
   TCHAR sz_process_name[1024] = TEXT("<unknown>");
 
   // Get a handle to the process.
 
-  HANDLE h_process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processID);
+  HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
   // Get the process name.
-  if (nullptr != h_process) {
-    HMODULE h_mod;
-    DWORD cb_needed;
+  if (nullptr != hproc) {
+    HMODULE hmod;
+    DWORD bytes_needed;
 
-    if (EnumProcessModules(h_process, &h_mod, sizeof(MemoryAddress), &cb_needed)) {
-      GetModuleBaseName(h_process, h_mod, sz_process_name, sizeof(sz_process_name) / sizeof(TCHAR));
+    if (EnumProcessModules(hproc, &hmod, sizeof(MemoryAddress), &bytes_needed)) {
+      GetModuleBaseName(hproc, hmod, sz_process_name, sizeof(sz_process_name) / sizeof(TCHAR));
     }
   }
 
-  CloseHandle(h_process);
-  return {std::string(sz_process_name), processID};
+  CloseHandle(hproc);
+  return {std::string(sz_process_name), pid};
 }
 
 }  // namespace
-
-void TestScan() {}
-
-// bool attach(Pid pid) {}
 
 std::vector<Process> GetProcs() {
   // Get the list of process identifiers.
@@ -55,16 +51,16 @@ std::vector<Process> GetProcs() {
     return {};
   }
 
-  std::span<DWORD> procs_span(procs.data(), bytes_needed / sizeof(DWORD));
-  std::vector<Process> processed_found;
-  processed_found.reserve(procs_span.size());
-  for (auto &p : procs_span) {
-    if (p) {
-      processed_found.emplace_back(GetProcNameAndId(p));
+  std::span<DWORD> pids(procs.data(), bytes_needed / sizeof(DWORD));
+  std::vector<Process> pids_found;
+  pids_found.reserve(pids.size());
+  for (auto &pid : pids) {
+    if (pid) {
+      pids_found.emplace_back(GetProcNameAndId(pid));
     }
   }
 
-  return processed_found;
+  return pids_found;
 }
 
 void ListProcs() {
