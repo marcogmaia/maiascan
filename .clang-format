@@ -1,0 +1,10 @@
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BasedOnStyle: Google
+ColumnLimit: 120
+DerivePointerAlignment: true
+PointerAlignment: Left
+IncludeBlocks: Preserve
+BinPackArguments: false
+BinPackParameters: false
