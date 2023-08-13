@@ -16,4 +16,7 @@ find_package(spdlog REQUIRED)
 
 include_directories("${CMAKE_SOURCE_DIR}/src")
 
+include(CTest)
+include(GoogleTest)
+
 add_subdirectory(src)

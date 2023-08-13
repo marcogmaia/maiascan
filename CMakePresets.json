@@ -71,5 +71,23 @@
       "name": "build-release",
       "configurePreset": "release"
     }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "inheritConfigureEnvironment": true,
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 0
+      }
+    },
+    {
+      "name": "windows-debug",
+      "inherits": "base",
+      "configurePreset": "debug"
+    }
   ]
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <string>
 #include <vector>
 
@@ -7,12 +8,8 @@
 
 namespace maia {
 
-struct Process {
-  std::string name;
-  Pid pid;
-};
+std::vector<ProcessData> GetProcs();
 
-std::vector<Process> GetProcs();
 void ListProcs();
 
 }  // namespace maia

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <string>
 #include <tuple>
@@ -20,7 +21,7 @@ namespace {
 
 // To ensure correct resolution of symbols, add Psapi.lib to TARGETLIBS
 // and compile with -DPSAPI_VERSION=1
-Process GetProcNameAndId(DWORD pid) {
+ProcessData GetProcNameAndId(DWORD pid) {
   TCHAR sz_process_name[1024] = TEXT("<unknown>");
 
   // Get a handle to the process.
@@ -28,7 +29,7 @@ Process GetProcNameAndId(DWORD pid) {
   HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
   // Get the process name.
-  if (nullptr != hproc) {
+  if (hproc) {
     HMODULE hmod;
     DWORD bytes_needed;
 
@@ -43,7 +44,7 @@ Process GetProcNameAndId(DWORD pid) {
 
 }  // namespace
 
-std::vector<Process> GetProcs() {
+std::vector<ProcessData> GetProcs() {
   // Get the list of process identifiers.
   DWORD bytes_needed{};
   std::array<DWORD, 1024> procs;
@@ -52,9 +53,9 @@ std::vector<Process> GetProcs() {
   }
 
   std::span<DWORD> pids(procs.data(), bytes_needed / sizeof(DWORD));
-  std::vector<Process> pids_found;
+  std::vector<ProcessData> pids_found;
   pids_found.reserve(pids.size());
-  for (auto &pid : pids) {
+  for (const auto &pid : pids) {
     if (pid) {
       pids_found.emplace_back(GetProcNameAndId(pid));
     }
