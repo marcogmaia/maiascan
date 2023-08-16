@@ -1,3 +1,4 @@
+add_subdirectory(console)
 add_subdirectory(scanner)
 
 add_executable(maiascan "./main.cpp")
