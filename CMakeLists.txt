@@ -14,6 +14,8 @@ find_package(cli CONFIG REQUIRED)
 find_package(cxxopts CONFIG REQUIRED)
 find_package(MFC REQUIRED)
 find_package(spdlog REQUIRED)
+find_package(tl-expected CONFIG REQUIRED)
+find_package(tl-optional CONFIG REQUIRED)
 
 include_directories("${CMAKE_SOURCE_DIR}/src")
 
