@@ -12,7 +12,7 @@
 #include "maiascan/scanner/scanner.h"
 #include "maiascan/scanner/types.h"
 
-namespace maia {
+namespace maia::scanner {
 
 namespace {
 
@@ -39,24 +39,14 @@ BytesView ToBytesView(T data) {
 
 template <typename T>
 auto SearchT(Process &proc, T needle) {
-  return maia::Search(proc, ToBytesView(needle));
+  return Search(proc, ToBytesView(needle));
 }
 
-std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
-  int total_offsets = 0;
-  for (const auto &match : matches) {
-    total_offsets += match.offsets.size();
-  }
-
-  std::vector<MemoryAddress> addresses;
-  addresses.reserve(total_offsets);
-  for (const auto &match : matches) {
-    for (const auto &offset : match.offsets) {
-      addresses.emplace_back(match.page.address + offset);
-    }
-  }
-  return addresses;
+// template <>
+BytesView ToBytesView(std::string &data) {
+  return BytesView(std::bit_cast<std::byte *>(data.data()), data.size());
 }
+
 
 }  // namespace
 
@@ -79,10 +69,14 @@ TEST(Process, NarrowValue) {
   auto matches = SearchT(process, "hello world");
   ASSERT_TRUE(matches);
 
+  std::string buffer(7, 0);
+
   auto addresses = GetAddressMatches(*matches);
+  ASSERT_TRUE(!addresses.empty());
+  ASSERT_TRUE(process.ReadIntoBuffer(addresses.front(), ToBytesView(buffer)));
 
   auto *base_addr = process.GetBaseAddress().value_or(nullptr);
   int a = 2;
 }
 
-}  // namespace maia
+}  // namespace maia::scanner

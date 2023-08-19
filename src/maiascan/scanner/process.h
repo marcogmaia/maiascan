@@ -7,9 +7,10 @@
 #include <tl/expected.hpp>
 #include <tl/optional.hpp>
 
+#include "maiascan/scanner/match.h"
 #include "maiascan/scanner/types.h"
 
-namespace maia {
+namespace maia::scanner {
 
 class Process {
  public:
@@ -25,9 +26,13 @@ class Process {
 
   tl::optional<Bytes> ReadPage(const MemoryPage& page) const;
 
+  tl::expected<void, std::string> ReadIntoBuffer(MemoryAddress address, BytesView buffer) const;
+
   tl::expected<void, std::string> Write(MemoryAddress address, BytesView value);
 
   tl::optional<MemoryAddress> GetBaseAddress();
+
+  tl::optional<Matches> Find(BytesView needle);
 
   Pid pid() const { return pid_; }
 
@@ -37,4 +42,4 @@ class Process {
   std::vector<MemoryPage> pages_;
 };
 
-}  // namespace maia
+}  // namespace maia::scanner

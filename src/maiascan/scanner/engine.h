@@ -11,16 +11,16 @@
 #include "maiascan/scanner/process.h"
 #include "maiascan/scanner/types.h"
 
-namespace maia {
+namespace maia::scanner {
 
 namespace detail {
 
-inline Match::Offsets SearchOffsets(BytesView haystack, BytesView needle, int align = 1) {
+inline Match::Offsets SearchOffsets(BytesView haystack, BytesView needle, int align = 4) {
   Match::Offsets offsets;
 
   for (auto it = haystack.begin();
        (it = std::search(it, haystack.end(), needle.begin(), needle.end())) != haystack.end();
-       std::advance(it, 4)) {
+       std::advance(it, align)) {
     const auto offset = std::distance(haystack.begin(), it);
     offsets.push_back(offset);
   }
@@ -48,4 +48,6 @@ inline tl::optional<Matches> Search(Process &proc, BytesView bytes) {
   return matches;
 }
 
-}  // namespace maia
+std::vector<MemoryAddress> GetAddressMatches(const Matches &matches);
+
+}  // namespace maia::scanner

@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(GTest REQUIRED)
 
 find_package(cli CONFIG REQUIRED)
-find_package(cxxopts CONFIG REQUIRED)
+find_package(CLI11 CONFIG REQUIRED)
 find_package(MFC REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)

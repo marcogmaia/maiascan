@@ -1,37 +1,33 @@
+
+#include <CLI/CLI.hpp>
+
+#include "maiascan/console/commands.h"
 #include "maiascan/console/console.h"
 
-#include <cli/cli.h>
-#include <cli/clifilesession.h>
+namespace maia ::console {
 
-int main() {
-  // setup cli
-  auto root_menu = std::make_unique<cli::Menu>("cli");
-  // clang-format off
-  root_menu->Insert( "hello", [](std::ostream& out) { out << "Hello, world\n"; }, "Print hello world");
-  root_menu->Insert( "hello_everysession", [](std::ostream&) { cli::Cli::cout() << "Hello, everybody" << std::endl; }, "Print hello everybody on all open sessions");
-  root_menu->Insert( "answer", [](std::ostream& out, int x) { out << "The answer is: " << x << "\n"; }, "Print the answer to Life, the Universe and Everything ");
-  root_menu->Insert( "color", [](std::ostream& out) { out << "Colors ON\n"; cli::SetColor(); }, "Enable colors in the cli");
-  root_menu->Insert( "nocolor", [](std::ostream& out) { out << "Colors OFF\n"; cli::SetNoColor(); }, "Disable colors in the cli");
-  // clang-format on
+namespace {}
 
-  auto sub_menu = std::make_unique<cli::Menu>("sub");
-  // clang-format off
-  sub_menu->Insert( "hello", [](std::ostream& out) { out << "Hello, submenu world\n"; }, "Print hello world in the submenu");
-  sub_menu->Insert( "demo", [](std::ostream& out) { out << "This is a sample!\n"; }, "Print a demo string");
-  // clang-format on
-  // clang-format off
-  auto sub_sub_menu = std::make_unique<cli::Menu>("subsub");
-  sub_sub_menu->Insert( "hello", [](std::ostream& out) { out << "Hello, subsubmenu world\n"; }, "Print hello world in the sub-submenu");
-  sub_menu->Insert(std::move(sub_sub_menu));
-  root_menu->Insert(std::move(sub_menu));
-  // clang-format on
+struct Console::Impl {};
 
-  cli::Cli cli(std::move(root_menu));
-  // global exit action
-  cli.ExitAction([](auto& out) { out << "Goodbye and thanks for all the fish.\n"; });
+Console::Console() : impl_(nullptr) {}
 
-  cli::CliFileSession input(cli);
-  input.Start();
+tl::expected<Command, std::string> Parse(const std::string& command) {
+  CLI::App app("maiascan");
 
-  return 0;
+  bool fl;
+  app.add_flag("-p,--print", fl, "Print configuration and exit");
+
+  int pid;
+  app.add_option("-a,--attach", pid, "Process pid to attach");
+
+  try {
+    app.parse(command);
+  } catch (const CLI ::ParseError& e) {
+    return tl::unexpected(e.what());
+  };
+
+  return CommandAttach{pid};
 }
+
+}  // namespace maia::console

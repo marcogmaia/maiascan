@@ -12,9 +12,10 @@
 #include <tl/expected.hpp>
 #include <tl/optional.hpp>
 
+#include "maiascan/scanner/engine.h"
 #include "maiascan/scanner/types.h"
 
-namespace maia {
+namespace maia::scanner {
 
 namespace {
 
@@ -111,4 +112,17 @@ tl::expected<void, std::string> Process::Write(MemoryAddress address, BytesView 
   return {};
 }
 
-}  // namespace maia
+tl::expected<void, std::string> Process::ReadIntoBuffer(MemoryAddress address, BytesView buffer) const {
+  size_t size_read{};
+  auto success = ReadProcessMemory(handle_, address, buffer.data(), buffer.size_bytes(), &size_read);
+  if (!success || size_read != buffer.size_bytes()) {
+    return tl::unexpected("Failed to read address");
+  }
+  return {};
+};
+
+tl::optional<Matches> Process::Find(BytesView needle) {
+  return Search(*this, needle);
+}
+
+}  // namespace maia::scanner
