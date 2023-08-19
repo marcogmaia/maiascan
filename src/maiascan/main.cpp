@@ -39,7 +39,7 @@ std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
   addresses.reserve(total_offsets);
   for (const auto &match : matches) {
     for (const auto &offset : match.offsets) {
-      addresses.emplace_back(match.page.address + offset);
+      addresses.emplace_back(NextAddress(match.page.address, offset));
     }
   }
   return addresses;

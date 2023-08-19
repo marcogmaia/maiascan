@@ -8,7 +8,7 @@
 
 namespace maia {
 
-using MemoryAddress = uint8_t*;
+using MemoryAddress = void*;
 using Pid = uint32_t;
 
 using Bytes = std::vector<std::byte>;

@@ -22,4 +22,8 @@ tl::optional<Matches> Search(Process &proc, BytesView bytes);
 
 std::vector<MemoryAddress> GetAddressMatches(const Matches &matches);
 
+inline MemoryAddress NextAddress(MemoryAddress address, int64_t diff = 1) {
+  return static_cast<MemoryAddress>(std::next(static_cast<uint8_t *>(address), diff));
+};
+
 }  // namespace maia::scanner

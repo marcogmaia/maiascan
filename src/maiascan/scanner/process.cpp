@@ -41,21 +41,10 @@ std::vector<MemoryPage> GetCheatablePages(HANDLE process_handle) {
     if (CanCheatPage(*page)) {
       pages.emplace_back(address, page->RegionSize);
     }
-    std::advance(address, page->RegionSize);
+    address = NextAddress(address, page->RegionSize);
   }
 
   return pages;
-}
-
-tl::optional<MemoryAddress> GetProcessBaseAddress(Pid pid) {
-  auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
-  MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
-  bool success = Module32First(snapshot, &mod_entry) != 0;
-  if (!success) {
-    auto err = GetLastError();
-    return tl::nullopt;
-  }
-  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
 }
 
 }  // namespace
@@ -64,20 +53,6 @@ const std::vector<MemoryPage>& Process::QueryPages() {
   pages_ = GetCheatablePages(handle_);
   return pages_;
 }
-
-// memory_t WindowsProcess::read(MemoryPage page) const {
-//   memory_t memory(page.size);
-
-//   DWORD total;
-//   if (!ReadProcessMemory(handle, page.address, memory.data(),
-//                          page.size, &total)) {
-//     std::cerr << "Failed to read process memory." << std::endl;
-//     exit(1);
-//   }
-
-//   memory.resize(total);
-//   return memory;
-// }
 
 tl::optional<Bytes> Process::ReadPage(const MemoryPage& page) const {
   Bytes memory(page.size);
@@ -90,19 +65,15 @@ tl::optional<Bytes> Process::ReadPage(const MemoryPage& page) const {
   return memory;
 }
 
-tl::optional<MemoryAddress> Process::GetBaseAddress() {
-  std::string name(1024, 0);
-  K32GetProcessImageFileNameA(handle_, name.data(), name.size());
-  auto* mod_handle = GetModuleHandleA(name.data());
-
-  MODULEINFO module_info{};
-  K32GetModuleInformation(handle_, mod_handle, &module_info, sizeof module_info);
-  // GetProcessInformation(HANDLE hProcess, PROCESS_INFORMATION_CLASS ProcessInformationClass, LPVOID
-  // ProcessInformation, DWORD ProcessInformationSize)
-
-  // auto aaa = GetBaseAddress2(handle_);
-  auto addrr = GetProcessBaseAddress(pid_);
-  return addrr.value_or(nullptr);
+tl::optional<MemoryAddress> Process::GetBaseAddress() const {
+  auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid_);
+  MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
+  bool success = Module32First(snapshot, &mod_entry) != 0;
+  if (!success) {
+    auto err = GetLastError();
+    return tl::nullopt;
+  }
+  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
 }
 
 tl::expected<void, std::string> Process::Write(MemoryAddress address, BytesView value) {

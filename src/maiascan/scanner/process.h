@@ -30,7 +30,7 @@ class Process {
 
   tl::expected<void, std::string> Write(MemoryAddress address, BytesView value);
 
-  tl::optional<MemoryAddress> GetBaseAddress();
+  tl::optional<MemoryAddress> GetBaseAddress() const;
 
   tl::optional<Matches> Find(BytesView needle);
 

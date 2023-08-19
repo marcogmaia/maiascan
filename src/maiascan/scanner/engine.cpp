@@ -4,7 +4,7 @@ namespace maia::scanner {
 
 namespace detail {
 
-inline Match::Offsets SearchOffsets(BytesView haystack, BytesView needle, int align = 4) {
+Match::Offsets SearchOffsets(BytesView haystack, BytesView needle, int align = 4) {
   Match::Offsets offsets;
 
   for (auto it = haystack.begin();
@@ -29,7 +29,7 @@ std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
   addresses.reserve(total_offsets);
   for (const auto &match : matches) {
     for (const auto &offset : match.offsets) {
-      addresses.emplace_back(match.page.address + offset);
+      addresses.emplace_back(NextAddress(match.page.address, offset));
     }
   }
   return addresses;
@@ -47,7 +47,7 @@ tl::optional<Pid> GetPidFromProcessName(const std::string &proc_name) {
   return tl::nullopt;
 }
 
-inline tl::optional<Matches> Search(Process &proc, BytesView bytes) {
+tl::optional<Matches> Search(Process &proc, BytesView bytes) {
   const auto &pages = proc.QueryPages();
   Matches matches;
   matches.reserve(pages.size());
