@@ -4,7 +4,7 @@
   "dependencies": [
     "atlmfc",
     "cli",
-    "cxxopts",
+    "cli11",
     "fmt",
     "gtest",
     "nlohmann-json",

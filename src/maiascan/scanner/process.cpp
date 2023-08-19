@@ -3,10 +3,13 @@
 
 #include "maiascan/scanner/process.h"
 
+#include <bit>
+#include <string>
 #include <vector>
 
 #include <Psapi.h>
 #include <TlHelp32.h>
+#include <tl/expected.hpp>
 #include <tl/optional.hpp>
 
 #include "maiascan/scanner/types.h"
@@ -43,6 +46,17 @@ std::vector<MemoryPage> GetCheatablePages(HANDLE process_handle) {
   return pages;
 }
 
+tl::optional<MemoryAddress> GetProcessBaseAddress(Pid pid) {
+  auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+  MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
+  bool success = Module32First(snapshot, &mod_entry) != 0;
+  if (!success) {
+    auto err = GetLastError();
+    return tl::nullopt;
+  }
+  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
+}
+
 }  // namespace
 
 const std::vector<MemoryPage>& Process::QueryPages() {
@@ -73,6 +87,28 @@ tl::optional<Bytes> Process::ReadPage(const MemoryPage& page) const {
   }
   memory.resize(total);
   return memory;
+}
+
+tl::optional<MemoryAddress> Process::GetBaseAddress() {
+  std::string name(1024, 0);
+  K32GetProcessImageFileNameA(handle_, name.data(), name.size());
+  auto* mod_handle = GetModuleHandleA(name.data());
+
+  MODULEINFO module_info{};
+  K32GetModuleInformation(handle_, mod_handle, &module_info, sizeof module_info);
+  // GetProcessInformation(HANDLE hProcess, PROCESS_INFORMATION_CLASS ProcessInformationClass, LPVOID
+  // ProcessInformation, DWORD ProcessInformationSize)
+
+  // auto aaa = GetBaseAddress2(handle_);
+  auto addrr = GetProcessBaseAddress(pid_);
+  return addrr.value_or(nullptr);
+}
+
+tl::expected<void, std::string> Process::Write(MemoryAddress address, BytesView value) {
+  if (!WriteProcessMemory(handle_, address, value.data(), value.size_bytes(), nullptr)) {
+    return tl::unexpected<std::string>{"Failed to write in memory"};
+  }
+  return {};
 }
 
 }  // namespace maia

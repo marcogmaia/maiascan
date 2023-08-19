@@ -1,7 +1,8 @@
 #pragma once
 
-// #include <cstddef>
 #include <algorithm>
+#include <cstddef>
+#include <span>
 #include <vector>
 
 #include <tl/optional.hpp>
@@ -14,13 +15,13 @@ namespace maia {
 
 namespace detail {
 
-inline Match::Offsets SearchOffsets(const Bytes &haystack, const Bytes &needle) {
+inline Match::Offsets SearchOffsets(BytesView haystack, BytesView needle, int align = 1) {
   Match::Offsets offsets;
 
-  for (auto it = haystack.cbegin();
-       (it = std::search(it, haystack.cend(), needle.cbegin(), needle.cend())) != haystack.cend();
-       std::advance(it, 1)) {
-    const auto offset = std::distance(haystack.cbegin(), it);
+  for (auto it = haystack.begin();
+       (it = std::search(it, haystack.end(), needle.begin(), needle.end())) != haystack.end();
+       std::advance(it, 4)) {
+    const auto offset = std::distance(haystack.begin(), it);
     offsets.push_back(offset);
   }
 
@@ -30,7 +31,7 @@ inline Match::Offsets SearchOffsets(const Bytes &haystack, const Bytes &needle) 
 }  // namespace detail
 
 // std::span
-inline tl::optional<Matches> Search(Process &proc, const Bytes &bytes) {
+inline tl::optional<Matches> Search(Process &proc, BytesView bytes) {
   const auto &pages = proc.QueryPages();
   Matches matches;
   matches.reserve(pages.size());
