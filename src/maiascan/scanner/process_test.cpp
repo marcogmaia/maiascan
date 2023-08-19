@@ -16,18 +16,6 @@ namespace maia::scanner {
 
 namespace {
 
-std::optional<Pid> GetPidFromProcessName(const std::string &proc_name) {
-  std::regex pattern{fmt::format("^{}.*", proc_name), std::regex_constants::icase};
-  std::smatch match{};
-  auto procs = GetProcs();
-  for (const auto &proc : procs) {
-    if (std::regex_match(proc.name, match, pattern)) {
-      return proc.pid;
-    }
-  }
-  return std::nullopt;
-}
-
 template <typename T>
 BytesView ToBytesView(T data) {
   constexpr bool kIsCString = std::is_same_v<char *, std::decay_t<T>> || std::is_same_v<const char *, std::decay_t<T>>;
@@ -46,7 +34,6 @@ auto SearchT(Process &proc, T needle) {
 BytesView ToBytesView(std::string &data) {
   return BytesView(std::bit_cast<std::byte *>(data.data()), data.size());
 }
-
 
 }  // namespace
 
