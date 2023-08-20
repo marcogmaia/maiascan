@@ -45,7 +45,6 @@ TEST(Process, AttachScan) {
   auto matches = SearchT(process, needle);
   ASSERT_TRUE(matches);
   auto vals = *matches;
-  auto *base_addr = process.GetBaseAddress().value_or(nullptr);
   int a = 2;
 }
 
@@ -62,7 +61,6 @@ TEST(Process, NarrowValue) {
   ASSERT_TRUE(!addresses.empty());
   ASSERT_TRUE(process.ReadIntoBuffer(addresses.front(), ToBytesView(buffer)));
 
-  auto *base_addr = process.GetBaseAddress().value_or(nullptr);
   int a = 2;
 }
 

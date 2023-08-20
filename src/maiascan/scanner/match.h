@@ -12,7 +12,7 @@ struct Match {
   using Offset = uint32_t;
   using Offsets = std::vector<Offset>;
 
-  MemoryPage page;
+  Page page;
   Offsets offsets;
 };
 

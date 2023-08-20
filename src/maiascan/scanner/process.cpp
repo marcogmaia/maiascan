@@ -4,11 +4,13 @@
 #include "maiascan/scanner/process.h"
 
 #include <bit>
+#include <iostream>
 #include <string>
 #include <vector>
 
 #include <Psapi.h>
 #include <TlHelp32.h>
+#include <fmt/core.h>
 #include <tl/expected.hpp>
 #include <tl/optional.hpp>
 
@@ -19,42 +21,74 @@ namespace maia::scanner {
 
 namespace {
 
-bool CanCheatPage(const MEMORY_BASIC_INFORMATION& page) {
+bool IsPageHackable(const MEMORY_BASIC_INFORMATION& page) {
   return page.State == MEM_COMMIT && page.Type == MEM_PRIVATE && page.Protect == PAGE_READWRITE;
 }
 
 tl::optional<MEMORY_BASIC_INFORMATION> QueryPage(HANDLE handle, MemoryAddress address) {
   MEMORY_BASIC_INFORMATION page;
-  if (VirtualQueryEx(handle, address, &page, sizeof(page)) != sizeof(page)) {
+  if (VirtualQueryEx(handle, address, &page, sizeof page) != sizeof(page)) {
     return tl::nullopt;
   };
   return page;
 }
 
-std::vector<MemoryPage> GetCheatablePages(HANDLE process_handle) {
-  std::vector<MemoryPage> pages;
+std::vector<Page> GetCheatablePages(HANDLE process_handle) {
+  std::vector<Page> pages;
   pages.reserve(32);
 
-  MemoryAddress address{};
+  MemoryAddress address = nullptr;
 
   while (auto page = QueryPage(process_handle, address)) {
-    if (CanCheatPage(*page)) {
+    if (IsPageHackable(*page)) {
       pages.emplace_back(address, page->RegionSize);
     }
     address = NextAddress(address, page->RegionSize);
   }
 
+  pages.shrink_to_fit();
   return pages;
+}
+
+MemoryAddress GetBaseAddress(Pid pid) {
+  auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+  if (snapshot == INVALID_HANDLE_VALUE) {
+    return {};
+  }
+  MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
+  bool success = Module32First(snapshot, &mod_entry) != 0;
+  if (!success) {
+    auto err = GetLastError();
+    return {};
+  }
+  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
+}
+
+void PrintAllProcessModules(Pid pid) {
+  HANDLE hsnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+
+  if (hsnapshot == INVALID_HANDLE_VALUE) {
+    return;
+  }
+
+  MODULEENTRY32 mod_entry = {0};
+  mod_entry.dwSize = sizeof(MODULEENTRY32);
+  for (bool ok = Module32First(hsnapshot, &mod_entry) != 0; ok; ok = Module32Next(hsnapshot, &mod_entry) != 0) {
+    std::cout << fmt::format(
+        "{:20} -- Addr: {}\n", mod_entry.szModule, std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr));
+  }
+
+  CloseHandle(hsnapshot);
 }
 
 }  // namespace
 
-const std::vector<MemoryPage>& Process::QueryPages() {
+const std::vector<Page>& Process::QueryPages() {
   pages_ = GetCheatablePages(handle_);
   return pages_;
 }
 
-tl::optional<Bytes> Process::ReadPage(const MemoryPage& page) const {
+tl::optional<Bytes> Process::ReadPage(const Page& page) const {
   Bytes memory(page.size);
 
   size_t total{};
@@ -63,17 +97,6 @@ tl::optional<Bytes> Process::ReadPage(const MemoryPage& page) const {
   }
   memory.resize(total);
   return memory;
-}
-
-tl::optional<MemoryAddress> Process::GetBaseAddress() const {
-  auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid_);
-  MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
-  bool success = Module32First(snapshot, &mod_entry) != 0;
-  if (!success) {
-    auto err = GetLastError();
-    return tl::nullopt;
-  }
-  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
 }
 
 tl::expected<void, std::string> Process::Write(MemoryAddress address, BytesView value) {
@@ -94,6 +117,11 @@ tl::expected<void, std::string> Process::ReadIntoBuffer(MemoryAddress address, B
 
 tl::optional<Matches> Process::Find(BytesView needle) {
   return Search(*this, needle);
+}
+
+Process::Process(Pid pid)
+    : pid_(pid), handle_(OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid)), base_address_(GetBaseAddress(pid)) {
+  PrintAllProcessModules(pid);
 }
 
 }  // namespace maia::scanner

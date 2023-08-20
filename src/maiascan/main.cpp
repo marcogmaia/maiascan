@@ -45,8 +45,6 @@ std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
   return addresses;
 }
 
-// void GetChangedAddresses(Matches matches>)
-
 void FilterOutChangedAddresses() {}
 
 template <typename T>
@@ -93,9 +91,6 @@ int main(int argc, const char *const *argv) {
           if (scan) {
             auto addresses = maia::scanner::GetAddressMatches(*scan);
             auto values = maia::scanner::ReadAllValues<decltype(needle)>(proc, addresses);
-            // for (const auto *addr : addresses) {
-            //   std::cout << fmt::format("{:p}\n", std::bit_cast<const void *>(addr));
-            // }
           }
         },
         *res);

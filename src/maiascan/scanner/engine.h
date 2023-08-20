@@ -26,4 +26,13 @@ inline MemoryAddress NextAddress(MemoryAddress address, int64_t diff = 1) {
   return static_cast<MemoryAddress>(std::next(static_cast<uint8_t *>(address), diff));
 };
 
+template <typename Callable>
+void ForEachMatchesAddress(const Matches &matches, Callable &&func) {
+  for (const auto &match : matches) {
+    for (const auto &offset : match.offsets) {
+      func(NextAddress(match.page.address, offset));
+    }
+  }
+}
+
 }  // namespace maia::scanner

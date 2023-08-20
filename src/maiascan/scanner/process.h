@@ -14,7 +14,7 @@ namespace maia::scanner {
 
 class Process {
  public:
-  explicit Process(Pid pid) : pid_(pid), handle_(OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid)) {}
+  explicit Process(Pid pid);
 
   ~Process() {
     if (handle_) {
@@ -22,15 +22,13 @@ class Process {
     }
   }
 
-  const std::vector<MemoryPage>& QueryPages();
+  const std::vector<Page>& QueryPages();
 
-  tl::optional<Bytes> ReadPage(const MemoryPage& page) const;
+  tl::optional<Bytes> ReadPage(const Page& page) const;
 
   tl::expected<void, std::string> ReadIntoBuffer(MemoryAddress address, BytesView buffer) const;
 
   tl::expected<void, std::string> Write(MemoryAddress address, BytesView value);
-
-  tl::optional<MemoryAddress> GetBaseAddress() const;
 
   tl::optional<Matches> Find(BytesView needle);
 
@@ -39,7 +37,8 @@ class Process {
  private:
   Pid pid_;
   HANDLE handle_{};
-  std::vector<MemoryPage> pages_;
+  MemoryAddress base_address_{};
+  std::vector<Page> pages_;
 };
 
 }  // namespace maia::scanner
