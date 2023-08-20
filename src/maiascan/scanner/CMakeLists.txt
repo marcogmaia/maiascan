@@ -1,4 +1,4 @@
-add_library(scanner "./scanner.cpp" "./process.cpp" "./engine.cpp")
+add_library(scanner "./scanner.cpp" "./process.cpp" "./engine.cpp" "./scan.cpp")
 
 target_compile_definitions(scanner PRIVATE "_AFXDLL")
 
