@@ -25,23 +25,12 @@ class Scan {
     return scan_;
   }
 
- private:
-  void SetMatches(const Matches& matches, int buffer_size) {
-    ForEachMatchesAddress(matches, [this, buffer_size](MemoryAddress address) {
-      Bytes buffer(buffer_size, std::byte{});
-      if (process_.ReadIntoBuffer(address, buffer)) {
-        scan_.emplace_back(ScanMatch{buffer, address});
-      }
-    });
-  }
-
   void FilterChanged() {
-    if (scan_.empty() || prev_scan_.empty()) {
+    bool can_filter = !scan_.empty() && !prev_scan_.empty() && scan_.size() == prev_scan_.size();
+    if (!can_filter) {
       return;
     }
-    if (scan_.size() != prev_scan_.size()) {
-      return;
-    }
+    SwapScans();
     std::vector<ScanMatch> scan_changed;
     scan_changed.reserve(std::max(scan_.size(), prev_scan_.size()));
     for (auto it_actual = scan_.begin(), it_prev = prev_scan_.begin();
@@ -53,6 +42,18 @@ class Scan {
       }
     }
     scan_changed.swap(scan_);
+  }
+
+  std::vector<ScanMatch>& scan() { return scan_; }
+
+ private:
+  void SetMatches(const Matches& matches, int buffer_size) {
+    ForEachMatchesAddress(matches, [this, buffer_size](MemoryAddress address) {
+      Bytes buffer(buffer_size, std::byte{});
+      if (process_.ReadIntoBuffer(address, buffer)) {
+        scan_.emplace_back(ScanMatch{buffer, address});
+      }
+    });
   }
 
   void SwapScans() {

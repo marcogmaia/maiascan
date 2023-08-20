@@ -15,15 +15,15 @@ TEST(Scan, Test) {
   auto scan = Scan{&process};
 
   int needle = 1337;
-  auto scan_result = scan.Find(needle);
-
-  int buf{};
-  auto view = ToBytesView(buf);
-  process.ReadIntoBuffer(std::bit_cast<MemoryAddress>(0x1e2402a58f0), view);
+  const auto &scan_result = scan.Find(needle);
 
   ASSERT_TRUE(!scan_result.empty());
-  ASSERT_TRUE(std::ranges::equal(scan_result.front().bytes, view));
-  SUCCEED();
+
+  int new_needle = 1340;
+  scan.Find(new_needle);
+  scan.FilterChanged();
+  EXPECT_EQ(scan.scan().size(), 1);
+  EXPECT_TRUE(std::ranges::equal(scan.scan().front().bytes, ToBytesView(new_needle)));
 }
 
 }  // namespace maia::scanner
