@@ -19,13 +19,8 @@ class Scan {
   template <typename T>
   const std::vector<ScanMatch>& Find(T needle) {
     SwapScans();
-    auto pages = process_.QueryPages();
-    for (auto& page : pages) {
-      if (auto mem = process_.ReadPage(page); mem) {
-        if (auto matches = process_.Find(ToBytesView(needle))) {
-          SetMatches(*matches, sizeof needle);
-        }
-      }
+    if (auto matches = process_.Find(ToBytesView(needle))) {
+      SetMatches(*matches, sizeof needle);
     }
     return scan_;
   }
