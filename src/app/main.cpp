@@ -10,6 +10,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
+#include <tl/optional.hpp>
 
 #include "app/imgui_extensions.hpp"
 #include "maiascan/console/console.h"
@@ -120,16 +121,11 @@ void TerminateGlfw(GLFWwindow *window) {
 }
 
 int main(int argc, const char **argv) {
-  auto res = maia::console::Parse(argv, argc, true);
-  if (!res) {
-    spdlog::error("{}", res.error());
-    return 1;
-  }
-
-  try {
-    std::visit(maia::scanner::ProcessCommandAttach, *res);
-  } catch (std::exception &) {
-  }
+  // auto res = maia::console::Parse(argv, argc, true);
+  // if (!res) {
+  //   spdlog::error("{}", res.error());
+  //   return 1;
+  // }
 
   // ============ Setting up window
   auto glfw_init_result = InitGlfw();
@@ -142,13 +138,48 @@ int main(int argc, const char **argv) {
 
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+  tl::optional<maia::scanner::Process> proc;
+  tl::optional<maia::scanner::Scan> scan;
+
+  auto pid = maia::scanner::GetPidFromProcessName("fakegame");
+  if (!pid) {
+    spdlog::error("Make sure that fakegame is running");
+    return 1;
+  }
+  // proc.emplace(maia::scanner::Process{*pid});
+  maia::scanner::Process procc{*pid};
+  // auto proc = maia::scanner::Process{*pid};
+  scan.emplace(maia::scanner::Scan{&procc});
+
+  std::string proc_name(256, 0);
+
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
 
     maia::ImGuiBeginFrame();
 
-    if (ImGui::Begin("winname")) {
+    if (ImGui::Begin("scan")) {
+      // if (!proc) {
+      //   if (ImGui::Button("attach")) {
+      //     spdlog::warn("Invalid process: {}", proc_name);
+      //   }
+      // } else {
+      {
+        static int needle{};
+        ImGui::InputScalar("needle", ImGuiDataType_S32, &needle);
+        if (ImGui::Button("Scan")) {
+          scan->Find(needle);
+          spdlog::info("Scanning for needle: {}", needle);
+        }
+      }
+      if (!scan->scan().empty()) {
+        for (auto &scan_entry : scan->scan()) {
+          procc.ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
+          ImGui::Text("%p -- %d", scan_entry.address, *std::bit_cast<int *>(scan_entry.bytes.data()));
+        }
+      }
     }
+    // }
     ImGui::End();
 
     ImGui::ShowDemoWindow();
