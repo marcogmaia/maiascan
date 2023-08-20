@@ -18,7 +18,7 @@ TEST(Scan, Test) {
   auto scan_result = scan.Find(needle);
 
   int buf{};
-  auto view = BytesView(std::bit_cast<std::byte*>(&buf), sizeof buf);
+  auto view = ToBytesView(buf);
   process.ReadIntoBuffer(std::bit_cast<MemoryAddress>(0x1e2402a58f0), view);
 
   ASSERT_TRUE(!scan_result.empty());

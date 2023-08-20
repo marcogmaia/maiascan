@@ -124,4 +124,10 @@ Process::Process(Pid pid)
   PrintAllProcessModules(pid);
 }
 
+Process::~Process() {
+  if (handle_) {
+    CloseHandle(handle_);
+  }
+}
+
 }  // namespace maia::scanner

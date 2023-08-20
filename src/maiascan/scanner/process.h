@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Windows.h>
-
 #include <vector>
 
 #include <tl/expected.hpp>
@@ -14,13 +12,11 @@ namespace maia::scanner {
 
 class Process {
  public:
+  using ProcessHandle = MemoryAddress;
+
   explicit Process(Pid pid);
 
-  ~Process() {
-    if (handle_) {
-      CloseHandle(handle_);
-    }
-  }
+  ~Process();
 
   const std::vector<Page>& QueryPages();
 
@@ -36,7 +32,7 @@ class Process {
 
  private:
   Pid pid_;
-  HANDLE handle_{};
+  ProcessHandle handle_{};
   MemoryAddress base_address_{};
   std::vector<Page> pages_;
 };
