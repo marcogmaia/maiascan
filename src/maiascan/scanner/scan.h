@@ -20,6 +20,7 @@ class Scan {
   const std::vector<ScanMatch>& Find(T needle) {
     SwapScans();
     if (auto matches = process_.Find(ToBytesView(needle))) {
+      // TODO(marco): This function seems kinda odd, verify if it can be made better.
       SetMatches(*matches, sizeof needle);
     }
     return scan_;
