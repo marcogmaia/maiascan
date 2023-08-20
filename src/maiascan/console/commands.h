@@ -7,7 +7,7 @@
 namespace maia::console {
 
 struct CommandAttach {
-  int pid;
+  std::string process_name;
 };
 
 using Command = std::variant<CommandAttach>;

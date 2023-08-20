@@ -31,7 +31,7 @@ class Process {
   Pid pid() const { return pid_; }
 
  private:
-  Pid pid_;
+  Pid pid_{};
   ProcessHandle handle_{};
   MemoryAddress base_address_{};
   std::vector<Page> pages_;

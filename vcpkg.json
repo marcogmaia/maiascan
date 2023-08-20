@@ -3,7 +3,6 @@
   "version-string": "0.0.1",
   "dependencies": [
     "atlmfc",
-    "cli",
     "cli11",
     "fmt",
     "gtest",
@@ -15,6 +14,7 @@
         "gl-api-43"
       ]
     },
+    "glfw3",
     {
       "name": "imgui",
       "features": [

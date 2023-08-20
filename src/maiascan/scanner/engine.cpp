@@ -36,6 +36,9 @@ std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
 }
 
 tl::optional<Pid> GetPidFromProcessName(const std::string &proc_name) {
+  if (proc_name.empty()) {
+    return tl::nullopt;
+  }
   std::regex pattern{fmt::format("^{}.*", proc_name), std::regex_constants::icase};
   std::smatch match{};
   auto procs = GetProcs();
@@ -53,6 +56,7 @@ tl::optional<Matches> Search(Process &proc, BytesView bytes) {
   matches.reserve(pages.size());
 
   for (const auto &page : pages) {
+    // TODO(marco): remove ReadPage from here.
     if (auto memory = proc.ReadPage(page); memory) {
       auto offsets = detail::SearchOffsets(*memory, bytes);
       matches.emplace_back(page, offsets);

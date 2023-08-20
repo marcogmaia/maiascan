@@ -28,6 +28,28 @@ class Scan {
 
   void FilterChanged();
 
+  template <CFundamentalType T>
+  void Narrow(T needle) {
+    if (scan_.empty()) {
+      return;
+    }
+    std::vector<ScanMatch> new_scan;
+    new_scan.reserve(scan_.size());
+
+    auto needle_view = ToBytesView(needle);
+    T buffer{};
+    auto buffer_view = ToBytesView(buffer);
+    for (auto& scan_entry : scan_) {
+      process_.ReadIntoBuffer(scan_entry.address, buffer_view);
+      bool is_match = std::ranges::equal(buffer_view, scan_entry.bytes);
+      if (is_match) {
+        new_scan.emplace_back(scan_entry);
+      }
+    }
+    prev_scan_ = std::move(scan_);
+    scan_ = std::move(new_scan);
+  }
+
   std::vector<ScanMatch>& scan() { return scan_; }
 
  private:

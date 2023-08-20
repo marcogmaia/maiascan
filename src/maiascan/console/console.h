@@ -13,6 +13,8 @@ namespace maia::console {
 // Run(Command);
 tl::expected<Command, std::string> Parse(const std::string &command);
 
+tl::expected<Command, std::string> Parse(const char *const *argv, int argc, bool skip_first);
+
 class Console {
  public:
   Console();
