@@ -44,8 +44,6 @@ std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
   return addresses;
 }
 
-void FilterOutChangedAddresses() {}
-
 template <typename T>
 std::vector<T> ReadAllValues(const Process &proc, const std::vector<MemoryAddress> &addresses) {
   std::vector<T> values;
@@ -64,12 +62,6 @@ std::vector<T> ReadAllValues(const Process &proc, const std::vector<MemoryAddres
   return values;
 }
 
-template <CFundamentalType T>
-T BytesToFundametalType(BytesView view) {
-  auto *ptr = std::bit_cast<T *>(view.data());
-  return *ptr;
-}
-
 void ProcessCommandAttach(console::CommandAttach &command) {
   auto pid = GetPidFromProcessName(command.process_name);
   if (!pid) {
@@ -83,7 +75,8 @@ void ProcessCommandAttach(console::CommandAttach &command) {
   scan.Find(needle);
   for (auto &scan_entry : scan.scan()) {
     spdlog::info("{:>16} -- {}", scan_entry.address, BytesToFundametalType<int>(scan_entry.bytes));
-    proc.Write(scan_entry.address, ToBytesView(2000));
+    int write_value = 2000;
+    proc.Write(scan_entry.address, ToBytesView(write_value));
   }
 }
 
@@ -120,13 +113,8 @@ void TerminateGlfw(GLFWwindow *window) {
   glfwTerminate();
 }
 
+// TODO(marco): Refactor this garbage.
 int main(int argc, const char **argv) {
-  // auto res = maia::console::Parse(argv, argc, true);
-  // if (!res) {
-  //   spdlog::error("{}", res.error());
-  //   return 1;
-  // }
-
   // ============ Setting up window
   auto glfw_init_result = InitGlfw();
   if (!glfw_init_result) {
@@ -159,27 +147,26 @@ int main(int argc, const char **argv) {
     maia::ImGuiBeginFrame();
 
     if (ImGui::Begin("scan")) {
-      // if (!proc) {
-      //   if (ImGui::Button("attach")) {
-      //     spdlog::warn("Invalid process: {}", proc_name);
-      //   }
-      // } else {
-      {
-        static int needle{};
-        ImGui::InputScalar("needle", ImGuiDataType_S32, &needle);
-        if (ImGui::Button("Scan")) {
-          scan->Find(needle);
-          spdlog::info("Scanning for needle: {}", needle);
-        }
+      static int needle{};
+      ImGui::InputScalar("needle", ImGuiDataType_S32, &needle);
+      if (ImGui::Button("Scan")) {
+        scan->Find(needle);
+        spdlog::info("Scanning for needle: {}", needle);
+      }
+      if (ImGui::Button("Remove different")) {
+        scan->RemoveDifferent(needle);
       }
       if (!scan->scan().empty()) {
-        for (auto &scan_entry : scan->scan()) {
-          procc.ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
-          ImGui::Text("%p -- %d", scan_entry.address, *std::bit_cast<int *>(scan_entry.bytes.data()));
+        auto total_matches = scan->scan().size();
+        ImGui::Text("Number of matches: %zu", total_matches);
+        if (total_matches < 2000) {
+          for (auto &scan_entry : scan->scan()) {
+            procc.ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
+            ImGui::Text("%p -- %d", scan_entry.address, *std::bit_cast<int *>(scan_entry.bytes.data()));
+          }
         }
       }
     }
-    // }
     ImGui::End();
 
     ImGui::ShowDemoWindow();

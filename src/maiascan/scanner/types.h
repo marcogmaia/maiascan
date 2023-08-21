@@ -20,8 +20,14 @@ template <typename T>
 concept CFundamentalType = std::is_fundamental_v<std::decay_t<T>>;
 
 template <CFundamentalType T>
-BytesView ToBytesView(const T &data) {
+BytesView ToBytesView(T &data) {
   return BytesView(std::bit_cast<std::byte *>(&data), sizeof(T));
+}
+
+template <CFundamentalType T>
+T BytesToFundametalType(BytesViewReadOnly view) {
+  const auto *ptr = std::bit_cast<T *>(view.data());
+  return *ptr;
 }
 
 struct ProcessData {

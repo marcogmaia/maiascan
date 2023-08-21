@@ -29,6 +29,19 @@ class Scan {
   void FilterChanged();
 
   template <CFundamentalType T>
+  void RemoveDifferent(T original_value) {
+    std::vector<ScanMatch> same_matches;
+    same_matches.reserve(scan_.size());
+    for (const auto& scan : scan_) {
+      if (BytesToFundametalType<T>(scan.bytes) == original_value) {
+        same_matches.emplace_back(scan);
+      }
+    }
+    prev_scan_ = std::move(scan_);
+    scan_ = std::move(same_matches);
+  }
+
+  template <CFundamentalType T>
   void Narrow(T needle) {
     if (scan_.empty()) {
       return;
