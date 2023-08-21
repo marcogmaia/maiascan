@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include <tl/expected.hpp>
@@ -10,7 +11,7 @@
 
 namespace maia::scanner {
 
-class Process {
+class Process : public std::enable_shared_from_this<Process> {
  public:
   using ProcessHandle = MemoryAddress;
 

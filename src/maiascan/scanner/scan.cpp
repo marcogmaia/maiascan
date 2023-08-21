@@ -27,7 +27,7 @@ void Scan::FilterChanged() {
 void Scan::SetMatches(const Matches& matches, int buffer_size) {
   ForEachMatchesAddress(matches, [this, buffer_size](MemoryAddress address) {
     Bytes buffer(buffer_size, std::byte{});
-    if (process_.ReadIntoBuffer(address, buffer)) {
+    if (process_->ReadIntoBuffer(address, buffer)) {
       scan_.emplace_back(ScanMatch{address, buffer});
     }
   });

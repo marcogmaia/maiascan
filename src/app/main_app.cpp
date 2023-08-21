@@ -71,7 +71,7 @@ void ProcessCommandAttach(console::CommandAttach &command) {
   spdlog::info("Selected process {} with (PID: {}).", command.process_name, *pid);
   Process proc{static_cast<maia::Pid>(*pid)};
   int needle = 1337;
-  Scan scan{&proc};
+  Scan scan{proc.shared_from_this()};
   scan.Find(needle);
   for (auto &scan_entry : scan.scan()) {
     spdlog::info("{:>16} -- {}", scan_entry.address, BytesToFundametalType<int>(scan_entry.bytes));
@@ -126,7 +126,7 @@ int main(int argc, const char **argv) {
 
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-  tl::optional<maia::scanner::Process> proc;
+  std::shared_ptr<maia::scanner::Process> proc;
   tl::optional<maia::scanner::Scan> scan;
 
   auto pid = maia::scanner::GetPidFromProcessName("fakegame");
@@ -134,10 +134,10 @@ int main(int argc, const char **argv) {
     spdlog::error("Make sure that fakegame is running");
     return 1;
   }
-  // proc.emplace(maia::scanner::Process{*pid});
-  maia::scanner::Process procc{*pid};
+  proc = std::make_shared<maia::scanner::Process>(*pid);
+  scan.emplace(proc->shared_from_this());
+  // maia::scanner::Process procc{*pid};
   // auto proc = maia::scanner::Process{*pid};
-  scan.emplace(maia::scanner::Scan{&procc});
 
   std::string proc_name(256, 0);
 
@@ -161,7 +161,7 @@ int main(int argc, const char **argv) {
         ImGui::Text("Number of matches: %zu", total_matches);
         if (total_matches < 2000) {
           for (auto &scan_entry : scan->scan()) {
-            procc.ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
+            proc->ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
             ImGui::Text("%p -- %d", scan_entry.address, *std::bit_cast<int *>(scan_entry.bytes.data()));
           }
         }

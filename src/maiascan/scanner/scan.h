@@ -14,12 +14,12 @@ class Scan {
     Bytes bytes;
   };
 
-  explicit Scan(Process* process) : process_(*process) {}
+  explicit Scan(std::shared_ptr<Process> process) : process_(std::move(process)) {}
 
   template <typename T>
   const std::vector<ScanMatch>& Find(T needle) {
     SwapScans();
-    if (auto matches = process_.Find(ToBytesView(needle))) {
+    if (auto matches = process_->Find(ToBytesView(needle))) {
       // TODO(marco): This function seems kinda odd, verify if it can be made better.
       SetMatches(*matches, sizeof needle);
     }
@@ -53,7 +53,7 @@ class Scan {
     T buffer{};
     auto buffer_view = ToBytesView(buffer);
     for (auto& scan_entry : scan_) {
-      process_.ReadIntoBuffer(scan_entry.address, buffer_view);
+      process_->ReadIntoBuffer(scan_entry.address, buffer_view);
       bool is_match = std::ranges::equal(buffer_view, scan_entry.bytes);
       if (is_match) {
         new_scan.emplace_back(scan_entry);
@@ -73,7 +73,7 @@ class Scan {
     scan_.clear();
   }
 
-  Process& process_;
+  std::shared_ptr<Process> process_;
   std::vector<ScanMatch> scan_{};
   std::vector<ScanMatch> prev_scan_{};
 };

@@ -12,7 +12,7 @@ TEST(Scan, Test) {
   auto pid = GetPidFromProcessName("fakegame");
   ASSERT_TRUE(pid) << "Make sure fakegame is running.";
   auto process = Process{*pid};
-  auto scan = Scan{&process};
+  auto scan = Scan{process.shared_from_this()};
 
   int needle = 1337;
   const auto &scan_result = scan.Find(needle);
