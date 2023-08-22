@@ -57,7 +57,7 @@ tl::optional<Matches> Search(Process &proc, BytesView bytes) {
 
   for (const auto &page : pages) {
     // TODO(marco): remove ReadPage from here.
-    if (auto memory = proc.ReadPage(page); memory) {
+    if (auto memory = proc.ReadPage(page)) {
       auto offsets = detail::SearchOffsets(*memory, bytes);
       matches.emplace_back(page, offsets);
     }

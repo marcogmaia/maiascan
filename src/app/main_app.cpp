@@ -69,14 +69,14 @@ void ProcessCommandAttach(console::CommandAttach &command) {
     return;
   }
   spdlog::info("Selected process {} with (PID: {}).", command.process_name, *pid);
-  Process proc{static_cast<maia::Pid>(*pid)};
+  auto proc = std::make_shared<Process>(*pid);
   int needle = 1337;
-  Scan scan{proc.shared_from_this()};
+  Scan scan{proc};
   scan.Find(needle);
   for (auto &scan_entry : scan.scan()) {
     spdlog::info("{:>16} -- {}", scan_entry.address, BytesToFundametalType<int>(scan_entry.bytes));
     int write_value = 2000;
-    proc.Write(scan_entry.address, ToBytesView(write_value));
+    proc->Write(scan_entry.address, ToBytesView(write_value));
   }
 }
 
@@ -127,7 +127,6 @@ int main(int argc, const char **argv) {
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   std::shared_ptr<maia::scanner::Process> proc;
-  tl::optional<maia::scanner::Scan> scan;
 
   auto pid = maia::scanner::GetPidFromProcessName("fakegame");
   if (!pid) {
@@ -135,9 +134,7 @@ int main(int argc, const char **argv) {
     return 1;
   }
   proc = std::make_shared<maia::scanner::Process>(*pid);
-  scan.emplace(proc->shared_from_this());
-  // maia::scanner::Process procc{*pid};
-  // auto proc = maia::scanner::Process{*pid};
+  auto scan = maia::scanner::Scan{proc};
 
   std::string proc_name(256, 0);
 
@@ -146,23 +143,25 @@ int main(int argc, const char **argv) {
 
     maia::ImGuiBeginFrame();
 
-    if (ImGui::Begin("scan")) {
-      static int needle{};
-      ImGui::InputScalar("needle", ImGuiDataType_S32, &needle);
-      if (ImGui::Button("Scan")) {
-        scan->Find(needle);
-        spdlog::info("Scanning for needle: {}", needle);
-      }
-      if (ImGui::Button("Remove different")) {
-        scan->RemoveDifferent(needle);
-      }
-      if (!scan->scan().empty()) {
-        auto total_matches = scan->scan().size();
-        ImGui::Text("Number of matches: %zu", total_matches);
-        if (total_matches < 2000) {
-          for (auto &scan_entry : scan->scan()) {
-            proc->ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
-            ImGui::Text("%p -- %d", scan_entry.address, *std::bit_cast<int *>(scan_entry.bytes.data()));
+    if (proc) {
+      if (ImGui::Begin("scan")) {
+        static int needle{};
+        ImGui::InputScalar("needle", ImGuiDataType_S32, &needle);
+        if (ImGui::Button("Scan")) {
+          scan.Find(needle);
+          spdlog::info("Scanning for needle: {}", needle);
+        }
+        if (ImGui::Button("Remove different")) {
+          scan.RemoveDifferent(needle);
+        }
+        if (!scan.scan().empty()) {
+          auto total_matches = scan.scan().size();
+          ImGui::Text("Number of matches: %zu", total_matches);
+          if (total_matches < 2000) {
+            for (auto &scan_entry : scan.scan()) {
+              proc->ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
+              ImGui::Text("%p -- %d", scan_entry.address, *std::bit_cast<int *>(scan_entry.bytes.data()));
+            }
           }
         }
       }
