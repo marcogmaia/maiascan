@@ -19,7 +19,8 @@ class Scan {
   template <typename T>
   const std::vector<ScanMatch>& Find(T needle) {
     SwapScans();
-    if (auto matches = process_->Find(ToBytesView(needle))) {
+    auto needle_view = BytesView(std::bit_cast<std::byte*>(std::addressof(needle)), sizeof needle);
+    if (auto matches = process_->Find(needle_view)) {
       // TODO(marco): This function seems kinda odd, verify if it can be made better.
       SetMatches(*matches, sizeof needle);
     }

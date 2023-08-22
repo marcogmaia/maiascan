@@ -10,6 +10,9 @@
 
 namespace maia::scanner {
 
+template <typename T>
+concept CScannable = CFundamentalType<T> || std::is_pointer_v<T>;
+
 class Process {
  public:
   using ProcessHandle = MemoryAddress;
@@ -29,6 +32,16 @@ class Process {
   tl::optional<Matches> Find(BytesView needle);
 
   Pid pid() const { return pid_; }
+
+  template <CScannable T>
+  tl::optional<T> Read(MemoryAddress address) {
+    T buffer;
+    auto buffer_view = BytesView(std::bit_cast<std::byte*>(std::addressof(buffer)), sizeof buffer);
+    if (!ReadIntoBuffer(address, buffer_view)) {
+      return tl::nullopt;
+    }
+    return buffer;
+  }
 
  private:
   Pid pid_{};
