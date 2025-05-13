@@ -3,7 +3,7 @@
   "version-string": "0.0.1",
   "dependencies": [
     "atlmfc",
-    "cxxopts",
+    "cli11",
     "fmt",
     "gtest",
     "nlohmann-json",
@@ -14,6 +14,7 @@
         "gl-api-43"
       ]
     },
+    "glfw3",
     {
       "name": "imgui",
       "features": [
@@ -21,6 +22,8 @@
         "glfw-binding",
         "opengl3-binding"
       ]
-    }
+    },
+    "tl-expected",
+    "tl-optional"
   ]
 }
