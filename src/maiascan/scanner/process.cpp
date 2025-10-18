@@ -11,8 +11,8 @@
 #include <Psapi.h>
 #include <TlHelp32.h>
 #include <fmt/core.h>
-#include <tl/expected.hpp>
-#include <tl/optional.hpp>
+#include <expected>
+#include <optional>
 
 #include "maiascan/scanner/engine.h"
 #include "maiascan/scanner/types.h"
@@ -25,10 +25,10 @@ bool IsPageHackable(const MEMORY_BASIC_INFORMATION& page) {
   return page.State == MEM_COMMIT && page.Type == MEM_PRIVATE && page.Protect == PAGE_READWRITE;
 }
 
-tl::optional<MEMORY_BASIC_INFORMATION> QueryPage(HANDLE handle, MemoryAddress address) {
+std::optional<MEMORY_BASIC_INFORMATION> QueryPage(HANDLE handle, MemoryAddress address) {
   MEMORY_BASIC_INFORMATION page;
   if (VirtualQueryEx(handle, address, &page, sizeof page) != sizeof(page)) {
-    return tl::nullopt;
+    return std::nullopt;
   };
   return page;
 }
@@ -88,7 +88,7 @@ const std::vector<Page>& Process::QueryPages() {
   return pages_;
 }
 
-tl::optional<Bytes> Process::ReadPage(const Page& page) const {
+std::optional<Bytes> Process::ReadPage(const Page& page) const {
   Bytes memory(page.size);
 
   size_t total{};
@@ -99,23 +99,23 @@ tl::optional<Bytes> Process::ReadPage(const Page& page) const {
   return memory;
 }
 
-tl::expected<void, std::string> Process::Write(MemoryAddress address, BytesView value) {
+std::expected<void, std::string> Process::Write(MemoryAddress address, BytesView value) {
   if (!WriteProcessMemory(handle_, address, value.data(), value.size_bytes(), nullptr)) {
-    return tl::unexpected<std::string>{"Failed to write in memory"};
+    return std::unexpected<std::string>{"Failed to write in memory"};
   }
   return {};
 }
 
-tl::expected<void, std::string> Process::ReadIntoBuffer(MemoryAddress address, BytesView buffer) const {
+std::expected<void, std::string> Process::ReadIntoBuffer(MemoryAddress address, BytesView buffer) const {
   size_t size_read{};
   auto success = ReadProcessMemory(handle_, address, buffer.data(), buffer.size_bytes(), &size_read);
   if (!success || size_read != buffer.size_bytes()) {
-    return tl::unexpected("Failed to read address");
+    return std::unexpected("Failed to read address");
   }
   return {};
 };
 
-tl::optional<Matches> Process::Find(BytesView needle) {
+std::optional<Matches> Process::Find(BytesView needle) {
   return Search(*this, needle);
 }
 

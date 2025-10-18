@@ -1,2 +1,4 @@
-add_executable(fakegame "./main_fakegame.cpp")
+# Copyright (c) Maia
+
+add_executable(fakegame main.cpp)
 target_link_libraries(fakegame fmt::fmt)

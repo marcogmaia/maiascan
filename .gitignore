@@ -1,9 +1,12 @@
-__pycache__/
 .cache/
 .vs/
 .vscode/
-*.zip
 build/
 cache/
-imgui.ini
 out/
+__pycache__/
+
+*.zip
+.clangd
+CMakeUserPresets.json
+imgui.ini

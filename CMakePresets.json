@@ -1,93 +1,41 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 23,
-    "patch": 0
-  },
   "configurePresets": [
     {
-      "name": "default",
+      "name": "windows",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "generator": "Ninja",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "environment": {
         "VCPKG_FORCE_DOWNLOADED_BINARIES": "1"
       },
-      "binaryDir": "${sourceDir}/build/default",
-      "description": "Default build using Ninja generator",
-      "displayName": "Default Config",
-      "generator": "Ninja",
-      "hidden": true,
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang.exe",
-        "CMAKE_CXX_COMPILER": "clang++.exe",
-        "CMAKE_TOOLCHAIN_FILE": {
-          "value": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
-          "type": "FILEPATH"
-        },
-        "VCPKG_INSTALLED_DIR": {
-          "type": "PATH",
-          "value": "${sourceDir}/cache/vcpkg_installed"
-        },
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_C_STANDARD": "23",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/out/vcpkg_installed",
+        "X_VCPKG_APPLOCAL_DEPS_INSTALL": "1"
+      },
+      "toolset": {
+        "strategy": "external",
+        "value": "v143,host=x64,version=14.44"
       },
       "architecture": {
         "value": "x64",
         "strategy": "external"
-      }
-    },
-    {
-      "name": "windows-only",
-      "inherits": "default",
-      "displayName": "Windows-only configuration",
-      "description": "This build is only available on Windows",
+      },
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       }
-    },
-    {
-      "name": "release",
-      "inherits": "default",
-      "binaryDir": "${sourceDir}/build/windows-release",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "debug",
-      "inherits": "default",
-      "binaryDir": "${sourceDir}/build/windows-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
     }
   ],
-  "buildPresets": [
-    {
-      "name": "build-debug",
-      "configurePreset": "debug"
-    },
-    {
-      "name": "build-release",
-      "configurePreset": "release"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "base",
-      "inheritConfigureEnvironment": true,
-      "hidden": true,
-      "output": {
-        "outputOnFailure": true
-      },
-      "execution": {
-        "jobs": 0
-      }
-    },
-    {
-      "name": "windows-debug",
-      "inherits": "base",
-      "configurePreset": "debug"
-    }
-  ]
+  "buildPresets": [{ "name": "windows", "configurePreset": "windows" }],
+  "testPresets": [{ "name": "windows", "configurePreset": "windows" }],
+  "packagePresets": [{ "name": "windows", "configurePreset": "windows" }]
 }

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
 
-#include "maiascan/scanner/engine.h"
 #include "maiascan/scanner/process.h"
 
 namespace maia::scanner {
@@ -34,7 +34,7 @@ class Scan {
     std::vector<ScanMatch> same_matches;
     same_matches.reserve(scan_.size());
     for (const auto& scan : scan_) {
-      if (BytesToFundametalType<T>(scan.bytes) == original_value) {
+      if (BytesToFundamentalType<T>(scan.bytes) == original_value) {
         same_matches.emplace_back(scan);
       }
     }
@@ -54,8 +54,8 @@ class Scan {
     T buffer{};
     auto buffer_view = ToBytesView(buffer);
     for (auto& scan_entry : scan_) {
-      process_->ReadIntoBuffer(scan_entry.address, buffer_view);
-      bool is_match = std::ranges::equal(buffer_view, scan_entry.bytes);
+      bool is_match = process_->ReadIntoBuffer(scan_entry.address, buffer_view) &&
+                      std::ranges::equal(buffer_view, scan_entry.bytes);
       if (is_match) {
         new_scan.emplace_back(scan_entry);
       }
@@ -75,8 +75,8 @@ class Scan {
   }
 
   std::shared_ptr<Process> process_;
-  std::vector<ScanMatch> scan_{};
-  std::vector<ScanMatch> prev_scan_{};
+  std::vector<ScanMatch> scan_;
+  std::vector<ScanMatch> prev_scan_;
 };
 
 }  // namespace maia::scanner

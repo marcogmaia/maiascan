@@ -1,4 +1,9 @@
+// Copyright (c) Maia
+
+#include <regex>
+
 #include "maiascan/scanner/engine.h"
+#include "maiascan/scanner/scanner.h"
 
 namespace maia::scanner {
 
@@ -35,9 +40,9 @@ std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
   return addresses;
 }
 
-tl::optional<Pid> GetPidFromProcessName(const std::string &proc_name) {
+std::optional<Pid> GetPidFromProcessName(const std::string &proc_name) {
   if (proc_name.empty()) {
-    return tl::nullopt;
+    return std::nullopt;
   }
   std::regex pattern{fmt::format("^{}.*", proc_name), std::regex_constants::icase};
   std::smatch match{};
@@ -47,10 +52,10 @@ tl::optional<Pid> GetPidFromProcessName(const std::string &proc_name) {
       return proc.pid;
     }
   }
-  return tl::nullopt;
+  return std::nullopt;
 }
 
-tl::optional<Matches> Search(Process &proc, BytesView bytes) {
+std::optional<Matches> Search(Process &proc, BytesView bytes) {
   const auto &pages = proc.QueryPages();
   Matches matches;
   matches.reserve(pages.size());

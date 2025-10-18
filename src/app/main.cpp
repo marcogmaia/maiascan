@@ -1,7 +1,7 @@
-#include <bit>
+// Copyright (c) Maia
+
 #include <iostream>
-#include <type_traits>
-#include <variant>
+#include <print>
 
 #include <GLFW/glfw3.h>
 #include <fmt/core.h>
@@ -10,14 +10,13 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
-#include <tl/optional.hpp>
+#include <optional>
 
 #include "app/imgui_extensions.hpp"
-#include "maiascan/console/console.h"
+#include "maiascan/console/commands.h"
 #include "maiascan/scanner/engine.h"
 #include "maiascan/scanner/process.h"
 #include "maiascan/scanner/scan.h"
-#include "maiascan/scanner/scanner.h"
 
 namespace maia::scanner {
 
@@ -29,7 +28,7 @@ auto SearchT(Process &proc, T needle) {
 }
 
 std::vector<MemoryAddress> GetAddressMatches(const Matches &matches) {
-  int total_offsets = 0;
+  size_t total_offsets = 0;
   for (const auto &match : matches) {
     total_offsets += match.offsets.size();
   }
@@ -74,9 +73,12 @@ void ProcessCommandAttach(console::CommandAttach &command) {
   Scan scan{proc};
   scan.Find(needle);
   for (auto &scan_entry : scan.scan()) {
-    spdlog::info("{:>16} -- {}", scan_entry.address, BytesToFundametalType<int>(scan_entry.bytes));
+    spdlog::info("{:>16} -- {}", scan_entry.address, BytesToFundamentalType<int>(scan_entry.bytes));
     int write_value = 2000;
-    proc->Write(scan_entry.address, ToBytesView(write_value));
+    auto res = proc->Write(scan_entry.address, ToBytesView(write_value));
+    if (!res) {
+      spdlog::warn(res.error());
+    }
   }
 }
 
@@ -85,13 +87,13 @@ void ProcessCommandAttach(console::CommandAttach &command) {
 }  // namespace maia::scanner
 
 void glfw_error_callback(int error, const char *description) {
-  fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+  std::println(stderr, "GLFW Error {}: {}", error, description);
 }
 
-tl::expected<GLFWwindow *, int> InitGlfw() {
+std::expected<GLFWwindow *, int> InitGlfw() {
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit()) {
-    return tl::unexpected(1);
+    return std::unexpected(1);
   }
 
   const char *glsl_version = "#version 130";
@@ -100,7 +102,7 @@ tl::expected<GLFWwindow *, int> InitGlfw() {
 
   GLFWwindow *window = glfwCreateWindow(1280, 720, "maiascan", nullptr, nullptr);
   if (window == nullptr) {
-    return tl::unexpected(1);
+    return std::unexpected(1);
   }
   glfwMakeContextCurrent(window);
   gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
@@ -159,8 +161,11 @@ int main(int argc, const char **argv) {
           ImGui::Text("Number of matches: %zu", total_matches);
           if (total_matches < 2000) {
             for (auto &scan_entry : scan.scan()) {
-              proc->ReadIntoBuffer(scan_entry.address, scan_entry.bytes);
-              ImGui::Text("%p -- %d", scan_entry.address, *std::bit_cast<int *>(scan_entry.bytes.data()));
+              if (auto res = proc->ReadIntoBuffer(scan_entry.address, scan_entry.bytes)) {
+                ImGui::Text("%p -- %d", scan_entry.address, *reinterpret_cast<int *>(scan_entry.bytes.data()));
+              } else {
+                spdlog::warn(res.error());
+              }
             }
           }
         }

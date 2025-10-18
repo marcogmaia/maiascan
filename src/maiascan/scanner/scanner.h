@@ -1,7 +1,7 @@
+// Copyright (c) Maia
+
 #pragma once
 
-#include <span>
-#include <string>
 #include <vector>
 
 #include "maiascan/scanner/types.h"

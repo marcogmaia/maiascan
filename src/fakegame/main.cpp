@@ -1,4 +1,5 @@
-#include <bit>
+// Copyright (c) Maia
+
 #include <iostream>
 #include <memory>
 #include <string>
@@ -7,18 +8,14 @@
 
 template <typename T>
 void Show(const std::string& name, const T& value) {
-  std::cout << fmt::format("{:10}: {:20} - Addr: {}\n", name, value, static_cast<const void*>(&value));
+  fmt::print("{:10}: {:20} - Addr: {}\n", name, value, static_cast<const void*>(&value));
 }
-
-// void Show(const std::string& name, const void* value) {
-//   std::cout << fmt::format("{:10}: {:20} - Addr: {}\n", name, value, value);
-// }
 
 template <typename T>
 void ShowPointer(const std::string& name, const T* ptr) {
-  void* stack_ptr = &ptr;
-  std::string addr_val = fmt::format("{}-({})", std::bit_cast<const void*>(ptr), *ptr);
-  std::cout << fmt::format("{:10}: {:20} - Addr: {}\n", name, addr_val, stack_ptr);
+  void* stack_ptr = &ptr;  // NOLINT
+  std::string addr_val = fmt::format("{}-({})", reinterpret_cast<const void*>(ptr), *ptr);
+  fmt::print("{:10}: {:20} - Addr: {}\n", name, addr_val, stack_ptr);
 }
 
 int main() {

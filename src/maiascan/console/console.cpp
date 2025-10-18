@@ -1,3 +1,4 @@
+// Copyright (c) Maia
 
 #include <fmt/core.h>
 #include <CLI/CLI.hpp>
@@ -7,13 +8,11 @@
 
 namespace maia ::console {
 
-namespace {}
-
 struct Console::Impl {};
 
 Console::Console() : impl_(nullptr) {}
 
-tl::expected<Command, std::string> Parse(const char* const* argv, int argc, bool skip_first) {
+std::expected<Command, std::string> Parse(const char* const* argv, int argc, bool skip_first) {
   std::string command{};
   for (int i = skip_first ? 1 : 0; i < argc; ++i) {
     command += " ";
@@ -22,7 +21,7 @@ tl::expected<Command, std::string> Parse(const char* const* argv, int argc, bool
   return Parse(command);
 }
 
-tl::expected<Command, std::string> Parse(const std::string& command) {
+std::expected<Command, std::string> Parse(const std::string& command) {
   CLI::App app("maiascan");
 
   bool fl;
@@ -34,9 +33,7 @@ tl::expected<Command, std::string> Parse(const std::string& command) {
   try {
     app.parse(command);
   } catch (const CLI::ParseError& e) {
-    return tl::unexpected(app.help());
-  } catch (const CLI::CallForHelp&) {
-    return tl::unexpected(app.help());
+    return std::unexpected(app.help());
   };
 
   return CommandAttach{process_name};

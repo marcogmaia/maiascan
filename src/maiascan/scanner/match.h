@@ -2,8 +2,6 @@
 
 #include <vector>
 
-#include <tl/optional.hpp>
-
 #include "maiascan/scanner/types.h"
 
 namespace maia {

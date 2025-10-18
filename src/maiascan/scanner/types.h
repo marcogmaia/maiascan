@@ -1,3 +1,4 @@
+// Copyright (c) Maia
 
 #pragma once
 
@@ -25,9 +26,8 @@ BytesView ToBytesView(T &data) {
 }
 
 template <CFundamentalType T>
-T BytesToFundametalType(BytesViewReadOnly view) {
-  const auto *ptr = std::bit_cast<T *>(view.data());
-  return *ptr;
+T BytesToFundamentalType(BytesViewReadOnly view) {
+  return *std::bit_cast<T *>(view.data());
 }
 
 struct ProcessData {

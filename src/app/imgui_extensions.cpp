@@ -1,10 +1,5 @@
 #include "app/imgui_extensions.hpp"
 
-#include <bit>
-#include <cmath>
-#include <source_location>
-#include <tuple>
-
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
