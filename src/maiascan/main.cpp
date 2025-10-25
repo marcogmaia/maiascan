@@ -13,6 +13,7 @@
 #include <optional>
 
 #include "gui/imgui_extensions.h"
+#include "gui/widgets/process_picker.h"
 #include "maiascan/console/commands.h"
 #include "maiascan/scanner/engine.h"
 #include "maiascan/scanner/process.h"
@@ -90,82 +91,65 @@ void ProcessCommandAttach(console::CommandAttach& command) {
 
 }  // namespace maia::scanner
 
-void glfw_error_callback(int error, const char* description) {
-  std::println(stderr, "GLFW Error {}: {}", error, description);
+void ClearBackground(GLFWwindow* window, ImVec4& clear_color) {
+  int display_w;
+  int display_h;
+  glfwGetFramebufferSize(window, &display_w, &display_h);
+  glViewport(0, 0, display_w, display_h);
+  glClearColor(clear_color.x * clear_color.w,
+               clear_color.y * clear_color.w,
+               clear_color.z * clear_color.w,
+               clear_color.w);
+  glClear(GL_COLOR_BUFFER_BIT);
 }
 
-std::expected<GLFWwindow*, int> InitGlfw() {
-  glfwSetErrorCallback(glfw_error_callback);
-  if (!glfwInit()) {
-    return std::unexpected(1);
-  }
-
-  const char* glsl_version = "#version 130";
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-
-  GLFWwindow* window =
-      glfwCreateWindow(1280, 720, "maiascan", nullptr, nullptr);
-  if (window == nullptr) {
-    return std::unexpected(1);
-  }
-  glfwMakeContextCurrent(window);
-  gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
-  glfwSwapInterval(1);  // Enable vsync
-  return window;
-}
-
-void TerminateGlfw(GLFWwindow* window) {
-  glfwDestroyWindow(window);
-  glfwTerminate();
-}
-
-// TODO(marco): Refactor this garbage.
 int main(int argc, const char** argv) {
   // ============ Setting up window
-  auto glfw_init_result = InitGlfw();
-  if (!glfw_init_result) {
-    return glfw_init_result.error();
-  }
-  auto* window = *glfw_init_result;
+  // auto glfw_init_result = InitGlfw();
+  // if (!glfw_init_result) {
+  //   return glfw_init_result.error();
+  // }
+  // auto* window = *glfw_init_result;
 
-  maia::ImGuiInit();
+  auto* window = static_cast<GLFWwindow*>(maia::ImGuiInit());
 
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   std::shared_ptr<maia::scanner::Process> proc;
 
-  auto pid = maia::scanner::GetPidFromProcessName("fakegame");
-  if (!pid) {
-    spdlog::error("Make sure that fakegame is running");
-    return 1;
-  }
-  proc = std::make_shared<maia::scanner::Process>(*pid);
-  auto scan = maia::scanner::Scan{proc};
+  // auto pid = maia::scanner::GetPidFromProcessName("fakegame");
+  // if (!pid) {
+  //   spdlog::error("Make sure that fakegame is running");
+  //   return 1;
+  // }
+  // proc = std::make_shared<maia::scanner::Process>(*pid);
+  std::optional<maia::scanner::Scan> scan /* = maia::scanner::Scan{proc} */;
 
-  std::string proc_name(256, 0);
+  // std::string proc_name(256, 0);
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
 
     maia::ImGuiBeginFrame();
 
-    if (proc) {
+    maia::gui::ShowProcessTool();
+
+    if (proc && scan) {
       if (ImGui::Begin("scan")) {
         static int needle{};
         ImGui::InputScalar("needle", ImGuiDataType_S32, &needle);
         if (ImGui::Button("Scan")) {
-          scan.Find(needle);
+          scan->Find(needle);
           spdlog::info("Scanning for needle: {}", needle);
         }
         if (ImGui::Button("Remove different")) {
-          scan.RemoveDifferent(needle);
+          scan->RemoveDifferent(needle);
         }
-        if (!scan.scan().empty()) {
-          auto total_matches = scan.scan().size();
+        if (!scan->scan().empty()) {
+          auto total_matches = scan->scan().size();
           ImGui::Text("Number of matches: %zu", total_matches);
           if (total_matches < 2000) {
-            for (auto& scan_entry : scan.scan()) {
+            for (auto& scan_entry : scan->scan()) {
               if (auto res = proc->ReadIntoBuffer(scan_entry.address,
                                                   scan_entry.bytes)) {
                 ImGui::Text("%p -- %d",
@@ -178,27 +162,17 @@ int main(int argc, const char** argv) {
           }
         }
       }
+      ImGui::End();
     }
-    ImGui::End();
 
-    ImGui::ShowDemoWindow();
-
-    int display_w;
-    int display_h;
-    glfwGetFramebufferSize(window, &display_w, &display_h);
-    glViewport(0, 0, display_w, display_h);
-    glClearColor(clear_color.x * clear_color.w,
-                 clear_color.y * clear_color.w,
-                 clear_color.z * clear_color.w,
-                 clear_color.w);
-    glClear(GL_COLOR_BUFFER_BIT);
+    // ImGui::ShowDemoWindow();
+    ClearBackground(window, clear_color);
 
     maia::ImGuiEndFrame();
     glfwSwapBuffers(window);
   }
 
-  maia::ImGuiTerminate();
-  TerminateGlfw(window);
+  maia::ImGuiTerminate(window);
 
   return 0;
 }

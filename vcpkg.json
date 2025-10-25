@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "maiascan",
   "version-string": "0.0.1",
-  "vcpkg-configuration": { "overlay-triplets": ["external/triplets"] },
+  "configuration": { "overlay-triplets": ["external/triplets"] },
   "dependencies": [
     "atl",
     "cli11",

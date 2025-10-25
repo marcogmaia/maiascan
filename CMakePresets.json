@@ -1,15 +1,16 @@
 {
-  "version": 6,
+  "version": 10,
   "configurePresets": [
     {
       "name": "windows",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "generator": "Ninja",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "environment": {
+        "VCPKG_ROOT": "C:/vcpkg",
         "VCPKG_FORCE_DOWNLOADED_BINARIES": "1"
       },
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_COMPILER": "cl.exe",

@@ -2,15 +2,57 @@
 
 #include "gui/imgui_extensions.h"
 
+#include <expected>
+#include <print>
+
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
+#include <glad/glad.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
 namespace maia {
 
-void ImGuiInit() {
-  GLFWwindow* window = glfwGetCurrentContext();
+namespace {
+
+void glfw_error_callback(int error, const char* description) {
+  std::println(stderr, "GLFW Error {}: {}", error, description);
+}
+
+std::expected<GLFWwindow*, int> InitGlfw() {
+  glfwSetErrorCallback(glfw_error_callback);
+  if (!glfwInit()) {
+    return std::unexpected(1);
+  }
+
+  const char* glsl_version = "#version 130";
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+
+  GLFWwindow* window =
+      glfwCreateWindow(1280, 720, "maiascan", nullptr, nullptr);
+  if (window == nullptr) {
+    return std::unexpected(1);
+  }
+  glfwMakeContextCurrent(window);
+  gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
+  glfwSwapInterval(1);  // Enable vsync
+  return window;
+}
+
+void TerminateGlfw(GLFWwindow* window) {
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
+}  // namespace
+
+void* ImGuiInit() {
+  auto res = InitGlfw();
+  if (!res) {
+    return nullptr;
+  }
+  GLFWwindow* window = *res;
   // Setup Dear ImGui context
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -88,12 +130,14 @@ void ImGuiInit() {
   // ImFont* font =
   // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f,
   // NULL, io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != NULL);
+  return window;
 }
 
-void ImGuiTerminate() {
+void ImGuiTerminate(void* window_handle) {
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
+  TerminateGlfw(static_cast<GLFWwindow*>(window_handle));
 }
 
 void ImGuiProcessViewports() {
