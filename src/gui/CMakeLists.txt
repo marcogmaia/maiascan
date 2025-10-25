@@ -1,14 +1,14 @@
 # Copyright (c) Maia
 
-add_executable(
-  maiascan
-  main.cpp
+add_library(
+  gui
   imgui_extensions.cpp
+  imgui_extensions.h
 )
 
 target_link_libraries(
-  maiascan
-  PRIVATE
+  gui
+  PUBLIC
     imgui::imgui
     glfw
     scanner
@@ -16,4 +16,4 @@ target_link_libraries(
     glad::glad
 )
 
-target_compile_definitions(maiascan PRIVATE GLFW_INCLUDE_NONE)
+target_compile_definitions(gui PUBLIC GLFW_INCLUDE_NONE)

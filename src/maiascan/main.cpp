@@ -12,7 +12,7 @@
 #include <spdlog/spdlog.h>
 #include <optional>
 
-#include "app/imgui_extensions.hpp"
+#include "gui/imgui_extensions.h"
 #include "maiascan/console/commands.h"
 #include "maiascan/scanner/engine.h"
 #include "maiascan/scanner/process.h"

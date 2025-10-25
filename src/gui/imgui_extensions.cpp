@@ -1,4 +1,6 @@
-#include "app/imgui_extensions.hpp"
+// Copyright (c) Maia
+
+#include "gui/imgui_extensions.h"
 
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
 #include <imgui.h>
