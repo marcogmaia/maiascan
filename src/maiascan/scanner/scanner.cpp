@@ -26,15 +26,20 @@ ProcessData GetProcNameAndId(DWORD pid) {
 
   // Get a handle to the process.
 
-  HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+  HANDLE hproc =
+      OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
   // Get the process name.
   if (hproc) {
     HMODULE hmod;
     DWORD bytes_needed;
 
-    if (EnumProcessModules(hproc, &hmod, sizeof(MemoryAddress), &bytes_needed)) {
-      GetModuleBaseName(hproc, hmod, sz_process_name, sizeof(sz_process_name) / sizeof(TCHAR));
+    if (EnumProcessModules(
+            hproc, &hmod, sizeof(MemoryAddress), &bytes_needed)) {
+      GetModuleBaseName(hproc,
+                        hmod,
+                        sz_process_name,
+                        sizeof(sz_process_name) / sizeof(TCHAR));
     }
   }
 
@@ -55,7 +60,7 @@ std::vector<ProcessData> GetProcs() {
   std::span<DWORD> pids(procs.data(), bytes_needed / sizeof(DWORD));
   std::vector<ProcessData> pids_found;
   pids_found.reserve(pids.size());
-  for (const auto &pid : pids) {
+  for (const auto& pid : pids) {
     if (pid) {
       pids_found.emplace_back(GetProcNameAndId(pid));
     }
@@ -66,7 +71,7 @@ std::vector<ProcessData> GetProcs() {
 
 void ListProcs() {
   auto procs = GetProcs();
-  for (auto &proc : procs) {
+  for (auto& proc : procs) {
     std::cout << fmt::format("{} (PID: {})\n", proc.name, proc.pid);
   }
 }

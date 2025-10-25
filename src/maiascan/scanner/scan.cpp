@@ -9,11 +9,12 @@
 namespace maia::scanner {
 
 void Scan::FilterChanged() {
-  bool can_filter = !scan_.empty() && !prev_scan_.empty() && scan_.size() == prev_scan_.size();
+  bool can_filter = !scan_.empty() && !prev_scan_.empty() &&
+                    scan_.size() == prev_scan_.size();
   if (!can_filter) {
     return;
   }
-  SwapScans();
+  PushScan();
   std::vector<ScanMatch> scan_changed;
   scan_changed.reserve(std::max(scan_.size(), prev_scan_.size()));
   for (auto it_actual = scan_.begin(), it_prev = prev_scan_.begin();

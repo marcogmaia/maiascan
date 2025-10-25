@@ -17,7 +17,7 @@ namespace maia::scanner {
 namespace {
 
 template <typename T>
-auto SearchT(Process &proc, T needle) {
+auto SearchT(Process& proc, T needle) {
   return Search(proc, ToBytesView(needle));
 }
 

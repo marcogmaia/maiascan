@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v21.1.2
+    hooks:
+      - id: clang-format
+        types_or:
+          - c++
+          - c
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--enforce-all"]
+
+  - repo: https://github.com/BlankSpruce/gersemi
+    rev: 0.22.2
+    hooks:
+      - id: gersemi
+        args: ["-i", "--indent", "2", "--list-expansion", "favour-expansion"]
+        exclude: ^external/.+/
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        additional_dependencies:
+          - prettier@3.1.0
+        types_or:
+          - json
+          - markdown
+          - yaml
+        exclude: ^external/.+/
+        args: [--end-of-line, auto, --print-width, "120"]

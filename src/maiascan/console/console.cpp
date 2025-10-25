@@ -10,9 +10,12 @@ namespace maia ::console {
 
 struct Console::Impl {};
 
-Console::Console() : impl_(nullptr) {}
+Console::Console()
+    : impl_(nullptr) {}
 
-std::expected<Command, std::string> Parse(const char* const* argv, int argc, bool skip_first) {
+std::expected<Command, std::string> Parse(const char* const* argv,
+                                          int argc,
+                                          bool skip_first) {
   std::string command{};
   for (int i = skip_first ? 1 : 0; i < argc; ++i) {
     command += " ";

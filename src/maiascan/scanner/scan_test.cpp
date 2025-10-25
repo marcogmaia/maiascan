@@ -15,7 +15,7 @@ TEST(Scan, Test) {
   auto scan = Scan{process};
 
   int needle = 1337;
-  const auto &scan_result = scan.Find(needle);
+  const auto& scan_result = scan.Find(needle);
 
   ASSERT_TRUE(!scan_result.empty());
 
@@ -23,7 +23,8 @@ TEST(Scan, Test) {
   scan.Find(new_needle);
   scan.FilterChanged();
   EXPECT_EQ(scan.scan().size(), 1);
-  EXPECT_TRUE(std::ranges::equal(scan.scan().front().bytes, ToBytesView(new_needle)));
+  EXPECT_TRUE(
+      std::ranges::equal(scan.scan().front().bytes, ToBytesView(new_needle)));
 }
 
 TEST(Scan, MemoryAddress) {
@@ -33,7 +34,7 @@ TEST(Scan, MemoryAddress) {
   auto scan = Scan{process};
 
   int needle = 1337;
-  const auto &scan_result = scan.Find(needle);
+  const auto& scan_result = scan.Find(needle);
 
   ASSERT_TRUE(!scan.scan().empty());
 
@@ -41,7 +42,7 @@ TEST(Scan, MemoryAddress) {
 
   auto scan_addresses = scan.scan();
   MemoryAddress needle_address{};
-  for (auto &scan_result : scan_addresses) {
+  for (auto& scan_result : scan_addresses) {
     needle_address = scan_result.address;
     ASSERT_EQ(needle, *process->Read<int>(needle_address));
     found = !scan.Find(needle_address).empty();
@@ -50,16 +51,17 @@ TEST(Scan, MemoryAddress) {
     }
   }
 
-  for (auto &s : scan.scan()) {
-    auto *fneedle = *process->Read<MemoryAddress>(s.address);
+  for (auto& s : scan.scan()) {
+    auto* fneedle = *process->Read<MemoryAddress>(s.address);
     EXPECT_EQ(needle_address, fneedle);
   }
 
   ASSERT_TRUE(found);
   ASSERT_TRUE(!scan_addresses.empty());
 
-  for (auto &scan_result : scan_addresses) {
-    EXPECT_EQ(needle, *std::bit_cast<decltype(needle) *>(scan_result.bytes.data()));
+  for (auto& scan_result : scan_addresses) {
+    EXPECT_EQ(needle,
+              *std::bit_cast<decltype(needle)*>(scan_result.bytes.data()));
   }
 }
 

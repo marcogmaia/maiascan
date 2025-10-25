@@ -10,7 +10,7 @@
 
 namespace maia {
 
-using MemoryAddress = void *;
+using MemoryAddress = void*;
 using Pid = uint32_t;
 
 using Bytes = std::vector<std::byte>;
@@ -21,13 +21,13 @@ template <typename T>
 concept CFundamentalType = std::is_fundamental_v<std::decay_t<T>>;
 
 template <CFundamentalType T>
-BytesView ToBytesView(T &data) {
-  return BytesView(std::bit_cast<std::byte *>(&data), sizeof(T));
+BytesView ToBytesView(T& data) {
+  return BytesView(std::bit_cast<std::byte*>(&data), sizeof(T));
 }
 
 template <CFundamentalType T>
 T BytesToFundamentalType(BytesViewReadOnly view) {
-  return *std::bit_cast<T *>(view.data());
+  return *std::bit_cast<T*>(view.data());
 }
 
 struct ProcessData {

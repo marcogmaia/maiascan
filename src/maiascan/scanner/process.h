@@ -25,18 +25,23 @@ class Process {
 
   std::optional<Bytes> ReadPage(const Page& page) const;
 
-  std::expected<void, std::string> ReadIntoBuffer(MemoryAddress address, BytesView buffer) const;
+  std::expected<void, std::string> ReadIntoBuffer(MemoryAddress address,
+                                                  BytesView buffer) const;
 
-  std::expected<void, std::string> Write(MemoryAddress address, BytesView value);
+  std::expected<void, std::string> Write(MemoryAddress address,
+                                         BytesView value);
 
   std::optional<Matches> Find(BytesView needle);
 
-  Pid pid() const { return pid_; }
+  Pid pid() const {
+    return pid_;
+  }
 
   template <CScannable T>
   std::optional<T> Read(MemoryAddress address) {
     T buffer;
-    auto buffer_view = BytesView(std::bit_cast<std::byte*>(std::addressof(buffer)), sizeof buffer);
+    auto buffer_view = BytesView(
+        std::bit_cast<std::byte*>(std::addressof(buffer)), sizeof buffer);
     if (!ReadIntoBuffer(address, buffer_view)) {
       return std::nullopt;
     }
