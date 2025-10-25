@@ -15,7 +15,7 @@ void Scan::FilterChanged() {
     return;
   }
   PushScan();
-  std::vector<ScanMatch> scan_changed;
+  std::vector<Match> scan_changed;
   scan_changed.reserve(std::max(scan_.size(), prev_scan_.size()));
   for (auto it_actual = scan_.begin(), it_prev = prev_scan_.begin();
        it_actual < scan_.end() && it_prev < prev_scan_.end();
@@ -28,11 +28,11 @@ void Scan::FilterChanged() {
   scan_changed.swap(scan_);
 }
 
-void Scan::SetMatches(const Matches& matches, int buffer_size) {
-  ForEachMatchesAddress(matches, [this, buffer_size](MemoryAddress address) {
-    Bytes buffer(buffer_size, std::byte{});
+void Scan::UpdateScan(const Matches& matches, int buffer_size) {
+  ForEachMatchAddress(matches, [this, buffer_size](MemoryAddress address) {
+    std::vector<Byte> buffer(buffer_size);
     if (process_->ReadIntoBuffer(address, buffer)) {
-      scan_.emplace_back(ScanMatch{address, buffer});
+      scan_.emplace_back(Match{.address = address, .bytes = buffer});
     }
   });
 }

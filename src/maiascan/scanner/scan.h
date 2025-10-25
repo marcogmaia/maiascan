@@ -9,23 +9,23 @@ namespace maia::scanner {
 
 class Scan {
  public:
-  struct ScanMatch {
+  struct Match {
     MemoryAddress address;
-    Bytes bytes;
+    std::vector<Byte> bytes;
   };
 
   explicit Scan(std::shared_ptr<Process> process)
       : process_(std::move(process)) {}
 
   template <typename T>
-  const std::vector<ScanMatch>& Find(T needle) {
+  const std::vector<Match>& Find(T needle) {
     PushScan();
-    auto needle_view = BytesView(
-        std::bit_cast<std::byte*>(std::addressof(needle)), sizeof needle);
+    auto needle_view = std::span<Byte>(
+        std::bit_cast<Byte*>(std::addressof(needle)), sizeof needle);
     if (auto matches = process_->Find(needle_view)) {
       // TODO(marco): This function seems kinda odd, verify if it can be made
       // better.
-      SetMatches(*matches, sizeof needle);
+      UpdateScan(*matches, sizeof(needle));
     }
     return scan_;
   }
@@ -34,7 +34,7 @@ class Scan {
 
   template <CFundamentalType T>
   void RemoveDifferent(T original_value) {
-    std::vector<ScanMatch> same_matches;
+    std::vector<Match> same_matches;
     same_matches.reserve(scan_.size());
     for (const auto& scan : scan_) {
       if (BytesToFundamentalType<T>(scan.bytes) == original_value) {
@@ -50,7 +50,7 @@ class Scan {
     if (scan_.empty()) {
       return;
     }
-    std::vector<ScanMatch> new_scan;
+    std::vector<Match> new_scan;
     new_scan.reserve(scan_.size());
 
     auto needle_view = ToBytesView(needle);
@@ -68,12 +68,12 @@ class Scan {
     scan_ = std::move(new_scan);
   }
 
-  std::vector<ScanMatch>& scan() {
+  std::vector<Match>& scan() {
     return scan_;
   }
 
  private:
-  void SetMatches(const Matches& matches, int buffer_size);
+  void UpdateScan(const Matches& matches, int buffer_size);
 
   void PushScan() {
     scan_.swap(prev_scan_);
@@ -81,8 +81,8 @@ class Scan {
   }
 
   std::shared_ptr<Process> process_;
-  std::vector<ScanMatch> scan_;
-  std::vector<ScanMatch> prev_scan_;
+  std::vector<Match> scan_;
+  std::vector<Match> prev_scan_;
 };
 
 }  // namespace maia::scanner

@@ -9,8 +9,8 @@ namespace maia::scanner {
 
 namespace detail {
 
-Match::Offsets SearchOffsets(BytesView haystack,
-                             BytesView needle,
+Match::Offsets SearchOffsets(std::span<Byte> haystack,
+                             std::span<Byte> needle,
                              int align = 4) {
   Match::Offsets offsets;
 
@@ -59,7 +59,7 @@ std::optional<Pid> GetPidFromProcessName(const std::string& proc_name) {
   return std::nullopt;
 }
 
-std::optional<Matches> Search(Process& proc, BytesView bytes) {
+std::optional<Matches> Search(Process& proc, std::span<Byte> bytes) {
   const auto& pages = proc.QueryPages();
   Matches matches;
   matches.reserve(pages.size());

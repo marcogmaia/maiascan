@@ -1,5 +1,4 @@
-
-#include <ranges>
+// Copyright (c) Maia
 
 #include <gtest/gtest.h>
 
@@ -9,22 +8,23 @@
 namespace maia::scanner {
 
 TEST(Scan, Test) {
-  auto pid = GetPidFromProcessName("fakegame");
+  auto pid = GetPidFromProcessName("scanner_test");
   ASSERT_TRUE(pid) << "Make sure fakegame is running.";
   auto process = std::make_shared<Process>(*pid);
   auto scan = Scan{process};
 
-  int needle = 1337;
+  volatile int needle = 1337;
+  volatile int needle2 = 1337;
   const auto& scan_result = scan.Find(needle);
+  needle = 2;
 
   ASSERT_TRUE(!scan_result.empty());
 
-  int new_needle = 1340;
-  scan.Find(new_needle);
+  scan.RemoveDifferent(1337);
   scan.FilterChanged();
-  EXPECT_EQ(scan.scan().size(), 1);
+  ASSERT_EQ(scan.scan().size(), 1);
   EXPECT_TRUE(
-      std::ranges::equal(scan.scan().front().bytes, ToBytesView(new_needle)));
+      std::ranges::equal(scan.scan().front().bytes, ToBytesView(needle)));
 }
 
 TEST(Scan, MemoryAddress) {

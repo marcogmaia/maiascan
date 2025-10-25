@@ -6,27 +6,24 @@
 #include <cstdint>
 #include <span>
 #include <string>
-#include <vector>
 
 namespace maia {
 
 using MemoryAddress = void*;
 using Pid = uint32_t;
 
-using Bytes = std::vector<std::byte>;
-using BytesView = std::span<std::byte>;
-using BytesViewReadOnly = std::span<const std::byte>;
+using Byte = std::byte;
 
 template <typename T>
 concept CFundamentalType = std::is_fundamental_v<std::decay_t<T>>;
 
 template <CFundamentalType T>
-BytesView ToBytesView(T& data) {
-  return BytesView(std::bit_cast<std::byte*>(&data), sizeof(T));
+std::span<Byte> ToBytesView(T& data) {
+  return std::span<Byte>(std::bit_cast<Byte*>(&data), sizeof(T));
 }
 
 template <CFundamentalType T>
-T BytesToFundamentalType(BytesViewReadOnly view) {
+T BytesToFundamentalType(std::span<const Byte> view) {
   return *std::bit_cast<T*>(view.data());
 }
 

@@ -3,8 +3,6 @@
 
 #include "maiascan/scanner/process.h"
 
-#include <bit>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -21,7 +19,7 @@ namespace maia::scanner {
 
 namespace {
 
-bool IsPageHackable(const MEMORY_BASIC_INFORMATION& page) {
+bool IsPageModifiable(const MEMORY_BASIC_INFORMATION& page) {
   return page.State == MEM_COMMIT && page.Type == MEM_PRIVATE &&
          page.Protect == PAGE_READWRITE;
 }
@@ -35,14 +33,14 @@ std::optional<MEMORY_BASIC_INFORMATION> QueryPage(HANDLE handle,
   return page;
 }
 
-std::vector<Page> GetCheatablePages(HANDLE process_handle) {
+std::vector<Page> GetModifiablePages(HANDLE process_handle) {
   std::vector<Page> pages;
   pages.reserve(32);
 
   MemoryAddress address = nullptr;
 
   while (auto page = QueryPage(process_handle, address)) {
-    if (IsPageHackable(*page)) {
+    if (IsPageModifiable(*page)) {
       pages.emplace_back(address, page->RegionSize);
     }
     address = NextAddress(address, page->RegionSize);
@@ -63,40 +61,38 @@ MemoryAddress GetBaseAddress(Pid pid) {
     auto err = GetLastError();
     return {};
   }
-  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
+  return mod_entry.modBaseAddr;
 }
 
 void PrintAllProcessModules(Pid pid) {
-  HANDLE hsnapshot =
+  HANDLE h_snapshot =
       CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
 
-  if (hsnapshot == INVALID_HANDLE_VALUE) {
+  if (h_snapshot == INVALID_HANDLE_VALUE) {
     return;
   }
 
   MODULEENTRY32 mod_entry = {0};
   mod_entry.dwSize = sizeof(MODULEENTRY32);
-  for (bool ok = Module32First(hsnapshot, &mod_entry) != 0; ok;
-       ok = Module32Next(hsnapshot, &mod_entry) != 0) {
-    std::cout << fmt::format(
-        "{:20} -- Addr: {}\n",
-        mod_entry.szModule,
-        std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr));
+  for (bool ok = Module32First(h_snapshot, &mod_entry) != 0; ok;
+       ok = Module32Next(h_snapshot, &mod_entry) != 0) {
+    fmt::print("{:20} -- Addr: {:p}\n",
+               mod_entry.szModule,
+               fmt::ptr(mod_entry.modBaseAddr));
   }
 
-  CloseHandle(hsnapshot);
+  CloseHandle(h_snapshot);
 }
 
 }  // namespace
 
 const std::vector<Page>& Process::QueryPages() {
-  pages_ = GetCheatablePages(handle_);
+  pages_ = GetModifiablePages(handle_);
   return pages_;
 }
 
-std::optional<Bytes> Process::ReadPage(const Page& page) const {
-  Bytes memory(page.size);
-
+std::optional<std::vector<Byte>> Process::ReadPage(const Page& page) const {
+  std::vector<Byte> memory(page.size);
   size_t total{};
   if (!ReadProcessMemory(
           handle_, page.address, memory.data(), page.size, &total)) {
@@ -107,7 +103,7 @@ std::optional<Bytes> Process::ReadPage(const Page& page) const {
 }
 
 std::expected<void, std::string> Process::Write(MemoryAddress address,
-                                                BytesView value) {
+                                                std::span<Byte> value) {
   if (!WriteProcessMemory(
           handle_, address, value.data(), value.size_bytes(), nullptr)) {
     return std::unexpected<std::string>{"Failed to write in memory"};
@@ -116,7 +112,7 @@ std::expected<void, std::string> Process::Write(MemoryAddress address,
 }
 
 std::expected<void, std::string> Process::ReadIntoBuffer(
-    MemoryAddress address, BytesView buffer) const {
+    MemoryAddress address, std::span<Byte> buffer) const {
   size_t size_read{};
   auto success = ReadProcessMemory(
       handle_, address, buffer.data(), buffer.size_bytes(), &size_read);
@@ -126,7 +122,7 @@ std::expected<void, std::string> Process::ReadIntoBuffer(
   return {};
 };
 
-std::optional<Matches> Process::Find(BytesView needle) {
+std::optional<Matches> Process::Find(std::span<Byte> needle) {
   return Search(*this, needle);
 }
 

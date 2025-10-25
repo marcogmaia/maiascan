@@ -15,7 +15,7 @@ namespace maia::scanner {
 
 std::optional<Pid> GetPidFromProcessName(const std::string& proc_name);
 
-std::optional<Matches> Search(Process& proc, BytesView bytes);
+std::optional<Matches> Search(Process& proc, std::span<Byte> bytes);
 
 std::vector<MemoryAddress> GetAddressMatches(const Matches& matches);
 
@@ -25,7 +25,7 @@ inline MemoryAddress NextAddress(MemoryAddress address, int64_t diff = 1) {
 };
 
 template <typename Callable>
-void ForEachMatchesAddress(const Matches& matches, Callable&& func) {
+void ForEachMatchAddress(const Matches& matches, Callable&& func) {
   for (const auto& match : matches) {
     for (const auto& offset : match.offsets) {
       func(NextAddress(match.page.address, offset));

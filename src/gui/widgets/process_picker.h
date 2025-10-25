@@ -25,19 +25,19 @@ struct ProcessInfo {
 std::string TCharToString(const TCHAR* tcharStr) {
 #ifdef UNICODE
   // If UNICODE is defined, TCHAR is wchar_t
-  std::wstring wStr(tcharStr);
+  std::wstring wstr(tcharStr);
   int size_needed = WideCharToMultiByte(
-      CP_UTF8, 0, &wStr[0], (int)wStr.size(), NULL, 0, NULL, NULL);
-  std::string strTo(size_needed, 0);
+      CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+  std::string strto(size_needed, 0);
   WideCharToMultiByte(CP_UTF8,
                       0,
-                      &wStr[0],
-                      (int)wStr.size(),
-                      &strTo[0],
+                      &wstr[0],
+                      (int)wstr.size(),
+                      &strto[0],
                       size_needed,
                       NULL,
                       NULL);
-  return strTo;
+  return strto;
 #else
   // If UNICODE is not defined, TCHAR is char
   return std::string(tcharStr);
@@ -76,9 +76,41 @@ void RefreshProcessList(std::vector<ProcessInfo>& processes) {
   CloseHandle(h_snapshot);  // Clean up the snapshot object
 }
 
-// class ProcessPicker {};
+// Helper function to get a process name from its PID
+std::string GetProcessNameFromPid(DWORD pid) {
+  if (pid == 0) {
+    return "N/A";
+  }
 
-// This function holds all our ImGui UI code
+  HANDLE h_process =
+      OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+
+  if (h_process == nullptr) {
+    return "<Access Denied>";
+  }
+
+  TCHAR process_name[MAX_PATH] = TEXT("<unknown>");
+
+  // Get the full path of the module
+  if (GetModuleFileNameEx(h_process, nullptr, process_name, MAX_PATH)) {
+    // Convert TCHAR to std::string
+    std::string full_path = TCharToString(process_name);
+
+    // Find the last backslash to get just the filename
+    size_t last_slash = full_path.find_last_of("\\/");
+    if (last_slash != std::string::npos) {
+      CloseHandle(h_process);
+      return full_path.substr(last_slash + 1);
+    } else {
+      CloseHandle(h_process);
+      return full_path;  // Return full path if no slash found
+    }
+  }
+
+  CloseHandle(h_process);
+  return TCharToString(process_name);
+}
+
 void ShowProcessTool(bool* p_open = nullptr) {
   // Static variables persist between frames
   static std::vector<ProcessInfo> processes;
@@ -100,6 +132,54 @@ void ShowProcessTool(bool* p_open = nullptr) {
   ImGui::SameLine();
   ImGui::Text("%zu processes found.", processes.size());
 
+  // --- "Drag-and-Drop" Picker Button ---
+  ImGui::SameLine();
+  ImGui::Button("Pick (Drag Me)");
+
+  // Check if the user is clicking and holding the button
+  if (ImGui::IsItemActive()) {
+    // --- NEW: Get HWND from ImGui ---
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    HWND hwnd = static_cast<HWND>(viewport->PlatformHandle);
+
+    // 1. Set the system-wide cursor to a crosshair
+    SetCapture(hwnd);
+    ImGui::SetMouseCursor(ImGuiMouseCursor_None);  // Hide ImGui's cursor
+    SetCursor(LoadCursor(NULL, IDC_CROSS));
+    ImGui::SetTooltip("Release over the target window to select.");
+  }
+
+  // Check if the user *released* the mouse after holding the button
+  if (ImGui::IsItemDeactivated()) {
+    // 1. Always release mouse capture!
+    ReleaseCapture();
+
+    // --- NEW: Get HWND from ImGui ---
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    HWND hwnd = static_cast<HWND>(viewport->PlatformHandle);
+
+    // 2. Get mouse position
+    POINT p;
+    GetCursorPos(&p);
+
+    // 3. Hide our own window *briefly*
+    ShowWindow(hwnd, SW_HIDE);
+    HWND h_wnd_under_cursor = WindowFromPoint(p);
+    ShowWindow(hwnd, SW_SHOW);  // Show it again immediately
+
+    // 4. Get PID and Name
+    if (h_wnd_under_cursor && h_wnd_under_cursor != hwnd) {
+      DWORD pid = 0;
+      GetWindowThreadProcessId(h_wnd_under_cursor, &pid);
+      if (pid != 0) {
+        // Update our selected process
+        selected_pid = pid;
+        selected_name = GetProcessNameFromPid(pid);
+      }
+    }
+  }
+  // --- END of new picker logic ---
+
   // 2. Filter Input
   ImGui::InputText("Filter", filter, IM_ARRAYSIZE(filter));
   std::string filter_lower = ToLower(std::string(filter));
@@ -108,8 +188,7 @@ void ShowProcessTool(bool* p_open = nullptr) {
 
   // 3. Display Selected Process
   ImGui::Text("Selected Process: %s", selected_name.c_str());
-  ImGui::Text("Selected PID: %lu",
-              selected_pid);  // %lu is for DWORD (unsigned long)
+  ImGui::Text("Selected PID: %lu", selected_pid);
 
   ImGui::Separator();
 
@@ -119,9 +198,7 @@ void ShowProcessTool(bool* p_open = nullptr) {
   for (const auto& proc : processes) {
     std::string name_lower = ToLower(proc.name);
 
-    // Apply the filter
     if (filter_lower.empty() || name_lower.contains(filter_lower)) {
-      // Format the display string: "process.exe (PID: 1234)"
       char item_label[512];
       std::ignore = snprintf(item_label,
                              sizeof(item_label),
@@ -131,12 +208,11 @@ void ShowProcessTool(bool* p_open = nullptr) {
 
       bool is_selected = (proc.pid == selected_pid);
       if (ImGui::Selectable(item_label, is_selected)) {
-        // When clicked, update the selected PID and Name
         selected_pid = proc.pid;
         selected_name = proc.name;
       }
       if (is_selected) {
-        ImGui::SetItemDefaultFocus();  // Auto-scroll to selected item
+        ImGui::SetItemDefaultFocus();
       }
     }
   }
