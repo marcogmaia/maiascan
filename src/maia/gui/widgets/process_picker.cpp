@@ -4,11 +4,14 @@
 #include <psapi.h>
 #include <tlhelp32.h>
 
+#include "process_picker.h"
+
 #include <algorithm>
 #include <string>
 #include <vector>
 
 #include <imgui.h>
+#include <entt/signal/dispatcher.hpp>
 
 #include "maia/logging.h"
 #include "maia/scanner/memory_common.h"
@@ -141,13 +144,12 @@ std::optional<ProcessInfo> ButtonProcessPicker() {
   }
 
   auto name = GetProcessNameFromPid(pid);
-  LogInfo("Selected process: {}", name);
   return ProcessInfo{.name = name, .pid = pid};
 }
 
 }  // namespace
 
-void ShowProcessTool(bool* p_open) {
+void ShowProcessTool(entt::dispatcher& dispatcher, bool* p_open) {
   // Static variables persist between frames
   static std::vector<ProcessInfo> processes;
   static char filter[MAX_PATH] = "";
@@ -173,6 +175,8 @@ void ShowProcessTool(bool* p_open) {
     RefreshProcessList(processes);
     selected_name = proc_picked->name;
     selected_pid = proc_picked->pid;
+    dispatcher.enqueue(
+        EventPickedProcess{.pid = selected_pid, .name = selected_name});
   }
 
   ImGui::InputText("Filter", filter, IM_ARRAYSIZE(filter));
@@ -202,6 +206,8 @@ void ShowProcessTool(bool* p_open) {
       if (ImGui::Selectable(item_label, is_selected)) {
         selected_pid = proc.pid;
         selected_name = proc.name;
+        dispatcher.enqueue(
+            EventPickedProcess{.pid = selected_pid, .name = selected_name});
       }
       if (is_selected) {
         ImGui::SetItemDefaultFocus();

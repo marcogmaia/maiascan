@@ -7,6 +7,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
+#include <entt/signal/dispatcher.hpp>
 
 #include "gui/imgui_extensions.h"
 #include "gui/widgets/process_picker.h"
@@ -26,6 +27,10 @@ void ClearBackground(GLFWwindow* window, ImVec4& clear_color) {
   glClear(GL_COLOR_BUFFER_BIT);
 }
 
+void ProcessPickedProcess(maia::gui::EventPickedProcess picked_process) {
+  maia::LogInfo("PID: {}, Name: {}", picked_process.pid, picked_process.name);
+}
+
 }  // namespace
 
 int main(int argc, const char** argv) {
@@ -35,18 +40,24 @@ int main(int argc, const char** argv) {
     return EXIT_FAILURE;
   }
 
-  ImVec4 clear_color = ImVec4(0.1f, 0.1f, 0.1f, 1.00f);
+  ImVec4 clear_color = ImVec4(0.06f, 0.06f, 0.08f, 1.0f);
+
+  entt::dispatcher dispatcher;
+  dispatcher.sink<maia::gui::EventPickedProcess>()
+      .connect<ProcessPickedProcess>();
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
 
     maia::ImGuiBeginFrame();
 
-    maia::gui::ShowProcessTool();
+    maia::gui::ShowProcessTool(dispatcher);
     ClearBackground(window, clear_color);
 
     maia::ImGuiEndFrame();
     glfwSwapBuffers(window);
+
+    dispatcher.update();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }

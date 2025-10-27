@@ -7,18 +7,16 @@
   "dependencies": [
     "atl",
     "cli11",
+    "entt",
     "fmt",
-    "gtest",
-    "nlohmann-json",
-    "spdlog",
-    {
-      "name": "glad",
-      "features": ["gl-api-43"]
-    },
+    { "name": "glad", "features": ["gl-api-43"] },
     "glfw3",
+    "gtest",
     {
       "name": "imgui",
       "features": ["docking-experimental", "glfw-binding", "opengl3-binding"]
-    }
+    },
+    "nlohmann-json",
+    "spdlog"
   ]
 }
