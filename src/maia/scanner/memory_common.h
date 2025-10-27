@@ -9,8 +9,9 @@
 
 namespace maia {
 
-using MemoryAddress = void*;
-using Pid = uint32_t;
+using MemoryPtr = void*;
+using MemoryAddress = uintptr_t;
+using Pid = size_t;
 
 using Byte = std::byte;
 
@@ -33,7 +34,7 @@ struct ProcessData {
 };
 
 struct Page {
-  MemoryAddress address;
+  MemoryPtr address;
   size_t size;
 };
 

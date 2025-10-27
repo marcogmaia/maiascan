@@ -2,8 +2,8 @@
 
 #include <gtest/gtest.h>
 
-#include "maiascan/scanner/engine.h"
-#include "maiascan/scanner/scan.h"
+#include "maia/scanner/engine.h"
+#include "maia/scanner/scan.h"
 
 namespace maia::scanner {
 
@@ -41,7 +41,7 @@ TEST(Scan, MemoryAddress) {
   bool found = false;
 
   auto scan_addresses = scan.scan();
-  MemoryAddress needle_address{};
+  MemoryPtr needle_address{};
   for (auto& scan_result : scan_addresses) {
     needle_address = scan_result.address;
     ASSERT_EQ(needle, *process->Read<int>(needle_address));
@@ -52,7 +52,7 @@ TEST(Scan, MemoryAddress) {
   }
 
   for (auto& s : scan.scan()) {
-    auto* fneedle = *process->Read<MemoryAddress>(s.address);
+    auto* fneedle = *process->Read<MemoryPtr>(s.address);
     EXPECT_EQ(needle_address, fneedle);
   }
 

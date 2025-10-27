@@ -2,7 +2,7 @@
   "version": 10,
   "configurePresets": [
     {
-      "name": "windows",
+      "name": "x64-windows",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "generator": "Ninja",
@@ -36,7 +36,7 @@
       }
     }
   ],
-  "buildPresets": [{ "name": "windows", "configurePreset": "windows" }],
-  "testPresets": [{ "name": "windows", "configurePreset": "windows" }],
-  "packagePresets": [{ "name": "windows", "configurePreset": "windows" }]
+  "buildPresets": [{ "name": "x64-windows", "configurePreset": "x64-windows" }],
+  "testPresets": [{ "name": "x64-windows", "configurePreset": "x64-windows" }],
+  "packagePresets": [{ "name": "x64-windows", "configurePreset": "x64-windows" }]
 }

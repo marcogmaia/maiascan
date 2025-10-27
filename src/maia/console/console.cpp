@@ -3,8 +3,8 @@
 #include <fmt/core.h>
 #include <CLI/CLI.hpp>
 
-#include "maiascan/console/commands.h"
-#include "maiascan/console/console.h"
+#include "maia/console/commands.h"
+#include "maia/console/console.h"
 
 namespace maia ::console {
 

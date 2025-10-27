@@ -6,7 +6,7 @@
 
 #include <expected>
 
-#include "maiascan/console/commands.h"
+#include "maia/console/commands.h"
 
 namespace maia::console {
 

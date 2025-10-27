@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "maiascan/scanner/types.h"
+#include "maia/scanner/types.h"
 
 namespace maia {
 

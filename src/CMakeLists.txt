@@ -2,4 +2,4 @@
 
 add_subdirectory(gui)
 add_subdirectory(fakegame)
-add_subdirectory(maiascan)
+add_subdirectory(maia)
