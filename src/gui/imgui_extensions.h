@@ -6,8 +6,8 @@
 
 namespace maia {
 
-// TODO: Make these a RAII construct.
-// Returns the window handle.
+// TODO: Make these a RAII construct. Also change to something to indicate that
+// we are initializing the windowing system. Returns the window handle.
 void* ImGuiInit();
 void ImGuiTerminate(void* window_handle);
 

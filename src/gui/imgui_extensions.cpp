@@ -3,7 +3,6 @@
 #include "gui/imgui_extensions.h"
 
 #include <expected>
-#include <print>
 
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
 #include <glad/glad.h>
