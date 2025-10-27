@@ -1,8 +1,10 @@
+// Copyright (c) Maia
+
 #pragma once
 
 #include <vector>
 
-#include "maia/scanner/types.h"
+#include "maia/scanner/memory_common.h"
 
 namespace maia {
 

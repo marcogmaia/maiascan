@@ -9,26 +9,6 @@
 
 namespace maia::scanner {
 
-struct MemoryRegion {
-  // TODO: Add a constructor to simplify the creation.
-
-  size_t base_address;
-
-  // View over the entire memory region.
-  std::span<std::byte> view;
-
-  uint32_t protection_flags = 0;  // e.g., PAGE_READWRITE
-  uint32_t state = 0;             // e.g., MEM_COMMIT
-
-  void* data() const {
-    return view.data();
-  }
-
-  size_t size() const {
-    return view.size();
-  }
-};
-
 class IProcessMemoryAccessor {
  public:
   virtual ~IProcessMemoryAccessor() = default;

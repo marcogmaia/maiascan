@@ -11,7 +11,6 @@
 #include <vector>
 
 #include <fmt/core.h>
-#include <spdlog/spdlog.h>
 #include <expected>
 #include <optional>
 
@@ -24,15 +23,6 @@ namespace maia::scanner {
 
 template <typename T>
 concept CScannable = CFundamentalType<T> || std::is_pointer_v<T>;
-
-std::vector<ProcessData> GetProcs();
-
-void ListProcs() {
-  auto procs = GetProcs();
-  for (auto& proc : procs) {
-    LogInfo("{} (PID: {})\n", proc.name, proc.pid);
-  }
-}
 
 // The `Process` is responsible to query data from the process, we can read the
 // memory pages and retrieve the memory.

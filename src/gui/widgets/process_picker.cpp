@@ -10,16 +10,11 @@
 #include <imgui.h>
 
 #include "maia/logging.h"
+#include "maia/scanner/memory_common.h"
 
 namespace maia::gui {
 
 namespace {
-
-// A simple struct to hold our process information
-struct ProcessInfo {
-  DWORD pid;
-  std::string name;
-};
 
 // Helper function to convert TCHAR (which can be wchar_t or char) to a
 // std::string (UTF-8)
@@ -70,7 +65,7 @@ void RefreshProcessList(std::vector<ProcessInfo>& processes) {
     do {
       // Add the process info to our vector
       processes.push_back(
-          {.pid = pe32.th32ProcessID, .name = TCharToString(pe32.szExeFile)});
+          {.name = TCharToString(pe32.szExeFile), .pid = pe32.th32ProcessID});
     } while (Process32Next(h_snapshot, &pe32));  // Get the next process
   }
 
@@ -146,7 +141,7 @@ std::optional<ProcessInfo> ButtonProcessPicker() {
 
   auto name = GetProcessNameFromPid(pid);
   LogInfo("Selected process: {}", name);
-  return ProcessInfo{.pid = pid, .name = name};
+  return ProcessInfo{.name = name, .pid = pid};
 }
 
 }  // namespace
@@ -154,7 +149,7 @@ std::optional<ProcessInfo> ButtonProcessPicker() {
 void ShowProcessTool(bool* p_open) {
   // Static variables persist between frames
   static std::vector<ProcessInfo> processes;
-  static char filter[256] = "";
+  static char filter[MAX_PATH] = "";
   static DWORD selected_pid = 0;
   static std::string selected_name = "None";
 
@@ -173,10 +168,10 @@ void ShowProcessTool(bool* p_open) {
 
   ImGui::SameLine();
 
-  if (auto res = ButtonProcessPicker(); res) {
+  if (auto proc_picked = ButtonProcessPicker(); proc_picked) {
     RefreshProcessList(processes);
-    selected_name = res->name;
-    selected_pid = res->pid;
+    selected_name = proc_picked->name;
+    selected_pid = proc_picked->pid;
   }
 
   ImGui::InputText("Filter", filter, IM_ARRAYSIZE(filter));
@@ -198,7 +193,7 @@ void ShowProcessTool(bool* p_open) {
       char item_label[512];
       std::ignore = snprintf(item_label,
                              sizeof(item_label),
-                             "%s (PID: %lu)",
+                             "%s (PID: %u)",
                              proc.name.c_str(),
                              proc.pid);
 

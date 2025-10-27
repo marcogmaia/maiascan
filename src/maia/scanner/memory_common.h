@@ -11,7 +11,7 @@ namespace maia {
 
 using MemoryPtr = void*;
 using MemoryAddress = uintptr_t;
-using Pid = size_t;
+using Pid = uint32_t;
 
 using Byte = std::byte;
 
@@ -28,7 +28,27 @@ T BytesToFundamentalType(std::span<const Byte> view) {
   return *std::bit_cast<T*>(view.data());
 }
 
-struct ProcessData {
+struct MemoryRegion {
+  // TODO: Add a constructor to simplify the creation.
+
+  size_t base_address;
+
+  // View over the entire memory region.
+  std::span<std::byte> view;
+
+  uint32_t protection_flags = 0;  // e.g., PAGE_READWRITE
+  uint32_t state = 0;             // e.g., MEM_COMMIT
+
+  void* data() const {
+    return view.data();
+  }
+
+  size_t size() const {
+    return view.size();
+  }
+};
+
+struct ProcessInfo {
   std::string name;
   Pid pid;
 };
