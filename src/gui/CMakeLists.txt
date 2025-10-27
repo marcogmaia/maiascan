@@ -12,6 +12,7 @@ add_library(
 target_link_libraries(
   gui
   PUBLIC
+    base
     imgui::imgui
     glfw
     scanner
