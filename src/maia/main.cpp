@@ -2,6 +2,8 @@
 
 #include <Windows.h>
 
+#include <TlHelp32.h>
+
 #include <memory>
 #include <numeric>
 
@@ -19,6 +21,8 @@
 #include "gui/widgets/scan_widget.h"
 #include "maia/logging.h"
 #include "maia/scanner/process.h"
+
+namespace maia {
 
 namespace {
 
@@ -85,7 +89,49 @@ size_t GetTotalOccupiedMemory(
                          });
 }
 
+MemoryAddress GetBaseAddress(Pid pid) {
+  auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+  if (snapshot == INVALID_HANDLE_VALUE) {
+    return {};
+  }
+  MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
+  bool success = Module32First(snapshot, &mod_entry) != 0;
+  if (!success) {
+    auto err = GetLastError();
+    return {};
+  }
+  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
+}
+
+void PrintAllProcessModules(Pid pid) {
+  HANDLE hsnapshot =
+      CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+
+  if (hsnapshot == INVALID_HANDLE_VALUE) {
+    return;
+  }
+
+  MODULEENTRY32 mod_entry = {.dwSize = 0};
+  mod_entry.dwSize = sizeof(MODULEENTRY32);
+  for (bool ok = Module32First(hsnapshot, &mod_entry) != 0; ok;
+       ok = Module32Next(hsnapshot, &mod_entry) != 0) {
+    fmt::print("{:20} -- Addr: {:p}\n",
+               mod_entry.szModule,
+               fmt::ptr(mod_entry.modBaseAddr));
+  }
+
+  CloseHandle(hsnapshot);
+}
+
+void PrintPickedProcessInfo(const gui::EventPickedProcess& picked_process) {
+  PrintAllProcessModules(picked_process.pid);
+  fmt::print("BaseAddress: {:p}\n",
+             std::bit_cast<const void*>(GetBaseAddress(picked_process.pid)));
+}
+
 }  // namespace
+
+}  // namespace maia
 
 int main() {
   auto* window = static_cast<GLFWwindow*>(maia::ImGuiInit());
@@ -98,10 +144,12 @@ int main() {
 
   entt::dispatcher dispatcher;
 
-  auto attacher = ProcessAttacher(dispatcher);
+  auto attacher = maia::ProcessAttacher(dispatcher);
 
-  dispatcher.sink<maia::gui::EventPickedProcess>()
-      .connect<ProcessPickedProcess>();
+  // clang-format off
+  dispatcher.sink<maia::gui::EventPickedProcess>().connect<maia::ProcessPickedProcess>();
+  dispatcher.sink<maia::gui::EventPickedProcess>().connect<maia::PrintPickedProcessInfo>();
+  // clang-format on
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
@@ -114,13 +162,16 @@ int main() {
     if (proc_access) {
       maia::gui::ShowMemoryScannerWindow();
       auto regions = proc_access->GetMemoryRegions();
-      maia::LogInfo("Num memory regions: {}, total size in bytes: {}",
-                    regions.size(),
-                    GetTotalOccupiedMemory(regions));
+      auto total_size_bytes = maia::GetTotalOccupiedMemory(regions);
+      maia::LogInfo(
+          "Num memory regions: {}, total size in bytes: {} ({:.3f}MB)",
+          regions.size(),
+          total_size_bytes,
+          static_cast<double>(total_size_bytes) / (1 << 20));
       break;
     }
 
-    ClearBackground(window, clear_color);
+    maia::ClearBackground(window, clear_color);
 
     maia::ImGuiEndFrame();
     glfwSwapBuffers(window);
