@@ -10,6 +10,8 @@ add_library(
   # scan.cpp
 )
 
+target_link_libraries(scanner PUBLIC base)
+
 target_compile_definitions(
   scanner
   PRIVATE

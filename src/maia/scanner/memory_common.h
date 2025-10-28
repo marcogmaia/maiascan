@@ -29,23 +29,9 @@ T BytesToFundamentalType(std::span<const Byte> view) {
 }
 
 struct MemoryRegion {
-  // TODO: Add a constructor to simplify the creation.
-
-  size_t base_address;
-
-  // View over the entire memory region.
-  std::span<std::byte> view;
-
-  uint32_t protection_flags = 0;  // e.g., PAGE_READWRITE
-  uint32_t state = 0;             // e.g., MEM_COMMIT
-
-  void* data() const {
-    return view.data();
-  }
-
-  size_t size() const {
-    return view.size();
-  }
+  MemoryAddress base_address{};
+  size_t size{};
+  uint32_t protection_flags;  // e.g., PAGE_READWRITE
 };
 
 struct ProcessInfo {
