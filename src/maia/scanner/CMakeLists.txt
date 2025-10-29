@@ -2,26 +2,29 @@
 
 set(CMAKE_MFC_FLAG 2)
 
-add_library(
+add_library(scanner)
+
+target_sources(
   scanner
-  scanner.cpp
-  process.cpp
-  # engine.cpp
-  # scan.cpp
+  PUBLIC
+    FILE_SET HEADERS
+      FILES livre_process_accessor.h scanner.h
+  PRIVATE
+    scanner.cpp
+    livre_process_accessor.cpp
 )
 
 target_link_libraries(scanner PUBLIC base)
 
-target_compile_definitions(
-  scanner
-  PRIVATE
-    _AFXDLL
-    _WIN32_WINNT=0x0A00 # Target Windows 10
-    WINVER=0x0A00 # Also set WINVER for compatibility
-)
-
-# target_compile_definitions(scanner PRIVATE _AFXDLL)
-target_link_libraries(scanner PRIVATE fmt::fmt)
+if(WIN32)
+  target_compile_definitions(
+    scanner
+    PUBLIC
+      _AFXDLL
+      _WIN32_WINNT=0x0A00 # Target Windows 10
+      WINVER=0x0A00 # Also set WINVER for compatibility
+  )
+endif()
 
 # add_executable(
 #   scanner_test

@@ -9,9 +9,10 @@
 
 namespace maia {
 
-using MemoryPtr = void*;
 using MemoryAddress = uintptr_t;
+using MemoryPtr = void*;
 using Pid = uint32_t;
+using ProcessHandle = void*;
 
 using Byte = std::byte;
 

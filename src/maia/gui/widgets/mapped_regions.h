@@ -9,18 +9,19 @@
 
 namespace maia::gui {
 
-//
 class MappedRegionsWidget {
  public:
   MappedRegionsWidget() {
-    scan_mem_regions_sink_.connect<[]() { LogInfo("ButtonPressed."); }>();
+    scan_mem_regions_sink_.connect<&MappedRegionsWidget::OnButtonPressed>(this);
   }
 
-  // Render widget.
-  void operator()() {
-    if (ImGui::Button("ButtonPress")) {
-      scan_mem_regions_button_.publish();
+  void Render() {
+    if (ImGui::Begin("Mapped regions")) {
+      if (ImGui::Button("ButtonPress")) {
+        scan_regions_button_.publish();
+      }
     }
+    ImGui::End();
   }
 
  private:
@@ -28,8 +29,11 @@ class MappedRegionsWidget {
     LogInfo("ButtonPressed.");
   }
 
-  entt::sigh<void()> scan_mem_regions_button_;
-  entt::sink<entt::sigh<void()>> scan_mem_regions_sink_;
+  // Signals:
+  entt::sigh<void()> scan_regions_button_;
+
+  // Slots:
+  entt::sink<entt::sigh<void()>> scan_mem_regions_sink_{scan_regions_button_};
 };
 
 }  // namespace maia::gui

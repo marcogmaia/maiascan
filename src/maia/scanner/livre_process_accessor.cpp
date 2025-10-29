@@ -5,7 +5,7 @@
 #include <Psapi.h>
 #include <TlHelp32.h>
 
-#include "maia/scanner/process.h"
+#include "maia/scanner/livre_process_accessor.h"
 
 #include <vector>
 
@@ -13,6 +13,35 @@
 #include "maia/scanner/memory_common.h"
 
 namespace maia::scanner {
+
+ProcessHandle OpenHandle(uint32_t pid) {
+  HANDLE handle =
+      OpenProcess(PROCESS_QUERY_INFORMATION |  // Required for VirtualQueryEx
+                      PROCESS_VM_READ |        // Required for ReadProcessMemory
+                      PROCESS_VM_WRITE |     // Required for WriteProcessMemory
+                      PROCESS_VM_OPERATION,  // Required for VirtualProtectEx
+                  FALSE,
+                  pid);
+  return handle;
+}
+
+namespace {
+
+MemoryAddress GetBaseAddress(Pid pid) {
+  auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+  if (snapshot == INVALID_HANDLE_VALUE) {
+    return {};
+  }
+  MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
+  bool success = Module32First(snapshot, &mod_entry) != 0;
+  if (!success) {
+    auto err = GetLastError();
+    return {};
+  }
+  return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
+}
+
+}  // namespace
 
 std::vector<MemoryRegion> LiveProcessAccessor::GetMemoryRegions() {
   std::vector<MemoryRegion> regions;
@@ -106,5 +135,9 @@ bool LiveProcessAccessor::WriteMemory(MemoryPtr address,
   // all requested bytes being written.
   return (write_result != 0) && (bytes_written == data.size());
 }
+
+LiveProcessAccessor::LiveProcessAccessor(ProcessHandle handle)
+    : handle_(handle),
+      process_base_address_(GetBaseAddress(GetProcessId(handle))) {}
 
 }  // namespace maia::scanner

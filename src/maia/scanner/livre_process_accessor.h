@@ -9,14 +9,13 @@
 
 namespace maia::scanner {
 
+ProcessHandle OpenHandle(uint32_t pid);
+
 // This class is platform-specific (e.g., uses ReadProcessMemory on Windows)
 // It's the ONLY part that's hard to test.
 class LiveProcessAccessor : public IProcessMemoryAccessor {
  public:
-  using ProcessHandle = MemoryPtr;
-
-  explicit LiveProcessAccessor(ProcessHandle handle)
-      : handle_(handle) {}
+  explicit LiveProcessAccessor(ProcessHandle handle);
 
   std::vector<MemoryRegion> GetMemoryRegions() override;
 
@@ -26,6 +25,7 @@ class LiveProcessAccessor : public IProcessMemoryAccessor {
 
  private:
   ProcessHandle handle_;
+  MemoryAddress process_base_address_;
 };
 
 }  // namespace maia::scanner
