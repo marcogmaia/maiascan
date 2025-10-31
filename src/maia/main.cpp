@@ -16,9 +16,9 @@
 #include <entt/signal/dispatcher.hpp>
 
 #include "maia/gui/imgui_extensions.h"
-#include "maia/gui/widgets/mapped_regions.h"
+// #include "maia/gui/widgets/mapped_regions.h"
 #include "maia/gui/widgets/process_picker.h"
-#include "maia/gui/widgets/scan_widget.h"
+#include "maia/gui/widgets/scan_table_view.h"
 #include "maia/logging.h"
 #include "maia/scanner/livre_process_accessor.h"
 
@@ -39,7 +39,7 @@ void ClearBackground(GLFWwindow* window, ImVec4& clear_color) {
 }
 
 void ProcessPickedProcess(maia::gui::EventPickedProcess picked_process) {
-  maia::LogInfo("PID: {}, Name: {}", picked_process.pid, picked_process.name);
+  LogInfo("PID: {}, Name: {}", picked_process.pid, picked_process.name);
 }
 
 class ScannerContext {
@@ -56,6 +56,12 @@ class ScannerContext {
     return &*process_accessor_;
   }
 
+  void Reset() {
+    process_accessor_.reset();
+    process_name_.reset();
+    process_pid_.reset();
+  }
+
  private:
   void AttachToProcess(maia::gui::EventPickedProcess picked_process) {
     auto* handle = scanner::OpenHandle(picked_process.pid);
@@ -69,12 +75,6 @@ class ScannerContext {
     process_accessor_.emplace(handle);
     process_name_ = picked_process.name;
     process_pid_ = picked_process.pid;
-  }
-
-  void Reset() {
-    process_accessor_.reset();
-    process_name_.reset();
-    process_pid_.reset();
   }
 
   entt::sink<entt::sigh<void()>> sink_;
@@ -156,7 +156,9 @@ int main() {
   dispatcher.sink<maia::gui::EventPickedProcess>().connect<maia::PrintPickedProcessInfo>();
   // clang-format on
 
-  maia::gui::MappedRegionsWidget mapped_regions_widget;
+  maia::gui::ScanModel model;
+  maia::gui::ScanTableWidget widget(model);
+  maia::gui::ScanTablePresenter presenter(model, widget);
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
@@ -165,20 +167,23 @@ int main() {
 
     maia::gui::ShowProcessTool(dispatcher);
 
+    widget.Render();
     auto* proc_access = attacher.GetProcessAccessor();
     if (proc_access) {
-      maia::gui::ShowMemoryScannerWindow();
-      auto regions = proc_access->GetMemoryRegions();
-      auto total_size_bytes = maia::GetTotalOccupiedMemory(regions);
-      maia::LogInfo(
-          "Num memory regions: {}, total size in bytes: {} ({:.3f}MB)",
-          regions.size(),
-          total_size_bytes,
-          static_cast<double>(total_size_bytes) / (1 << 20));
-      break;
+      model.signals.memory_changed.publish({});
+      attacher.Reset();
+      // proc_access = nullptr;
+      // proc_access.
+      // maia::gui::ShowMemoryScannerWindow();
+      // auto regions = proc_access->GetMemoryRegions();
+      // auto total_size_bytes = maia::GetTotalOccupiedMemory(regions);
+      // maia::LogInfo(
+      //     "Num memory regions: {}, total size in bytes: {} ({:.3f}MB)",
+      //     regions.size(),
+      //     total_size_bytes,
+      //     static_cast<double>(total_size_bytes) / (1 << 20));
+      // break;
     }
-
-    mapped_regions_widget.Render();
 
     maia::ClearBackground(window, clear_color);
 
