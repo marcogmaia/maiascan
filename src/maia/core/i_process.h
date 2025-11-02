@@ -24,7 +24,7 @@ class IProcess {
   /// \param address The base address to write to.
   /// \param buffer A span representing the buffer containing the data to write.
   /// \return true if the write was successful, false otherwise.
-  virtual bool WriteMemory(std::uintptr_t address,
+  virtual bool WriteMemory(uintptr_t address,
                            std::span<const std::byte> buffer) = 0;
 
   /// \brief Retrieves a list of all relevant memory regions in the process.
@@ -43,6 +43,13 @@ class IProcess {
   /// running.
   /// \return true if the process is still accessible, false otherwise.
   virtual bool IsProcessValid() const = 0;
+
+  /// \brief Gets the base address of the process's main executable module.
+  /// \details This is the virtual memory address where the primary module
+  /// (e.g., the .exe on Windows or the main ELF binary on Linux) is loaded into
+  /// memory. This address is often randomized by ASLR.
+  /// \return The base address of the main module, or 0 if it cannot be found.
+  virtual uintptr_t GetBaseAddress() const = 0;
 };
 
 }  // namespace maia

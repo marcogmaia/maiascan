@@ -29,6 +29,8 @@ class LiveProcessAccessor : public IProcess {
 
   bool IsProcessValid() const override;
 
+  uintptr_t GetBaseAddress() const override;
+
  private:
   ProcessHandle handle_;
   uint32_t process_id_;

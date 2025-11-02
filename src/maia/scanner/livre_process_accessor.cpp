@@ -45,6 +45,26 @@ MemoryPtr ToPtr(uintptr_t ptr) {
   return std::bit_cast<MemoryPtr>(ptr);
 }
 
+uintptr_t GetProcessBaseAddress(uint32_t process_id) {
+  MemoryAddress base_address = 0;
+  HANDLE snapshot = CreateToolhelp32Snapshot(
+      TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, process_id);
+
+  if (snapshot != INVALID_HANDLE_VALUE) {
+    MODULEENTRY32 module_entry;
+    module_entry.dwSize = sizeof(MODULEENTRY32);
+
+    // Module32First retrieves information about the first module (the .exe)
+    if (Module32First(snapshot, &module_entry)) {
+      base_address = reinterpret_cast<MemoryAddress>(module_entry.modBaseAddr);
+    }
+
+    CloseHandle(snapshot);
+  }
+
+  return base_address;
+}
+
 }  // namespace
 
 std::vector<MemoryRegion> LiveProcessAccessor::GetMemoryRegions() const {
@@ -157,7 +177,7 @@ bool LiveProcessAccessor::WriteMemory(uintptr_t address,
 LiveProcessAccessor::LiveProcessAccessor(ProcessHandle handle)
     : handle_(handle),
       process_id_(::GetProcessId(handle)),
-      process_base_address_(GetProcessId()) {}
+      process_base_address_(GetProcessBaseAddress(process_id_)) {}
 
 bool LiveProcessAccessor::IsProcessValid() const {
   // Check if the handle is null or invalid, which can happen
@@ -228,6 +248,10 @@ std::string LiveProcessAccessor::GetProcessName() const {
                         nullptr);
 
   return process_name_str;
+}
+
+uintptr_t LiveProcessAccessor::GetBaseAddress() const {
+  return process_base_address_;
 }
 
 }  // namespace maia::scanner
