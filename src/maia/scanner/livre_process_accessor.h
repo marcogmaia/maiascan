@@ -4,27 +4,34 @@
 
 #include <vector>
 
-#include "maia/core/i_memory_accessor.h"
+#include "core/i_process.h"
 #include "maia/core/memory_common.h"
 
 namespace maia::scanner {
 
 ProcessHandle OpenHandle(uint32_t pid);
 
-// This class is platform-specific (e.g., uses ReadProcessMemory on Windows)
-// It's the ONLY part that's hard to test.
-class LiveProcessAccessor : public core::IMemoryAccessor {
+class LiveProcessAccessor : public IProcess {
  public:
   explicit LiveProcessAccessor(ProcessHandle handle);
 
-  std::vector<MemoryRegion> GetMemoryRegions() override;
+  bool ReadMemory(uintptr_t address,
+                  std::span<std::byte> buffer) const override;
 
-  bool ReadMemory(MemoryPtr address, std::span<std::byte> buffer) override;
+  bool WriteMemory(uintptr_t address,
+                   std::span<const std::byte> buffer) override;
 
-  bool WriteMemory(MemoryPtr address, std::span<const std::byte> data) override;
+  std::vector<MemoryRegion> GetMemoryRegions() const override;
+
+  uint32_t GetProcessId() const override;
+
+  std::string GetProcessName() const override;
+
+  bool IsProcessValid() const override;
 
  private:
   ProcessHandle handle_;
+  uint32_t process_id_;
   MemoryAddress process_base_address_;
 };
 

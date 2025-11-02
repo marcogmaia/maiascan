@@ -7,7 +7,7 @@
 
 #include "maia/core/memory_common.h"
 
-namespace maia::core {
+namespace maia {
 
 class IMemoryAccessor {
  public:
@@ -31,4 +31,4 @@ class IMemoryAccessor {
                            std::span<const std::byte> data) = 0;
 };
 
-}  // namespace maia::core
+}  // namespace maia

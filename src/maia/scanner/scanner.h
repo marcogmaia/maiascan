@@ -15,7 +15,7 @@ namespace maia::scanner {
 class Scanner {
  public:
   /// \brief Constructs a Scanner that will use the given reader.
-  explicit Scanner(core::IMemoryAccessor& memory_accessor)
+  explicit Scanner(IMemoryAccessor& memory_accessor)
       : memory_accessor_(memory_accessor) {};
 
   /// \brief Performs an initial scan over all memory regions.
@@ -36,7 +36,7 @@ class Scanner {
                                        std::span<const std::byte> new_value);
 
  private:
-  core::IMemoryAccessor& memory_accessor_;
+  IMemoryAccessor& memory_accessor_;
 
   // Internal buffer to avoid re-allocating on every read
   std::vector<std::byte> read_buffer_;

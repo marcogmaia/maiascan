@@ -7,7 +7,7 @@
 
 #include "maia/core/memory_common.h"
 
-namespace maia::core {
+namespace maia {
 
 class IProcess {
  public:
@@ -17,15 +17,15 @@ class IProcess {
   /// \param address The base address to read from.
   /// \param buffer A span representing the caller-allocated buffer.
   /// \return true if the read was successful, false otherwise.
-  [[nodiscard]] virtual bool ReadMemory(uintptr_t address,
-                                        std::span<std::byte> buffer) const = 0;
+  virtual bool ReadMemory(uintptr_t address,
+                          std::span<std::byte> buffer) const = 0;
 
   /// \brief Writes a block of memory to the process.
   /// \param address The base address to write to.
   /// \param buffer A span representing the buffer containing the data to write.
   /// \return true if the write was successful, false otherwise.
-  [[nodiscard]] virtual bool WriteMemory(std::uintptr_t address,
-                                         std::span<const std::byte> buffer) = 0;
+  virtual bool WriteMemory(std::uintptr_t address,
+                           std::span<const std::byte> buffer) = 0;
 
   /// \brief Retrieves a list of all relevant memory regions in the process.
   /// \return A std::vector of MemoryRegion structs.
@@ -45,4 +45,4 @@ class IProcess {
   virtual bool IsProcessValid() const = 0;
 };
 
-}  // namespace maia::core
+}  // namespace maia
