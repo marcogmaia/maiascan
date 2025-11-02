@@ -12,9 +12,9 @@ namespace maia {
 class SinkStorage {
  public:
   template <auto U>
-  auto& Connect(auto& sig, auto& obj) {
+  auto& Connect(auto& sig, auto& instance) {
     auto sink = entt::sink(sig);
-    sink.template connect<U>(&obj);
+    sink.template connect<U>(&instance);
     sinks_.emplace_back(std::move(sink));
     return *this;
   }

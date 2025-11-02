@@ -5,7 +5,7 @@
 #include <Psapi.h>
 #include <TlHelp32.h>
 
-#include "maia/scanner/livre_process_accessor.h"
+#include "maia/scanner/live_process_accessor.h"
 
 #include <vector>
 

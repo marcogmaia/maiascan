@@ -24,5 +24,7 @@ target_link_libraries(
   PRIVATE
     base
     gui
+    core
+    application
     scanner
 )

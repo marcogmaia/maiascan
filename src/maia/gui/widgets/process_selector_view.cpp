@@ -31,32 +31,12 @@ void ProcessSelectorView::RenderProcessPickerButton() const {
   if (ImGui::IsItemDeactivated()) {
     signals_.process_pick_requested.publish();
   }
-
-  // When the item is deactivated, then we pick the process under the cursor.
-  // POINT p;
-  // GetCursorPos(&p);
-  // HWND hwnd_under_cursor = WindowFromPoint(p);
-
-  // if (!hwnd_under_cursor) {
-  //   return;
-  // }
-
-  // DWORD pid = 0;
-  // GetWindowThreadProcessId(hwnd_under_cursor, &pid);
-  // if (pid != 0) {
-  //   auto name = GetProcessNameFromPid(pid);
-  //   signals_..publish(pid, name);
-  // }
 }
 
 void ProcessSelectorView::Render(bool* p_open,
                                  const std::vector<ProcessInfo>& processes,
                                  const std::string& attached_process_name,
                                  Pid attached_pid) {
-  if (!p_open || !*p_open) {
-    return;
-  }
-
   ImGui::Begin("Process Selector", p_open);
 
   if (ImGui::Button("Refresh List")) {

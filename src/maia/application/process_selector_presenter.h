@@ -17,14 +17,15 @@ class ProcessSelectorPresenter {
 
  private:
   void OnProcessPickRequested();
-  void OnRefreshProcessList();
+  void RefreshProcessList();
+  void AttachProcess(Pid pid);
 
   ProcessModel& process_model_;
   ProcessSelectorView& process_selector_view_;
 
   std::vector<ProcessInfo> process_list_;
-  std::string selected_process_name_;
-  Pid selected_pid_;
+  std::string selected_process_name_ = "N/A";
+  Pid selected_pid_ = 0;
 
   SinkStorage sinks_;
 };

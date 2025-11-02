@@ -79,24 +79,21 @@ void RefreshProcessList(std::vector<ProcessInfo>& processes) {
   }
 
   PROCESSENTRY32 pe32;
-  pe32.dwSize = sizeof(PROCESSENTRY32);  // Must set the size
+  // Must set the size.
+  pe32.dwSize = sizeof(PROCESSENTRY32);
 
-  // Get the first process
   if (Process32First(h_snapshot, &pe32)) {
     do {
-      // Add the process info to our vector
-      processes.push_back(
-          {.name = TCharToString(pe32.szExeFile), .pid = pe32.th32ProcessID});
-    } while (Process32Next(h_snapshot, &pe32));  // Get the next process
+      processes.emplace_back(TCharToString(pe32.szExeFile), pe32.th32ProcessID);
+    } while (Process32Next(h_snapshot, &pe32));
   }
 
-  CloseHandle(h_snapshot);  // Clean up the snapshot object
+  CloseHandle(h_snapshot);
 }
 
 }  // namespace
 
 void ProcessSelectorPresenter::OnProcessPickRequested() {
-  // When the item is deactivated, then we pick the process under the cursor.
   POINT p;
   GetCursorPos(&p);
   HWND hwnd_under_cursor = WindowFromPoint(p);
@@ -107,6 +104,10 @@ void ProcessSelectorPresenter::OnProcessPickRequested() {
 
   DWORD pid = 0;
   GetWindowThreadProcessId(hwnd_under_cursor, &pid);
+  AttachProcess(pid);
+}
+
+void ProcessSelectorPresenter::AttachProcess(Pid pid) {
   if (process_model_.AttachToProcess(pid)) {
     selected_process_name_ = GetProcessNameFromPid(pid);
     selected_pid_ = pid;
@@ -119,13 +120,19 @@ ProcessSelectorPresenter::ProcessSelectorPresenter(
       process_selector_view_(process_selector_view) {
   // clang-format off
   sinks_.Connect<&ProcessSelectorPresenter::OnProcessPickRequested>(process_selector_view_.signals().process_pick_requested, *this)
-        .Connect<&ProcessSelectorPresenter::OnRefreshProcessList>(process_selector_view_.signals().refresh_requested, *this);
+        .Connect<&ProcessSelectorPresenter::RefreshProcessList>(process_selector_view_.signals().refresh_requested, *this)
+        .Connect<&ProcessSelectorPresenter::AttachProcess>(process_selector_view.signals().process_selected_from_list, *this);
   // clang-format on
+  RefreshProcessList();
 }
 
 void ProcessSelectorPresenter::Render() {
   process_selector_view_.Render(
       nullptr, process_list_, selected_process_name_, selected_pid_);
+}
+
+void ProcessSelectorPresenter::RefreshProcessList() {
+  ::maia::RefreshProcessList(process_list_);
 }
 
 }  // namespace maia
