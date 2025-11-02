@@ -123,10 +123,6 @@ void* ImGuiInit() {
   // literal you need to write a double backslash \\ !
   // io.Fonts->AddFontDefault();
   // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-  // io.Fonts->AddFontFromFileTTF(
-  //     "C:/Users/marco/Downloads/SourceCodePro/"
-  //     "SauceCodeProNerdFontMono-Regular.ttf",
-  //     16.0f);
   // "C:/Users/marco/Downloads/SourceCodePro/SauceCodeProNerdFontMono-Regular.ttf"
   // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
   // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
