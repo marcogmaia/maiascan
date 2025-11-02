@@ -21,18 +21,24 @@ namespace maia::gui {
 namespace {
 
 // Helper function to convert TCHAR (which can be wchar_t or char) to a
-// std::string (UTF-8)
+// std::string (UTF-8).
 std::string TCharToString(const TCHAR* tchar_str) {
 #ifdef UNICODE
   // If UNICODE is defined, TCHAR is wchar_t
   std::wstring wstr(tcharStr);
-  int size_needed = WideCharToMultiByte(
-      CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+  int size_needed = WideCharToMultiByte(CP_UTF8,
+                                        0,
+                                        wstr.data(),
+                                        static_cast<int>(wstr.size()),
+                                        NULL,
+                                        0,
+                                        NULL,
+                                        NULL);
   std::string strto(size_needed, 0);
   WideCharToMultiByte(CP_UTF8,
                       0,
                       &wstr[0],
-                      (int)wstr.size(),
+                      static_cast<int>(wstr.size()),
                       &strto[0],
                       size_needed,
                       NULL,
@@ -150,7 +156,7 @@ std::optional<ProcessInfo> ButtonProcessPicker() {
 }  // namespace
 
 void ShowProcessTool(entt::dispatcher& dispatcher, bool* p_open) {
-  // Static variables persist between frames
+  // TODO: This will be transformed into a Class/Widget.
   static std::vector<ProcessInfo> processes;
   static char filter[MAX_PATH] = "";
   static DWORD selected_pid = 0;

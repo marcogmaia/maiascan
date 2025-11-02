@@ -4,7 +4,7 @@
 
 #include <expected>
 
-#include <GLFW/glfw3.h>  // Will drag system OpenGL headers
+#include <GLFW/glfw3.h>
 #include <glad/glad.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -123,6 +123,11 @@ void* ImGuiInit() {
   // literal you need to write a double backslash \\ !
   // io.Fonts->AddFontDefault();
   // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
+  // io.Fonts->AddFontFromFileTTF(
+  //     "C:/Users/marco/Downloads/SourceCodePro/"
+  //     "SauceCodeProNerdFontMono-Regular.ttf",
+  //     16.0f);
+  // "C:/Users/marco/Downloads/SourceCodePro/SauceCodeProNerdFontMono-Regular.ttf"
   // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
   // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
   // io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
