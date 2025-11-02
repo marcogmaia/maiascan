@@ -5,13 +5,13 @@
 #include <span>
 #include <vector>
 
-#include "maia/scanner/memory_common.h"
+#include "maia/core/memory_common.h"
 
-namespace maia::scanner {
+namespace maia::core {
 
-class IProcessMemoryAccessor {
+class IMemoryAccessor {
  public:
-  virtual ~IProcessMemoryAccessor() = default;
+  virtual ~IMemoryAccessor() = default;
 
   /// \brief Gets a list of all scannable memory regions.
   /// \return A vector of MemoryRegion objects.
@@ -31,4 +31,4 @@ class IProcessMemoryAccessor {
                            std::span<const std::byte> data) = 0;
 };
 
-}  // namespace maia::scanner
+}  // namespace maia::core

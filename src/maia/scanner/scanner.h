@@ -4,7 +4,7 @@
 
 #include <vector>
 
-#include "maia/scanner/i_process_memory_accessor.h"
+#include "maia/core/i_memory_accessor.h"
 
 namespace maia::scanner {
 
@@ -15,7 +15,8 @@ namespace maia::scanner {
 class Scanner {
  public:
   /// \brief Constructs a Scanner that will use the given reader.
-  explicit Scanner(IProcessMemoryAccessor& process_accessor);
+  explicit Scanner(core::IMemoryAccessor& memory_accessor)
+      : memory_accessor_(memory_accessor) {};
 
   /// \brief Performs an initial scan over all memory regions.
   ///
@@ -35,7 +36,7 @@ class Scanner {
                                        std::span<const std::byte> new_value);
 
  private:
-  IProcessMemoryAccessor& accessor_;
+  core::IMemoryAccessor& memory_accessor_;
 
   // Internal buffer to avoid re-allocating on every read
   std::vector<std::byte> read_buffer_;

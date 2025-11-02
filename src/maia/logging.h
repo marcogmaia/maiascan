@@ -6,6 +6,18 @@
 
 namespace maia {
 
+inline void LogInstallFormat() {
+  // spdlog pattern: [Time][Level][File:Line]: Message
+  // - [%H:%M:%S.%e]: HH:MM:SS.ms
+  // - [%^%l%$]:      Colored log level
+  // - [%s:%#]:       Source location (e.g., main.cpp:17)
+  // - %v:            The message
+  //
+  // NOTE: [File:Line] requires using the SPDLOG_... macros!
+  // "[%H:%M:%S.%e][%^%l%$][%s:%#]: %v"
+  spdlog::set_pattern("[%H:%M:%S.%e][%^%l%$]: %v");
+}
+
 template <typename... Args>
 inline void LogTrace(spdlog::format_string_t<Args...> fmt, Args&&... args) {
   spdlog::default_logger_raw()->trace(fmt, std::forward<Args>(args)...);

@@ -9,8 +9,8 @@
 
 #include <vector>
 
+#include "maia/core/memory_common.h"
 #include "maia/logging.h"
-#include "maia/scanner/memory_common.h"
 
 namespace maia::scanner {
 

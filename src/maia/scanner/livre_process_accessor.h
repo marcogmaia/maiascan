@@ -4,8 +4,8 @@
 
 #include <vector>
 
-#include "maia/scanner/i_process_memory_accessor.h"
-#include "maia/scanner/memory_common.h"
+#include "maia/core/i_memory_accessor.h"
+#include "maia/core/memory_common.h"
 
 namespace maia::scanner {
 
@@ -13,7 +13,7 @@ ProcessHandle OpenHandle(uint32_t pid);
 
 // This class is platform-specific (e.g., uses ReadProcessMemory on Windows)
 // It's the ONLY part that's hard to test.
-class LiveProcessAccessor : public IProcessMemoryAccessor {
+class LiveProcessAccessor : public core::IMemoryAccessor {
  public:
   explicit LiveProcessAccessor(ProcessHandle handle);
 

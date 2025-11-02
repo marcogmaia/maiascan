@@ -16,9 +16,8 @@
 #include <entt/signal/dispatcher.hpp>
 
 #include "maia/gui/imgui_extensions.h"
-// #include "maia/gui/widgets/mapped_regions.h"
 #include "maia/gui/widgets/process_picker.h"
-#include "maia/gui/widgets/scan_table_view.h"
+#include "maia/gui/widgets/scanner_widget.h"
 #include "maia/logging.h"
 #include "maia/scanner/livre_process_accessor.h"
 
@@ -42,47 +41,49 @@ void ProcessPickedProcess(maia::gui::EventPickedProcess picked_process) {
   LogInfo("PID: {}, Name: {}", picked_process.pid, picked_process.name);
 }
 
-class ScannerContext {
- public:
-  explicit ScannerContext(entt::dispatcher& dispatcher) {
-    dispatcher.sink<maia::gui::EventPickedProcess>()
-        .connect<&ScannerContext::AttachToProcess>(this);
-  }
+// class ScannerContext {
+//  public:
+//   explicit ScannerContext(gui::ScanResultModel& scan_result_model,
+//                           entt::dispatcher& dispatcher) {
+//     dispatcher.sink<maia::gui::EventPickedProcess>()
+//         .connect<&ScannerContext::AttachToProcess>(this);
+//   }
 
-  scanner::IProcessMemoryAccessor* GetProcessAccessor() {
-    if (!process_accessor_) {
-      return nullptr;
-    }
-    return &*process_accessor_;
-  }
+//   core::IMemoryAccessor* GetProcessAccessor() {
+//     if (!process_accessor_) {
+//       return nullptr;
+//     }
+//     return &*process_accessor_;
+//   }
 
-  void Reset() {
-    process_accessor_.reset();
-    process_name_.reset();
-    process_pid_.reset();
-  }
+//   void Reset() {
+//     process_accessor_.reset();
+//     process_name_.reset();
+//     process_pid_.reset();
+//   }
 
- private:
-  void AttachToProcess(maia::gui::EventPickedProcess picked_process) {
-    auto* handle = scanner::OpenHandle(picked_process.pid);
-    if (!handle) {
-      maia::LogWarning("Unable to attach to process: {}, PID: {}",
-                       picked_process.name,
-                       picked_process.pid);
-      Reset();
-      return;
-    }
-    process_accessor_.emplace(handle);
-    process_name_ = picked_process.name;
-    process_pid_ = picked_process.pid;
-  }
+//  private:
+//   void AttachToProcess(maia::gui::EventPickedProcess picked_process) {
+//     auto* handle = scanner::OpenHandle(picked_process.pid);
+//     if (!handle) {
+//       LogWarning("Unable to attach to process: {}, PID: {}",
+//                  picked_process.name,
+//                  picked_process.pid);
+//       Reset();
+//       return;
+//     }
+//     process_accessor_.emplace(handle);
+//     process_name_ = picked_process.name;
+//     process_pid_ = picked_process.pid;
+//   }
 
-  entt::sink<entt::sigh<void()>> sink_;
+//   // entt::sink<entt::sigh<void()>> sink_;
+//   gui::ScanResultModel &scan_result_model_;
 
-  std::optional<maia::scanner::LiveProcessAccessor> process_accessor_;
-  std::optional<std::string> process_name_;
-  std::optional<Pid> process_pid_;
-};
+//   std::optional<maia::scanner::LiveProcessAccessor> process_accessor_;
+//   std::optional<std::string> process_name_;
+//   std::optional<Pid> process_pid_;
+// };
 
 size_t GetTotalOccupiedMemory(
     const std::vector<maia::MemoryRegion>& mem_regions) {
@@ -149,16 +150,17 @@ int main() {
 
   entt::dispatcher dispatcher;
 
-  auto attacher = maia::ScannerContext(dispatcher);
+  // auto attacher = maia::ScannerContext(dispatcher);
 
   // clang-format off
   dispatcher.sink<maia::gui::EventPickedProcess>().connect<maia::ProcessPickedProcess>();
   dispatcher.sink<maia::gui::EventPickedProcess>().connect<maia::PrintPickedProcessInfo>();
   // clang-format on
 
-  maia::gui::ScanModel model;
-  maia::gui::ScanTableWidget widget(model);
-  maia::gui::ScanTablePresenter presenter(model, widget);
+  maia::LogInstallFormat();
+  // maia::ScanResultModel model;
+  maia::gui::ScannerWidget widget;
+  // maia::gui::ScanTablePresenter presenter(model, widget);
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
@@ -168,22 +170,22 @@ int main() {
     maia::gui::ShowProcessTool(dispatcher);
 
     widget.Render();
-    auto* proc_access = attacher.GetProcessAccessor();
-    if (proc_access) {
-      model.signals.memory_changed.publish({});
-      attacher.Reset();
-      // proc_access = nullptr;
-      // proc_access.
-      // maia::gui::ShowMemoryScannerWindow();
-      // auto regions = proc_access->GetMemoryRegions();
-      // auto total_size_bytes = maia::GetTotalOccupiedMemory(regions);
-      // maia::LogInfo(
-      //     "Num memory regions: {}, total size in bytes: {} ({:.3f}MB)",
-      //     regions.size(),
-      //     total_size_bytes,
-      //     static_cast<double>(total_size_bytes) / (1 << 20));
-      // break;
-    }
+    // auto* proc_access = attacher.GetProcessAccessor();
+    // if (proc_access) {
+    // model.signals.memory_changed.publish({});
+    // attacher.Reset();
+    // proc_access = nullptr;
+    // proc_access.
+    // maia::gui::ShowMemoryScannerWindow();
+    // auto regions = proc_access->GetMemoryRegions();
+    // auto total_size_bytes = maia::GetTotalOccupiedMemory(regions);
+    // maia::LogInfo(
+    //     "Num memory regions: {}, total size in bytes: {} ({:.3f}MB)",
+    //     regions.size(),
+    //     total_size_bytes,
+    //     static_cast<double>(total_size_bytes) / (1 << 20));
+    // break;
+    // }
 
     maia::ClearBackground(window, clear_color);
 

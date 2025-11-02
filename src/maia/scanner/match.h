@@ -4,7 +4,7 @@
 
 #include <vector>
 
-#include "maia/scanner/memory_common.h"
+#include "maia/core/memory_common.h"
 
 namespace maia {
 
