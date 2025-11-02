@@ -2,17 +2,41 @@
 
 #pragma once
 
-#include "maia/core/i_process.h"
+#include "maia/core/i_process_attacher.h"
+
+#include <entt/signal/sigh.hpp>
 
 namespace maia {
 
 class ProcessModel {
  public:
-  explicit ProcessModel(IProcess& process)
-      : process_(process) {}
+  struct Signals {
+    entt::sigh<void(IProcess*)> active_process_changed;
+  };
+
+  explicit ProcessModel(IProcessAttacher& process_attacher)
+      : process_attacher_(process_attacher) {}
+
+  void AttachToProcess(Pid pid) {
+    active_process_ = process_attacher_.AttachTo(pid);
+    if (active_process_) {
+      signals_.active_process_changed.publish(active_process_.get());
+    }
+  }
+
+  void Detach() {
+    active_process_.reset();
+    signals_.active_process_changed.publish(nullptr);
+  }
+
+  Signals& signals() {
+    return signals_;
+  }
 
  private:
-  IProcess& process_;
+  Signals signals_;
+  IProcessAttacher& process_attacher_;
+  std::unique_ptr<IProcess> active_process_;
 };
 
 }  // namespace maia

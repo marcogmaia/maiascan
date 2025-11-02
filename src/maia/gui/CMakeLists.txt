@@ -1,12 +1,19 @@
 # Copyright (c) Maia
 
-add_library(
+add_library(gui)
+
+target_sources(
   gui
-  imgui_extensions.cpp
-  imgui_extensions.h
-  # Widgets
-  widgets/process_picker.cpp
-  widgets/process_picker.h
+  PUBLIC
+    FILE_SET HEADERS
+      FILES
+        imgui_extensions.h
+        widgets/process_picker.h
+        widgets/process_selector.h
+  PRIVATE
+    imgui_extensions.cpp
+    widgets/process_picker.cpp
+    widgets/process_selector.cpp
 )
 
 target_link_libraries(
@@ -20,9 +27,4 @@ target_link_libraries(
     glad::glad
 )
 
-target_compile_definitions(
-  gui
-  PUBLIC
-    GLFW_INCLUDE_NONE
-  # GLFW_EXPOSE_NATIVE_WIN32
-)
+target_compile_definitions(gui PUBLIC GLFW_INCLUDE_NONE)

@@ -14,7 +14,7 @@ repos:
         args: ["--enforce-all"]
 
   - repo: https://github.com/BlankSpruce/gersemi
-    rev: 0.22.2
+    rev: 0.22.3
     hooks:
       - id: gersemi
         args: ["-i", "--indent", "2", "--list-expansion", "favour-expansion"]
