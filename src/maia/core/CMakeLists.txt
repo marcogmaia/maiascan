@@ -1,10 +1,19 @@
 # Copyright (c) Maia
 
-add_library(core)
+find_package(EnTT CONFIG REQUIRED)
+
+add_library(core INTERFACE)
 
 target_sources(
   core
-  FILE_SET HEADERS
-  i_memory_accessor.h
-  memory_common.h
+  INTERFACE
+    FILE_SET HEADERS
+      FILES i_memory_accessor.h memory_common.h
+)
+
+target_link_libraries(
+  core
+  INTERFACE
+    base
+    EnTT::EnTT
 )

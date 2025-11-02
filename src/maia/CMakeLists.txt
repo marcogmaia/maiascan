@@ -1,6 +1,8 @@
 # Copyright (c) Maia
 
+add_subdirectory(application)
 add_subdirectory(console)
+add_subdirectory(core)
 add_subdirectory(gui)
 add_subdirectory(scanner)
 

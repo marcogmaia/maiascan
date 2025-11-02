@@ -9,11 +9,11 @@ target_sources(
       FILES
         imgui_extensions.h
         widgets/process_picker.h
-        widgets/process_selector.h
+        widgets/process_selector_view.h
   PRIVATE
     imgui_extensions.cpp
     widgets/process_picker.cpp
-    widgets/process_selector.cpp
+    widgets/process_selector_view.cpp
 )
 
 target_link_libraries(

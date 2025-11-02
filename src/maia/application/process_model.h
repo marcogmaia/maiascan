@@ -17,11 +17,14 @@ class ProcessModel {
   explicit ProcessModel(IProcessAttacher& process_attacher)
       : process_attacher_(process_attacher) {}
 
-  void AttachToProcess(Pid pid) {
+  // Return true in case the attach was successful.
+  bool AttachToProcess(Pid pid) {
     active_process_ = process_attacher_.AttachTo(pid);
-    if (active_process_) {
-      signals_.active_process_changed.publish(active_process_.get());
+    if (!active_process_) {
+      return false;
     }
+    signals_.active_process_changed.publish(active_process_.get());
+    return true;
   }
 
   void Detach() {
