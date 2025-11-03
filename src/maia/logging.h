@@ -64,7 +64,7 @@ inline void LogInfo(const T& msg) {
 }
 
 template <typename T>
-inline void LogWarn(const T& msg) {
+inline void LogWarning(const T& msg) {
   spdlog::default_logger_raw()->warn(msg);
 }
 

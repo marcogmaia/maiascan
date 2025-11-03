@@ -4,6 +4,8 @@
 #include <psapi.h>
 #include <tlhelp32.h>
 
+#include <string>
+
 #include "maia/application/process_selector_presenter.h"
 #include "maia/logging.h"
 
@@ -40,6 +42,38 @@ std::string TCharToString(const TCHAR* tchar_str) {
 #endif
 }
 
+std::string GetLastErrorMessage(DWORD error_code) {
+  if (error_code == 0) {
+    return "No error";  // Or whatever you prefer for success
+  }
+
+  std::string message(512, 0);
+
+  size_t size =
+      FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                     nullptr,
+                     error_code,
+                     MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                     message.data(),
+                     message.size(),
+                     nullptr);
+
+  if (size == 0) {
+    // The error code couldn't be found or another error occurred.
+    return "Unknown error " + std::to_string(error_code);
+  }
+
+  // Resize the string to the actual length of the message.
+  message.resize(size);
+
+  // Remove trailing newline characters that FormatMessage often adds.
+  if (!message.empty()) {
+    message.erase(message.find_last_not_of(" \n\r\t") + 1);
+  }
+
+  return message;
+}
+
 std::string GetProcessNameFromPid(DWORD pid) {
   if (pid == 0) {
     return "N/A";
@@ -49,7 +83,10 @@ std::string GetProcessNameFromPid(DWORD pid) {
       OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
   if (h_process == nullptr) {
-    return "<Access Denied>";
+    auto errc = static_cast<uint32_t>(GetLastError());
+    auto message = GetLastErrorMessage(errc);
+    LogWarning("Error 0x{:04x}: {}", errc, message);
+    return std::format("<{}>", message);
   }
 
   TCHAR process_name[MAX_PATH] = TEXT("<unknown>");

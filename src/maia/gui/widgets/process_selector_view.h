@@ -20,13 +20,13 @@ namespace maia {
 class ProcessSelectorView {
  public:
   struct Signals {
-    // Fired when the user clicks the "Refresh" button
+    // Fired when the user clicks the "Refresh" button.
     entt::sigh<void()> refresh_requested;
 
-    // Fired when the "Pick (Drag Me)" button is released over a window
+    // Fired when the selecting a process from the list.
     entt::sigh<void(Pid pid)> process_selected_from_list;
 
-    //  Fired when the "Pick (Drag Me)" button is released
+    // Fired when the "Pick (Drag Me)" button is released.
     entt::sigh<void()> process_pick_requested;
   };
 
