@@ -83,6 +83,8 @@ std::string GetProcessNameFromPid(DWORD pid) {
       OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
   if (h_process == nullptr) {
+    // TODO: this logging should be moved to where we first try to open the
+    // process.
     auto errc = static_cast<uint32_t>(GetLastError());
     auto message = GetLastErrorMessage(errc);
     LogWarning("Error 0x{:04x}: {}", errc, message);
