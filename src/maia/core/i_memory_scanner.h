@@ -5,7 +5,7 @@
 #include <span>
 #include <vector>
 
-namespace maia::core {
+namespace maia {
 
 /// \brief Defines a contract for performing memory scanning operations
 /// against a specific process.
@@ -16,7 +16,7 @@ class IMemoryScanner {
   /// \brief Performs an initial scan of the process.
   /// \param value A span representing the value to search for.
   /// \return A std::vector of addresses where the value was found.
-  [[nodiscard]] virtual std::vector<uintptr_t> FirstScan(
+  virtual std::vector<uintptr_t> FirstScan(
       std::span<const std::byte> value) = 0;
 
   // /// \brief Performs a subsequent scan for an exact value.
@@ -34,4 +34,4 @@ class IMemoryScanner {
   //     std::span<const uintptr_t> previous_results) = 0;
 };
 
-}  // namespace maia::core
+}  // namespace maia

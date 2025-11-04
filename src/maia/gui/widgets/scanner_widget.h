@@ -2,15 +2,13 @@
 
 #pragma once
 
-#include <any>
-
 #include <imgui.h>
 #include <entt/signal/sigh.hpp>
 
 #include "maia/application/scan_result_model.h"
 #include "maia/logging.h"
 
-namespace maia::gui {
+namespace maia {
 
 class ScannerWidget {
  public:
@@ -19,12 +17,10 @@ class ScannerWidget {
     entt::sigh<void()> scan_button_pressed;
   };
 
-  Signals signals;
-
-  void Render() const {
+  void Render(const std::vector<ScanEntry>& entries) const {
     if (ImGui::Begin("Mapped regions")) {
       if (ImGui::Button("Scan")) {
-        signals.scan_button_pressed.publish();
+        signals_.scan_button_pressed.publish();
       }
 
       if (ImGui::BeginTable("Tab", 2)) {
@@ -32,12 +28,13 @@ class ScannerWidget {
         ImGui::TableSetupColumn("Value");
 
         ImGui::TableHeadersRow();
-        for (const auto& entry : entries_) {
+        for (const auto& entry : entries) {
           ImGui::TableNextRow();
           ImGui::TableNextColumn();
-          ImGui::TextUnformatted(std::format("{}", entry.address).c_str());
-          ImGui::TextUnformatted(
-              std::format("{}", *static_cast<uint8_t*>(entry.data)).c_str());
+          ImGui::TextUnformatted(std::format("{:x}", entry.address).c_str());
+          ImGui::TableNextColumn();
+          auto val = *reinterpret_cast<const uint32_t*>(entry.data.data());
+          ImGui::TextUnformatted(std::format("{}", val).c_str());
         }
         ImGui::EndTable();
       }
@@ -45,41 +42,12 @@ class ScannerWidget {
     ImGui::End();
   }
 
-  void SetMemory(std::vector<ScanEntry> entries) {
-    LogInfo("Memory set");
-    entries_.swap(entries);
+  Signals& signals() {
+    return signals_;
   }
 
  private:
-  // A "Scan" is the result of a scanning operation, it contains the memory view
-  // scanned for.
-  std::vector<ScanEntry> entries_;
+  Signals signals_;
 };
 
-class SinkStorage {
- public:
-  template <auto U>
-  auto& Connect(auto& sig, auto& obj) {
-    auto sink = entt::sink(sig);
-    sink.template connect<U>(&obj);
-    sinks_.emplace_back(std::move(sink));
-    return *this;
-  }
-
-  template <auto U>
-  auto& Connect(auto& sig) {
-    auto sink = entt::sink(sig);
-    sink.template connect<U>();
-    sinks_.emplace_back(std::move(sink));
-    return *this;
-  }
-
- private:
-  std::vector<std::any> sinks_;
-};
-
-inline void FreeFunc() {
-  LogWarning("ui");
-}
-
-}  // namespace maia::gui
+}  // namespace maia

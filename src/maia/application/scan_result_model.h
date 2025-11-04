@@ -12,8 +12,8 @@ namespace maia {
 
 struct ScanEntry {
   MemoryAddress address;
-  MemoryPtr data;
-  size_t size;
+  std::vector<std::byte> data;
+  // size_t size;
 };
 
 class ScanResultModel {
@@ -22,8 +22,8 @@ class ScanResultModel {
     entt::sigh<void(std::vector<ScanEntry>)> memory_changed;
   };
 
-  explicit ScanResultModel(core::IMemoryScanner* memory_scanner)
-      : memory_scanner_(*memory_scanner) {}
+  // explicit ScanResultModel(IMemoryScanner* memory_scanner)
+  //     {}
 
   Signals& signals() {
     return signals_;
@@ -40,7 +40,7 @@ class ScanResultModel {
 
  private:
   Signals signals_;
-  core::IMemoryScanner& memory_scanner_;
+  // IMemoryScanner& memory_scanner_;
   std::vector<ScanEntry> entries_;
 };
 

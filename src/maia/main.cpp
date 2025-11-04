@@ -7,9 +7,11 @@
 #include <glad/glad.h>
 #include <entt/signal/dispatcher.hpp>
 
+#include "application/scanner_presenter.h"
 #include "maia/application/process_selector_presenter.h"
 #include "maia/gui/imgui_extensions.h"
 #include "maia/logging.h"
+#include "scan_result_model.h"
 #include "scanner/process_attacher.h"
 
 namespace maia {
@@ -93,11 +95,20 @@ int main() {
   maia::ProcessSelectorPresenter process_selector{process_model,
                                                   proc_selector_view};
 
+  // maia::MemoryScanner memory_scanner{};
+  maia::ScanResultModel scan_result_model{};
+  maia::ScannerWidget scanner_widget{};
+  maia::ScannerPresenter scanner{
+      scan_result_model, process_model, scanner_widget};
+
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
 
     maia::ImGuiBeginFrame();
+
     process_selector.Render();
+    scanner.Render();
+
     maia::ClearBackground(window, clear_color);
 
     maia::ImGuiEndFrame();

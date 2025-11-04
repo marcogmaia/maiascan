@@ -9,10 +9,11 @@ target_sources(
       FILES
         process_model.h
         process_selector_presenter.h
-        scan_presenter.h
+        scanner_presenter.h
         scan_result_model.h
   PRIVATE
     process_selector_presenter.cpp
+    scanner_presenter.cpp
 )
 
 target_link_libraries(application PUBLIC core)

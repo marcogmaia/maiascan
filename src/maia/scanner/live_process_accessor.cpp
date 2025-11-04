@@ -18,8 +18,9 @@ ProcessHandle OpenHandle(uint32_t pid) {
   HANDLE handle =
       OpenProcess(PROCESS_QUERY_INFORMATION |  // Required for VirtualQueryEx
                       PROCESS_VM_READ |        // Required for ReadProcessMemory
-                      PROCESS_VM_WRITE |     // Required for WriteProcessMemory
-                      PROCESS_VM_OPERATION,  // Required for VirtualProtectEx
+                      PROCESS_VM_WRITE |      // Required for WriteProcessMemory
+                      PROCESS_VM_OPERATION |  // Required for VirtualProtectEx
+                      SYNCHRONIZE,  // Required for WaitForSingleObject
                   FALSE,
                   pid);
   return handle;
