@@ -43,6 +43,8 @@ class ScanResultModel {
 
   void ScanForValue(std::vector<std::byte> value_to_scan);
 
+  void FilterChangedValues();
+
   void SetActiveProcess(IProcess* process);
 
  private:
@@ -52,6 +54,7 @@ class ScanResultModel {
   std::unique_ptr<IMemoryScanner> memory_scanner_;
 
   std::vector<ScanEntry> entries_;
+  std::vector<ScanEntry> prev_entries_;
 
   std::mutex mutex_;
   std::jthread task_;

@@ -2,9 +2,21 @@
 
 #include "maia/application/scan_result_model.h"
 
+#include <ranges>
+
 #include "memory_scanner.h"
 
 namespace maia {
+
+namespace {
+
+void UpdateScannedValues(IProcess& process, std::vector<ScanEntry>& entries) {
+  for (auto& entry : entries) {
+    process.ReadMemory(entry.address, entry.data);
+  }
+}
+
+}  // namespace
 
 void ScanResultModel::ScanForValue(std::vector<std::byte> value_to_scan) {
   if (!active_process_ || !active_process_->IsProcessValid()) {
@@ -14,6 +26,7 @@ void ScanResultModel::ScanForValue(std::vector<std::byte> value_to_scan) {
   }
   LogInfo("Scan pressed.");
 
+  entries_.clear();
   const auto scanned_values = memory_scanner_->FirstScan(value_to_scan);
   for (const auto& value : scanned_values) {
     std::scoped_lock guard(mutex_);
@@ -21,6 +34,7 @@ void ScanResultModel::ScanForValue(std::vector<std::byte> value_to_scan) {
     active_process_->ReadMemory(value, bytes);
     entries_.emplace_back(ScanEntry{.address = value, .data = bytes});
   }
+  prev_entries_ = entries_;
 }
 
 void ScanResultModel::SetActiveProcess(IProcess* process) {
@@ -36,12 +50,29 @@ ScanResultModel::ScanResultModel()
         while (!stop_token.stop_requested()) {
           if (active_process_ && active_process_->IsProcessValid()) {
             std::scoped_lock guard(mutex_);
-            for (auto& entry : entries_) {
-              active_process_->ReadMemory(entry.address, entry.data);
-            }
+            UpdateScannedValues(*active_process_, entries_);
           }
           std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
       }) {}
+
+void ScanResultModel::FilterChangedValues() {
+  if (!active_process_ || !active_process_->IsProcessValid()) {
+    return;
+  }
+
+  std::scoped_lock aguard(mutex_);
+  thread_local std::vector<ScanEntry> new_entries;
+  new_entries.clear();
+  new_entries.reserve(entries_.size());
+  UpdateScannedValues(*active_process_, entries_);
+  for (const auto& [prev, curr] : std::views::zip(prev_entries_, entries_)) {
+    if (prev.data != curr.data) {
+      new_entries.emplace_back(curr);
+    }
+  };
+  entries_.swap(new_entries);
+  prev_entries_ = entries_;
+}
 
 }  // namespace maia

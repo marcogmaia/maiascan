@@ -16,9 +16,11 @@ class ScannerWidget {
   class Signals {
    public:
     entt::sigh<void(std::vector<std::byte> value_to_scan)> scan_button_pressed;
+    entt::sigh<void()> filter_changed;
+    entt::sigh<void(ScanEntry)> entry_selected;
   };
 
-  void Render(const std::vector<ScanEntry>& entries) const;
+  void Render(const std::vector<ScanEntry>& entries);
 
   Signals& signals() {
     return signals_;
@@ -27,7 +29,8 @@ class ScannerWidget {
  private:
   Signals signals_;
 
-  mutable std::string str_;
+  std::string str_;
+  int selected_index_;
 };
 
 }  // namespace maia

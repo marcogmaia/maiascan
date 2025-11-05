@@ -28,7 +28,7 @@ std::vector<std::byte> ToByteVector(uint32_t value) {
 
 }  // namespace
 
-void ScannerWidget::Render(const std::vector<ScanEntry>& entries) const {
+void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
   if (ImGui::Begin("Mapped regions")) {
     ImGui::InputText("Input", &this->str_);
 
@@ -38,6 +38,12 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) const {
             ToUint32(str_).transform(ToByteVector).value_or({}));
       }
 
+      ImGui::SameLine();
+      if (ImGui::Button("Filter Changed")) {
+        signals_.filter_changed.publish();
+      }
+      ImGui::SetItemTooltip("Filter out all values\nthat have been changed.");
+
       const ImGuiTableFlags flags = ImGuiTableFlags_RowBg;
 
       if (ImGui::BeginTable("Tab", 2, flags)) {
@@ -45,10 +51,22 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) const {
         ImGui::TableSetupColumn("Value");
 
         ImGui::TableHeadersRow();
-        for (const auto& entry : entries) {
+
+        for (int i = 0; i < entries.size(); ++i) {
+          const auto& entry = entries[i];  // NOLINT
           ImGui::TableNextRow();
           ImGui::TableNextColumn();
-          ImGui::TextUnformatted(std::format("0x{:x}", entry.address).c_str());
+          const bool is_selected = (this->selected_index_ == i);
+          std::string address_str = std::format("0x{:x}", entry.address);
+
+          // ImGuiSelectableFlags_SpanAllColumns makes it fill the whole row.
+          if (ImGui::Selectable(address_str.c_str(),
+                                is_selected,
+                                ImGuiSelectableFlags_SpanAllColumns)) {
+            this->selected_index_ = i;
+            signals_.entry_selected.publish(entry);
+          }
+
           ImGui::TableNextColumn();
           if (entry.data.size() >= sizeof(uint32_t)) {
             auto val = *reinterpret_cast<const uint32_t*>(entry.data.data());
