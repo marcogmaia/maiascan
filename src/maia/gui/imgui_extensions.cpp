@@ -10,12 +10,14 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include "maia/logging.h"
+
 namespace maia {
 
 namespace {
 
 void glfw_error_callback(int error, const char* description) {
-  // LogError("GLFW Error {}: {}", error, description);
+  LogError("GLFW Error {}: {}", error, description);
 }
 
 std::expected<GLFWwindow*, int> InitGlfw() {
@@ -24,12 +26,14 @@ std::expected<GLFWwindow*, int> InitGlfw() {
     return std::unexpected(1);
   }
 
-  const char* glsl_version = "#version 130";
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
-  GLFWwindow* window =
-      glfwCreateWindow(1280, 720, "maiascan", nullptr, nullptr);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  // glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+
+  GLFWwindow* window = glfwCreateWindow(800, 600, "maiascan", nullptr, nullptr);
   if (window == nullptr) {
     return std::unexpected(1);
   }
@@ -94,8 +98,8 @@ void* ImGuiInit() {
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);  // Required on Mac
 #else
-  // GL 3.0 + GLSL 130
-  const char* glsl_version = "#version 130";
+  // GL 4.3 + GLSL 430
+  const char* glsl_version = "#version 430";
   // glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   // glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+

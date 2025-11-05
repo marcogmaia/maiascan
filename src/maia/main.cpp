@@ -30,49 +30,35 @@ void ClearBackground(GLFWwindow* window, ImVec4& clear_color) {
   glClear(GL_COLOR_BUFFER_BIT);
 }
 
-// size_t GetTotalOccupiedMemory(
-//     const std::vector<maia::MemoryRegion>& mem_regions) {
-//   return std::accumulate(mem_regions.begin(),
-//                          mem_regions.end(),
-//                          0z,
-//                          [](size_t total, const maia::MemoryRegion& region) {
-//                            return total + region.size;
-//                          });
-// }
+void CreateDockSpace() {
+  ImGuiViewport* viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(viewport->WorkPos);
+  ImGui::SetNextWindowSize(viewport->WorkSize);
+  ImGui::SetNextWindowViewport(viewport->ID);
 
-// MemoryAddress GetBaseAddress(Pid pid) {
-//   auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
-//   if (snapshot == INVALID_HANDLE_VALUE) {
-//     return {};
-//   }
-//   MODULEENTRY32 mod_entry{.dwSize = sizeof(MODULEENTRY32)};
-//   bool success = Module32First(snapshot, &mod_entry) != 0;
-//   if (!success) {
-//     auto err = GetLastError();
-//     return {};
-//   }
-//   return std::bit_cast<MemoryAddress>(mod_entry.modBaseAddr);
-// }
+  ImGuiWindowFlags host_window_flags = 0;
+  host_window_flags |= ImGuiWindowFlags_NoTitleBar;
+  host_window_flags |= ImGuiWindowFlags_NoCollapse;
+  host_window_flags |= ImGuiWindowFlags_NoResize;
+  host_window_flags |= ImGuiWindowFlags_NoMove;
+  host_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+  host_window_flags |= ImGuiWindowFlags_NoNavFocus;
+  host_window_flags |= ImGuiWindowFlags_NoBackground;  // Make it transparent
 
-// void PrintAllProcessModules(Pid pid) {
-//   HANDLE hsnapshot =
-//       CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+  // We must push style vars to remove padding/borders
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-//   if (hsnapshot == INVALID_HANDLE_VALUE) {
-//     return;
-//   }
+  ImGui::Begin("MaiaScan Host", nullptr, host_window_flags);
 
-//   MODULEENTRY32 mod_entry = {.dwSize = 0};
-//   mod_entry.dwSize = sizeof(MODULEENTRY32);
-//   for (bool ok = Module32First(hsnapshot, &mod_entry) != 0; ok;
-//        ok = Module32Next(hsnapshot, &mod_entry) != 0) {
-//     fmt::print("{:20} -- Addr: {:p}\n",
-//                mod_entry.szModule,
-//                fmt::ptr(mod_entry.modBaseAddr));
-//   }
+  ImGui::PopStyleVar(3);
 
-//   CloseHandle(hsnapshot);
-// }
+  // Create the dockspace.
+  ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+  ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+  ImGui::End();
+}
 
 }  // namespace
 
@@ -95,7 +81,6 @@ int main() {
   maia::ProcessSelectorPresenter process_selector{process_model,
                                                   proc_selector_view};
 
-  // maia::MemoryScanner memory_scanner{};
   maia::ScanResultModel scan_result_model{};
   maia::ScannerWidget scanner_widget{};
   maia::ScannerPresenter scanner{
@@ -106,11 +91,12 @@ int main() {
 
     maia::ImGuiBeginFrame();
 
+    maia::CreateDockSpace();
+
     process_selector.Render();
     scanner.Render();
 
     maia::ClearBackground(window, clear_color);
-
     maia::ImGuiEndFrame();
     glfwSwapBuffers(window);
 

@@ -14,6 +14,7 @@ target_sources(
   PRIVATE
     process_selector_presenter.cpp
     scanner_presenter.cpp
+    scan_result_model.cpp
 )
 
 target_link_libraries(application PUBLIC core)

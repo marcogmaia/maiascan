@@ -10,10 +10,12 @@ target_sources(
         imgui_extensions.h
         widgets/process_picker.h
         widgets/process_selector_view.h
+        widgets/scanner_view.h
   PRIVATE
     imgui_extensions.cpp
     widgets/process_picker.cpp
     widgets/process_selector_view.cpp
+    widgets/scanner_view.cpp
 )
 
 target_link_libraries(
