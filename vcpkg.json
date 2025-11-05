@@ -2,22 +2,21 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "maiascan",
   "version-string": "0.0.1",
-  "vcpkg-configuration": { "overlay-triplets": ["external/triplets"] },
+  "builtin-baseline": "74e6536215718009aae747d86d84b78376bf9e09",
+  "configuration": { "overlay-triplets": ["external/triplets"] },
   "dependencies": [
     "atl",
     "cli11",
+    "entt",
     "fmt",
-    "gtest",
-    "nlohmann-json",
-    "spdlog",
-    {
-      "name": "glad",
-      "features": ["gl-api-43"]
-    },
+    { "name": "glad", "features": ["gl-api-43"] },
     "glfw3",
+    "gtest",
     {
       "name": "imgui",
       "features": ["docking-experimental", "glfw-binding", "opengl3-binding"]
-    }
+    },
+    "nlohmann-json",
+    "spdlog"
   ]
 }
