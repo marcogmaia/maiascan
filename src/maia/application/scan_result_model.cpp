@@ -75,4 +75,13 @@ void ScanResultModel::FilterChangedValues() {
   prev_entries_ = entries_;
 }
 
+void ScanResultModel::FirstScan(std::vector<std::byte> value_to_scan) {
+  {
+    std::scoped_lock guard(mutex_);
+    prev_entries_.clear();
+    entries_.clear();
+  }
+  ScanForValue(value_to_scan);
+}
+
 }  // namespace maia

@@ -2,6 +2,9 @@
 
 #include "maia/gui/widgets/scanner_view.h"
 
+// TODO: Remove this when changing the array to enum.
+#include <array>
+
 namespace maia {
 
 namespace {
@@ -29,13 +32,73 @@ std::vector<std::byte> ToByteVector(uint32_t value) {
 }  // namespace
 
 void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
-  if (ImGui::Begin("Mapped regions")) {
-    ImGui::InputText("Input", &this->str_);
+  if (ImGui::Begin("Scanner")) {
+    // TODO: Change these to an enum.
+    constexpr auto kScanTypeItems =
+        std::array{"Exact Value", "Bigger Than...", "Smaller Than..."};
+    constexpr auto kValueTypeItems = std::array{
+        "4 Bytes", "1 Byte", "2 Bytes", "8 Bytes", "Float", "Double"};
+
+    if (ImGui::BeginTable("InputTable", 2)) {
+      ImGui::TableSetupColumn("Labels", ImGuiTableColumnFlags_WidthFixed);
+      ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Value:");
+
+      ImGui::TableSetColumnIndex(1);
+      // Makes the input fill the cell.
+      ImGui::PushItemWidth(-FLT_MIN);
+      ImGui::InputText("##Input", &str_);
+      ImGui::PopItemWidth();
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Hex");
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::Checkbox("##HexInput", &is_hex_input_);
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Scan Type");
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::PushItemWidth(-FLT_MIN);
+      ImGui::Combo("##ScanType",
+                   &current_scan_type_,
+                   kScanTypeItems.data(),
+                   kScanTypeItems.size());
+      ImGui::PopItemWidth();
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Value Type");
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::PushItemWidth(-FLT_MIN);
+      ImGui::Combo("##ValueType",
+                   &current_scan_value_type_,
+                   kValueTypeItems.data(),
+                   kValueTypeItems.size());
+      ImGui::PopItemWidth();
+
+      ImGui::EndTable();
+    }
+
+    ImGui::Separator();
 
     if (ImGui::BeginChild("Table")) {
+      auto needle_bytes = ToUint32(str_)
+                              .transform(ToByteVector)
+                              .value_or(std::vector<std::byte>());
+      if (ImGui::Button("First Scan")) {
+        signals_.new_scan_pressed.publish(needle_bytes);
+      }
+      ImGui::SameLine();
       if (ImGui::Button("Scan")) {
-        signals_.scan_button_pressed.publish(
-            ToUint32(str_).transform(ToByteVector).value_or({}));
+        signals_.scan_button_pressed.publish(needle_bytes);
       }
 
       ImGui::SameLine();
@@ -56,14 +119,14 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
           const auto& entry = entries[i];  // NOLINT
           ImGui::TableNextRow();
           ImGui::TableNextColumn();
-          const bool is_selected = (this->selected_index_ == i);
+          const bool is_selected = (selected_index_ == i);
           std::string address_str = std::format("0x{:x}", entry.address);
 
           // ImGuiSelectableFlags_SpanAllColumns makes it fill the whole row.
           if (ImGui::Selectable(address_str.c_str(),
                                 is_selected,
                                 ImGuiSelectableFlags_SpanAllColumns)) {
-            this->selected_index_ = i;
+            selected_index_ = i;
             signals_.entry_selected.publish(entry);
           }
 

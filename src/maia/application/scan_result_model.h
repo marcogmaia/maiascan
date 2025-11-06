@@ -33,15 +33,13 @@ class ScanResultModel {
     signals_.memory_changed.publish(std::move(entries));
   }
 
-  void FirstScan() {
-    LogInfo("First scan");
-  };
-
   const std::vector<ScanEntry>& entries() const {
     return entries_;
   }
 
   void ScanForValue(std::vector<std::byte> value_to_scan);
+
+  void FirstScan(std::vector<std::byte> value_to_scan);
 
   void FilterChangedValues();
 
