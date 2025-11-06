@@ -2,16 +2,23 @@
 
 #include "maia/gui/widgets/scanner_view.h"
 
+#include <format>
+#include <optional>
+#include <string_view>
+
 namespace maia {
 
 namespace {
 
-std::optional<uint32_t> ToUint32(const std::string& str) {
-  const char* first = str.data();
-  const char* last = first + str.size();
+std::optional<uint32_t> ToUint32(std::string_view sview, int base = 10) {
+  if (base == 16 && sview.starts_with("0x")) {
+    sview = sview.substr(2);
+  }
+  const char* first = sview.data();
+  const char* last = first + sview.size();
 
   uint32_t value;
-  std::from_chars_result result = std::from_chars(first, last, value);
+  std::from_chars_result result = std::from_chars(first, last, value, base);
 
   if (result.ec != std::errc() || result.ptr != last) {
     return std::nullopt;
@@ -26,16 +33,57 @@ std::vector<std::byte> ToByteVector(uint32_t value) {
   return bytes;
 }
 
+void TextEntryValue(const ScanEntry& entry, bool is_hexadecimal = false) {
+  // TODO: Make this safer, and enable the printing of other data types.
+  auto value_to_show = *reinterpret_cast<const uint32_t*>(entry.data.data());
+  if (is_hexadecimal) {
+    ImGui::TextUnformatted(std::format("0x{:x}", value_to_show).c_str());
+  } else {
+    ImGui::TextUnformatted(std::format("{}", value_to_show).c_str());
+  }
+}
+
 }  // namespace
 
 void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
-  if (ImGui::Begin("Mapped regions")) {
-    ImGui::InputText("Input", &this->str_);
+  if (ImGui::Begin("Scanner")) {
+    if (ImGui::BeginTable("InputTable", 2)) {
+      ImGui::TableSetupColumn("Labels", ImGuiTableColumnFlags_WidthFixed);
+      ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Value:");
+
+      ImGui::TableSetColumnIndex(1);
+      // Makes the input fill the cell.
+      ImGui::PushItemWidth(-FLT_MIN);
+      ImGui::InputText("##Input", &str_);
+      ImGui::PopItemWidth();
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Hex");
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::Checkbox("##HexInput", &is_hex_input_);
+
+      ImGui::EndTable();
+    }
+
+    ImGui::Separator();
 
     if (ImGui::BeginChild("Table")) {
+      const int base = is_hex_input_ ? 16 : 10;
+      auto needle_bytes = ToUint32(str_, base)
+                              .transform(ToByteVector)
+                              .value_or(std::vector<std::byte>());
+      if (ImGui::Button("First Scan")) {
+        signals_.new_scan_pressed.publish(needle_bytes);
+      }
+      ImGui::SameLine();
       if (ImGui::Button("Scan")) {
-        signals_.scan_button_pressed.publish(
-            ToUint32(str_).transform(ToByteVector).value_or({}));
+        signals_.scan_button_pressed.publish(needle_bytes);
       }
 
       ImGui::SameLine();
@@ -56,21 +104,21 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
           const auto& entry = entries[i];  // NOLINT
           ImGui::TableNextRow();
           ImGui::TableNextColumn();
-          const bool is_selected = (this->selected_index_ == i);
+          const bool is_selected = (selected_index_ == i);
           std::string address_str = std::format("0x{:x}", entry.address);
 
           // ImGuiSelectableFlags_SpanAllColumns makes it fill the whole row.
           if (ImGui::Selectable(address_str.c_str(),
                                 is_selected,
                                 ImGuiSelectableFlags_SpanAllColumns)) {
-            this->selected_index_ = i;
+            selected_index_ = i;
             signals_.entry_selected.publish(entry);
           }
 
           ImGui::TableNextColumn();
+          // TODO: Make this work with other fundamental data types.
           if (entry.data.size() >= sizeof(uint32_t)) {
-            auto val = *reinterpret_cast<const uint32_t*>(entry.data.data());
-            ImGui::TextUnformatted(std::format("{}", val).c_str());
+            TextEntryValue(entry, is_hex_input_);
           } else {
             ImGui::TextUnformatted("N/A");
           }

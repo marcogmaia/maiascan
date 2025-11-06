@@ -26,7 +26,7 @@ void ScanResultModel::ScanForValue(std::vector<std::byte> value_to_scan) {
   }
   LogInfo("Scan pressed.");
 
-  entries_.clear();
+  Clear();
   const auto scanned_values = memory_scanner_->FirstScan(value_to_scan);
   for (const auto& value : scanned_values) {
     std::scoped_lock guard(mutex_);
@@ -73,6 +73,17 @@ void ScanResultModel::FilterChangedValues() {
   };
   entries_.swap(new_entries);
   prev_entries_ = entries_;
+}
+
+void ScanResultModel::FirstScan(std::vector<std::byte> value_to_scan) {
+  Clear();
+  ScanForValue(value_to_scan);
+}
+
+void ScanResultModel::Clear() {
+  std::scoped_lock guard(mutex_);
+  prev_entries_.clear();
+  entries_.clear();
 }
 
 }  // namespace maia

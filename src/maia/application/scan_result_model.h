@@ -4,10 +4,12 @@
 
 #include <entt/signal/sigh.hpp>
 
+#include <mutex>
+#include <thread>
+
 #include "maia/core/i_memory_scanner.h"
 #include "maia/core/i_process.h"
 #include "maia/core/memory_common.h"
-#include "maia/logging.h"
 
 namespace maia {
 
@@ -28,24 +30,19 @@ class ScanResultModel {
     return signals_;
   }
 
-  void SetMemory(std::vector<ScanEntry> entries) {
-    entries_ = entries;
-    signals_.memory_changed.publish(std::move(entries));
-  }
-
-  void FirstScan() {
-    LogInfo("First scan");
-  };
-
   const std::vector<ScanEntry>& entries() const {
     return entries_;
   }
 
   void ScanForValue(std::vector<std::byte> value_to_scan);
 
+  void FirstScan(std::vector<std::byte> value_to_scan);
+
   void FilterChangedValues();
 
   void SetActiveProcess(IProcess* process);
+
+  void Clear();
 
  private:
   Signals signals_;
