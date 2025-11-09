@@ -2,112 +2,90 @@
 
 #pragma once
 
-#include <cstddef>
-#include <string>
-#include <variant>
+#include <memory>
+#include <ranges>
 #include <vector>
 
+#include "maia/assert2.h"
+#include "maia/core/i_process.h"
+#include "maia/core/memory_common.h"
 #include "maia/core/scan_types.h"
 
 namespace maia {
 
-template <typename T>
-struct FixedScanResult {
-  using value_type = T;
-  static constexpr bool kIsVariable = false;
-  static constexpr size_t kSizeBytes = sizeof(T);
+// using SnapshotPtr = std::shared_ptr<const MemorySnapshot>;
 
-  std::vector<uintptr_t> addresses;
+class ScanResult {
+ public:
+  // Empty result
+  ScanResult() = default;
 
-  explicit operator bool() const noexcept {
-    return !addresses.empty();
+  size_t size() const {
+    return snapshot_ ? snapshot_->addresses.size() : 0;
+  }
+
+  bool empty() const {
+    return size() == 0;
+  }
+
+  std::span<const uintptr_t> addresses() const {
+    return snapshot_->addresses;
+  }
+
+  // Safe, lazy range of previous values
+  template <CScannableType T>
+  auto values() const {
+    ValidateSize<T>();
+    return std::views::iota(0uz, size()) |
+           std::views::transform([this](size_t i) -> T {
+             T value;
+             std::memcpy(&value, &snapshot_->values[i * byte_size_], sizeof(T));
+             return value;
+           });
+  }
+
+  // Reinterpret entire result as different type (zero cost).
+  template <CScannableType T>
+  ScanResult As() const {
+    ScanResult r;
+    r.snapshot_ = snapshot_;
+    r.byte_size_ = sizeof(T);
+    return r;
+  }
+
+  template <CScannableType T>
+  static ScanResult FromSnapshot(
+      std::shared_ptr<const MemorySnapshot> snapshot) {
+    return ScanResult(snapshot, sizeof(T));
+  }
+
+ private:
+  explicit ScanResult(std::shared_ptr<const MemorySnapshot> snapshot,
+                      size_t byte_size)
+      : snapshot_(std::move(snapshot)),
+        byte_size_(byte_size) {}
+
+  std::shared_ptr<const MemorySnapshot> snapshot_;
+  size_t byte_size_ = 0;  // sizeof(T) for the current view
+
+  template <CScannableType T>
+  void ValidateSize() const {
+    maia::Assert(byte_size_ == sizeof(T));
   }
 };
 
-// Base for variable-length results (e.g., kString, kByteArray)
-template <typename T>
-struct VariableScanResult {
-  using value_type = T;
-  static constexpr bool kIsVariable = true;
-  static constexpr size_t kSizeBytes = sizeof(T);
+// Read current memory as any type (no snapshot involved).
+template <CScannableType T>
+T ReadCurrent(IProcess& process, MemoryAddress address) {
+  T value;
+  process.ReadMemory(address, ToBytesView(value));
+  return value;
+}
 
-  struct Entry {
-    uintptr_t address = 0;
-    size_t length = 0;  // Length of this specific match
-  };
-
-  std::vector<Entry> entries;
-
-  explicit operator bool() const noexcept {
-    return !entries.empty();
-  }
-};
-
-// Helper to pick the correct specialization.
-// clang-format off
-// template <ScanValueType VT> struct ScanResultTraits { using type = FixedScanResult<VT>; };
-
-// template <> struct ScanResultTraits<ScanValueType::kString>    { using type = VariableScanResult<ScanValueType::kString>; };
-// template <> struct ScanResultTraits<ScanValueType::kStringW>   { using type = VariableScanResult<ScanValueType::kStringW>; };
-// template <> struct ScanResultTraits<ScanValueType::kByteArray> { using type = VariableScanResult<ScanValueType::kByteArray>; };
-
-// clang-format on
-
-// Type-safe result.
-// template <typename VT>
-// using ScanResultTyped = typename ScanResultTraits<VT>::type;
-
-// // Variant of all possible results
-// using ScanResult = std::variant<ScanResultTyped<ScanValueType::kS8>,
-//                                 ScanResultTyped<ScanValueType::kU8>,
-//                                 ScanResultTyped<ScanValueType::kS16>,
-//                                 ScanResultTyped<ScanValueType::kU16>,
-//                                 ScanResultTyped<ScanValueType::kS32>,
-//                                 ScanResultTyped<ScanValueType::kU32>,
-//                                 ScanResultTyped<ScanValueType::kF32>,
-//                                 ScanResultTyped<ScanValueType::kS64>,
-//                                 ScanResultTyped<ScanValueType::kU64>,
-//                                 ScanResultTyped<ScanValueType::kF64>,
-//                                 ScanResultTyped<ScanValueType::kString>,
-//                                 ScanResultTyped<ScanValueType::kStringW>,
-//                                 ScanResultTyped<ScanValueType::kByteArray>>;
-
-// template <typename T>
-// struct ScanResultType {};
-
-using ScanResult = std::variant<FixedScanResult<int8_t>,
-                                FixedScanResult<uint8_t>,
-                                FixedScanResult<int16_t>,
-                                FixedScanResult<uint16_t>,
-                                FixedScanResult<int32_t>,
-                                FixedScanResult<uint32_t>,
-                                FixedScanResult<int64_t>,
-                                FixedScanResult<uint64_t>,
-                                FixedScanResult<float>,
-                                FixedScanResult<double>,
-                                VariableScanResult<std::string>,
-                                VariableScanResult<std::wstring>,
-                                VariableScanResult<std::vector<std::byte>>>;
-
-// template <ScanValueType VT>
-// ScanResult MakeScanResult(ScanResultTyped<VT>) {}
-
-// // Helper: iterate addresses regardless of type (for UI)
-// template <typename Func>
-// void ForEachAddress(const ScanResult& result, Func callback) {
-//   std::visit(
-//       [&](const auto& typed) {
-//         if constexpr (std::decay_t<decltype(typed)>::kIsVariable) {
-//           for (const auto& entry : typed.entries) {
-//             callback(entry.address);
-//           }
-//         } else {
-//           for (uintptr_t addr : typed.addresses) {
-//             callback(addr);
-//           }
-//         }
-//       },
-//       result);
-// }
+// Write a value (type-safe).
+template <CScannableType T>
+bool Write(IProcess& process, MemoryAddress address, const T& value) {
+  return process.WriteMemory(address, ToBytesView(value));
+}
 
 }  // namespace maia

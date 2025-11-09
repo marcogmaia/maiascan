@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace maia {
 
@@ -30,7 +31,7 @@ T BytesToFundamentalType(std::span<const Byte> view) {
 }
 
 struct MemoryRegion {
-  MemoryAddress base_address{};
+  uintptr_t base_address{};
   size_t size{};
   uint32_t protection_flags;  // e.g., PAGE_READWRITE
 };
@@ -40,9 +41,22 @@ struct ProcessInfo {
   Pid pid;
 };
 
-struct Page {
-  MemoryPtr address;
-  size_t size;
+// struct Page {
+//   MemoryPtr address;
+//   size_t size;
+// };
+
+// Stores addresses and raw bytes of values from the *previous* scan.
+// This is the only thing needed for "changed/unchanged" comparisons.
+struct MemorySnapshot {
+  std::vector<uintptr_t> addresses;
+
+  // For fixed-size types: contiguous bytes.
+  // For strings/bytes: concatenated with sizes tracked separately.
+  std::vector<std::byte> values;
+
+  // Only used for variable-length types (string, bytearray).
+  std::vector<size_t> sizes;
 };
 
 }  // namespace maia

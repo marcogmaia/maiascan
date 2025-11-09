@@ -3,8 +3,9 @@
 #pragma once
 
 #include <concepts>
-
-#include <cstdint>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace maia {
 
@@ -72,7 +73,7 @@ enum class ScanComparison {
 };
 
 // Helper to check which inputs the UI should show (0, 1, or 2 values)
-inline int GetRequiredValueCount(ScanComparison type) {
+constexpr int GetRequiredValueCount(ScanComparison type) {
   switch (type) {
     // These need two values (e.g., "Value 1" and "Value 2")
     case ScanComparison::kBetween:
@@ -100,7 +101,7 @@ inline int GetRequiredValueCount(ScanComparison type) {
 }
 
 // Helper to check if this scan is valid as a "First Scan"
-inline bool IsValidForFirstScan(ScanComparison type) {
+constexpr bool IsValidForFirstScan(ScanComparison type) {
   switch (type) {
     case ScanComparison::kUnknown:
     case ScanComparison::kExactValue:
@@ -123,5 +124,51 @@ struct ScanValueType {
   using value_type = T;
   static constexpr size_t kByteSize = sizeof(T);
 };
+
+template <typename T>
+struct FixedScanResult {
+  using value_type = T;
+  static constexpr bool kIsVariable = false;
+  static constexpr size_t kSizeBytes = sizeof(T);
+
+  std::vector<uintptr_t> addresses;
+
+  explicit operator bool() const noexcept {
+    return !addresses.empty();
+  }
+};
+
+// Base for variable-length results (e.g., kString, kByteArray)/
+template <typename T>
+struct VariableScanResult {
+  using value_type = T;
+  static constexpr bool kIsVariable = true;
+  static constexpr size_t kSizeBytes = sizeof(T);
+
+  struct Entry {
+    uintptr_t address = 0;
+    size_t length = 0;  // Length of this specific match
+  };
+
+  std::vector<Entry> entries;
+
+  explicit operator bool() const noexcept {
+    return !entries.empty();
+  }
+};
+
+// using ScanResult = std::variant<FixedScanResult<int8_t>,
+//                                 FixedScanResult<uint8_t>,
+//                                 FixedScanResult<int16_t>,
+//                                 FixedScanResult<uint16_t>,
+//                                 FixedScanResult<int32_t>,
+//                                 FixedScanResult<uint32_t>,
+//                                 FixedScanResult<int64_t>,
+//                                 FixedScanResult<uint64_t>,
+//                                 FixedScanResult<float>,
+//                                 FixedScanResult<double>,
+//                                 VariableScanResult<std::string>,
+//                                 VariableScanResult<std::wstring>,
+//                                 VariableScanResult<std::vector<std::byte>>>;
 
 }  // namespace maia

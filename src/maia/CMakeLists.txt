@@ -8,14 +8,24 @@ add_subdirectory(scanner)
 
 find_package(spdlog CONFIG REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
+find_package(libassert CONFIG REQUIRED)
 
-add_library(base INTERFACE)
-target_sources(base INTERFACE FILE_SET HEADERS FILES logging.h)
+add_library(base)
+target_sources(
+  base
+  PUBLIC
+    FILE_SET HEADERS
+      # TODO: Fix this name "assert2".
+      FILES logging.h assert2.h
+  PRIVATE
+    assert.cpp
+)
 target_link_libraries(
   base
-  INTERFACE
+  PUBLIC
     spdlog::spdlog
     EnTT::EnTT
+    libassert::assert
 )
 
 add_executable(maiascan main.cpp)

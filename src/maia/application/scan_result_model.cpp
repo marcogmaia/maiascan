@@ -36,7 +36,7 @@ void ScanResultModel::ScanForValue(std::vector<std::byte> value_to_scan) {
   // std::copy(value_to_scan.begin(), value_to_scan.end(),
   // std::bit_cast<std::byte*>();
 
-  ScanParams params = ScanParamsTyped<uint32_t>{
+  ScanParams params = ScanParamsType<uint32_t>{
       .comparison = ScanComparison::kExactValue, .value = value_to_scanu32
       /* .type = ScanType::kExactValue, .value = value_to_scan */};
   const ScanResult scanned_values = memory_scanner_->NewScan(params);
