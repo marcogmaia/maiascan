@@ -2,8 +2,10 @@
 
 #include "maia/application/scan_result_model.h"
 
+#include <memory>
 #include <ranges>
 
+#include "logging.h"
 #include "memory_scanner.h"
 
 namespace maia {
@@ -27,13 +29,30 @@ void ScanResultModel::ScanForValue(std::vector<std::byte> value_to_scan) {
   LogInfo("Scan pressed.");
 
   Clear();
-  const auto scanned_values = memory_scanner_->FirstScan(value_to_scan);
-  for (const auto& value : scanned_values) {
-    std::scoped_lock guard(mutex_);
-    std::vector<std::byte> bytes(4);
-    active_process_->ReadMemory(value, bytes);
-    entries_.emplace_back(ScanEntry{.address = value, .data = bytes});
-  }
+
+  uint32_t value_to_scanu32;
+  std::memcpy(
+      &value_to_scanu32, value_to_scan.data(), sizeof(value_to_scanu32));
+  // std::copy(value_to_scan.begin(), value_to_scan.end(),
+  // std::bit_cast<std::byte*>();
+
+  ScanParams params = ScanParamsTyped<uint32_t>{
+      .comparison = ScanComparison::kExactValue, .value = value_to_scanu32
+      /* .type = ScanType::kExactValue, .value = value_to_scan */};
+  const ScanResult scanned_values = memory_scanner_->NewScan(params);
+  // for (const auto& addr : scanned_values) {
+  //   std::scoped_lock guard(mutex_);
+  //   std::vector<std::byte> bytes(4);
+  //   active_process_->ReadMemory(addr, bytes);
+  //   entries_.emplace_back(ScanEntry{.address = addr, .data = bytes});
+  // }
+  // ForEachAddress(scanned_values, [this](uintptr_t address) {
+  //   // std::get_if<Scanresty>()
+  //   std::scoped_lock guard(mutex_);
+  //   std::vector<std::byte> bytes(4);
+  //   active_process_->ReadMemory(address, bytes);
+  //   entries_.emplace_back(ScanEntry{.address = address, .data = bytes});
+  // });
   prev_entries_ = entries_;
 }
 

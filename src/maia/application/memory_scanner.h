@@ -3,31 +3,72 @@
 #pragma once
 
 #include <algorithm>
+#include <cstring>
 #include <ranges>
+#include <span>
+#include <vector>
 
 #include "maia/core/i_memory_scanner.h"
 #include "maia/core/i_process.h"
+#include "maia/core/scan_types.h"
 #include "maia/logging.h"
 
 namespace maia {
 
+// // Safely converts a byte span to uint32_t (handles unaligned data).
+// inline uint32_t BytesToU32(std::span<const std::byte> bytes) {
+//   if (bytes.size() < sizeof(uint32_t)) {
+//     return 0;
+//   }
+//   uint32_t value;
+//   std::memcpy(&value, bytes.data(), sizeof(value));
+//   return value;
+// }
+
+// uint32_t ToUin32t(std::span<const std::byte> data) {
+//   uint32_t value;
+//   constexpr size_t kSize = sizeof(value);
+//   if (data.size_bytes() < kSize) {
+//     LogCritical("Invalid span.");
+//   }
+//   std::memcpy(&value, data.data(), kSize);
+//   return value;
+// }
+
+// MemoryScanner implementation for kU32 (32-bit unsigned integer) scans.
 class MemoryScanner : public IMemoryScanner {
  public:
   explicit MemoryScanner(IProcess& process)
       : process_(process),
         memory_regions_(process_.GetMemoryRegions()) {}
 
-  std::vector<uintptr_t> FirstScan(std::span<const std::byte> value) override {
+  // TODO: Fix this
+  ScanResult NewScan(const ScanParams& params) override {
     if (!process_.IsProcessValid()) {
       LogWarning("Process is invalid.");
       return {};
     }
 
-    const auto value_finder = [this, value](MemoryRegion reg) {
-      return FindValuesInRegion(reg, value);
+    const auto value_finder = [this, params](MemoryRegion reg) {
+      auto res = std::get<ScanParamsTyped<uint32_t>>(params);
+      return FindValuesInRegion(
+          reg, std::span(reinterpret_cast<std::byte*>(&res.value), 4));
     };
     auto view = memory_regions_ | std::views::transform(value_finder);
-    return std::views::join(view) | std::ranges::to<std::vector<uintptr_t>>();
+    auto addresses =
+        std::views::join(view) | std::ranges::to<std::vector<uintptr_t>>();
+
+    // MakeScanParams(ScanComparison::kExactValue, ToUin32t(params.));
+
+    return FixedScanResult<uint32_t>{.addresses = std::move(addresses)};
+  }
+
+  // std::get<ScanParamsTyped<ScanValueType::kU32>>()
+
+  ScanResult NextScan(const ScanResult& previous_result,
+                      const ScanParams& params) override {
+    // TODO: Implement this pure virtual method.
+    return {};
   }
 
  private:
@@ -59,8 +100,8 @@ class MemoryScanner : public IMemoryScanner {
   }
 
   IProcess& process_;
-
   std::vector<MemoryRegion> memory_regions_;
+  // TODO: Save a snapshot of the memory.
 };
 
 }  // namespace maia

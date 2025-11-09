@@ -6,6 +6,8 @@
 #include <optional>
 #include <string_view>
 
+#include <imgui_stdlib.h>
+
 namespace maia {
 
 namespace {
