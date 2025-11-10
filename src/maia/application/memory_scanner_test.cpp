@@ -37,10 +37,16 @@ class MockProcess : public IProcess {
 class MemoryScannerTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup memory regions
+    // Setup memory regions.
     regions_ = {
-        MemoryRegion{0x1000, 0x1000, 0x04}, // 4KB region
-        MemoryRegion{0x2000, 0x1000, 0x04}  // Another 4KB region
+        MemoryRegion{.base_address = 0x1000,
+                     .size = 0x1000,
+                     // 4KB region
+                     .protection_flags = 0x04},
+        MemoryRegion{.base_address = 0x2000,
+                     .size = 0x1000,
+                     // Another 4KB region
+                     .protection_flags = 0x04}
     };
 
     // Setup mock process

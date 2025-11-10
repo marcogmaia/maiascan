@@ -12,6 +12,7 @@
 #include <fmt/core.h>
 
 #include "maia/core/memory_common.h"
+#include "maia/core/memory_protection.h"
 
 namespace maia::scanner {
 
@@ -27,14 +28,15 @@ std::vector<uintptr_t> Scanner::ScanFor(
   auto regions = memory_accessor_.GetMemoryRegions();
 
   for (const auto& region : regions) {
-    // if (!region.is_readable) {
-    //   continue;
-    // }
+    // Skip non-readable regions.
+    if (!IsReadable(region.protection_flags)) {
+      continue;
+    }
 
     // Read the entire region
     read_buffer_.resize(region.size);
-    if (!memory_accessor_.ReadMemory(
-            reinterpret_cast<void*>(region.base_address), read_buffer_)) {
+    if (!memory_accessor_.ReadMemory(std::bit_cast<void*>(region.base_address),
+                                     read_buffer_)) {
       continue;
     }
 

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "maia/core/memory_common.h"
+#include "maia/core/memory_protection.h"
 #include "maia/logging.h"
 
 namespace maia::scanner {
@@ -91,15 +92,19 @@ std::vector<MemoryRegion> LiveProcessAccessor::GetMemoryRegions() const {
                         std::bit_cast<const void*>(current_address),
                         &mbi,
                         sizeof(mbi)) != 0) {
+    // Convert Windows protection flags to cross-platform format.
+    uint32_t protection_flags =
+        detail::WindowsProtectionToCrossPlatform(mbi.Protect);
+
     bool is_desired_page_block = (mbi.State == MEM_COMMIT) &&
-                                 !(mbi.Protect & PAGE_NOACCESS) &&
-                                 !(mbi.Protect & PAGE_GUARD);
+                                 IsAccessible(protection_flags) &&
+                                 !IsGuardPage(protection_flags);
 
     if (is_desired_page_block) {
       regions.emplace_back(MemoryRegion{
           .base_address = std::bit_cast<uintptr_t>(mbi.BaseAddress),
           .size = mbi.RegionSize,
-          .protection_flags = mbi.Protect});
+          .protection_flags = protection_flags});
     }
 
     // Move to the next region
