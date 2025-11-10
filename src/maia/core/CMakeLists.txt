@@ -17,3 +17,13 @@ target_link_libraries(
     base
     EnTT::EnTT
 )
+
+add_executable(core_test scan_result_test.cpp)
+target_link_libraries(
+  core_test
+  PRIVATE
+    core
+    GTest::gmock_main
+)
+
+gtest_discover_tests(core_test DISCOVERY_TIMEOUT 60)

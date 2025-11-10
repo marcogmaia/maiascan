@@ -25,18 +25,3 @@ if(WIN32)
       WINVER=0x0A00 # Also set WINVER for compatibility
   )
 endif()
-
-# add_executable(
-#   scanner_test
-#   process_test.cpp
-#   # scan_test.cpp
-# )
-# target_link_libraries(
-#   scanner_test
-#   PRIVATE
-#     scanner
-#     GTest::gmock_main
-#     fmt::fmt
-# )
-
-# gtest_discover_tests(scanner_test)

@@ -2,22 +2,20 @@
 
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <ranges>
 #include <vector>
 
 #include "maia/assert2.h"
-#include "maia/core/i_process.h"
 #include "maia/core/memory_common.h"
 #include "maia/core/scan_types.h"
 
 namespace maia {
 
-// using SnapshotPtr = std::shared_ptr<const MemorySnapshot>;
-
 class ScanResult {
  public:
-  // Empty result
+  // Empty result.
   ScanResult() = default;
 
   size_t size() const {
@@ -29,7 +27,8 @@ class ScanResult {
   }
 
   std::span<const uintptr_t> addresses() const {
-    return snapshot_->addresses;
+    return snapshot_ ? std::span<const uintptr_t>(snapshot_->addresses)
+                     : std::span<const uintptr_t>{};
   }
 
   // Safe, lazy range of previous values
@@ -63,7 +62,10 @@ class ScanResult {
   explicit ScanResult(std::shared_ptr<const MemorySnapshot> snapshot,
                       size_t byte_size)
       : snapshot_(std::move(snapshot)),
-        byte_size_(byte_size) {}
+        byte_size_(byte_size) {
+    maia::Assert(!snapshot_ || snapshot_->values.size() ==
+                                   snapshot_->addresses.size() * byte_size_);
+  }
 
   std::shared_ptr<const MemorySnapshot> snapshot_;
   size_t byte_size_ = 0;  // sizeof(T) for the current view
@@ -73,19 +75,5 @@ class ScanResult {
     maia::Assert(byte_size_ == sizeof(T));
   }
 };
-
-// Read current memory as any type (no snapshot involved).
-template <CScannableType T>
-T ReadCurrent(IProcess& process, MemoryAddress address) {
-  T value;
-  process.ReadMemory(address, ToBytesView(value));
-  return value;
-}
-
-// Write a value (type-safe).
-template <CScannableType T>
-bool Write(IProcess& process, MemoryAddress address, const T& value) {
-  return process.WriteMemory(address, ToBytesView(value));
-}
 
 }  // namespace maia

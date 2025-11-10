@@ -8,6 +8,7 @@
 #include <span>
 #include <vector>
 
+#include "maia/core/memory_io.h"
 #include "maia/core/scan_result.h"
 #include "maia/logging.h"
 
@@ -58,7 +59,7 @@ void UpdateSnapshotValues(IProcess& process, MemorySnapshot& snapshot) {
   snapshot.values.reserve(snapshot.values.size() * sizeof(T));
 
   for (const auto& addr : snapshot.addresses) {
-    auto buffer = ReadCurrent<T>(process, addr);
+    auto buffer = ReadAt<T>(process, addr);
     std::span<std::byte, sizeof(T)> buffer_span(
         reinterpret_cast<std::byte*>(&buffer), sizeof(T));
     snapshot.values.append_range(buffer_span);
