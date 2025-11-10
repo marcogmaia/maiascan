@@ -2,6 +2,7 @@
 
 #include "maia/application/scan_result_model.h"
 
+#include <algorithm>
 #include <memory>
 #include <ranges>
 
@@ -26,33 +27,60 @@ void ScanResultModel::ScanForValue(std::vector<std::byte> value_to_scan) {
     memory_scanner_.reset();
     return;
   }
-  LogInfo("Scan pressed.");
+  LogInfo("Scan pressed for value with {} bytes", value_to_scan.size());
 
   Clear();
 
-  uint32_t value_to_scanu32;
-  std::memcpy(
-      &value_to_scanu32, value_to_scan.data(), sizeof(value_to_scanu32));
-  // std::copy(value_to_scan.begin(), value_to_scan.end(),
-  // std::bit_cast<std::byte*>();
+  // Determine the type based on the byte vector size
+  if (value_to_scan.empty()) {
+    LogWarning("Empty value to scan");
+    return;
+  }
 
-  ScanParams params = ScanParamsType<uint32_t>{
-      .comparison = ScanComparison::kExactValue, .value = value_to_scanu32
-      /* .type = ScanType::kExactValue, .value = value_to_scan */};
-  const ScanResult scanned_values = memory_scanner_->NewScan(params);
-  // for (const auto& addr : scanned_values) {
-  //   std::scoped_lock guard(mutex_);
-  //   std::vector<std::byte> bytes(4);
-  //   active_process_->ReadMemory(addr, bytes);
-  //   entries_.emplace_back(ScanEntry{.address = addr, .data = bytes});
-  // }
-  // ForEachAddress(scanned_values, [this](uintptr_t address) {
-  //   // std::get_if<Scanresty>()
-  //   std::scoped_lock guard(mutex_);
-  //   std::vector<std::byte> bytes(4);
-  //   active_process_->ReadMemory(address, bytes);
-  //   entries_.emplace_back(ScanEntry{.address = address, .data = bytes});
-  // });
+  // Get all memory regions from the process
+  auto regions = active_process_->GetMemoryRegions();
+  LogInfo("Found {} memory regions to scan", regions.size());
+
+  std::scoped_lock guard(mutex_);
+
+  // Scan each memory region for the value
+  for (const auto& region : regions) {
+    // if (!region.is_readable || region.size == 0) {
+    //   continue;
+    // }
+
+    // Read the entire region
+    std::vector<std::byte> region_memory(region.size);
+    if (!active_process_->ReadMemory(region.base_address, region_memory)) {
+      continue;
+    }
+
+    // Search for the value pattern in this region
+    auto it = region_memory.begin();
+    while (true) {
+      it = std::search(
+          it, region_memory.end(), value_to_scan.begin(), value_to_scan.end());
+
+      if (it >= region_memory.end()) {
+        break;
+      }
+
+      size_t offset = std::distance(region_memory.begin(), it);
+      uintptr_t found_address = region.base_address + offset;
+
+      // Read the actual value at this address for display
+      std::vector<std::byte> actual_value(value_to_scan.size());
+      if (active_process_->ReadMemory(found_address, actual_value)) {
+        entries_.emplace_back(
+            ScanEntry{.address = found_address, .data = actual_value});
+      }
+
+      // Move past this match to find next one
+      std::advance(it, value_to_scan.size());
+    }
+  }
+
+  LogInfo("Scan completed, found {} addresses", entries_.size());
   prev_entries_ = entries_;
 }
 

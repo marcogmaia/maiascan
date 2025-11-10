@@ -119,6 +119,45 @@ constexpr bool IsValidForFirstScan(ScanComparison type) {
 template <typename T>
 concept CScannableType = std::integral<T> || std::floating_point<T>;
 
+enum class ScanValueType {
+  kInt8,
+  kUInt8,
+  kInt16,
+  kUInt16,
+  kInt32,
+  kUInt32,
+  kInt64,
+  kUInt64,
+  kFloat,
+  kDouble
+};
+
+constexpr const char* GetScanValueTypeName(ScanValueType type) {
+  switch (type) {
+    case ScanValueType::kInt8:
+      return "Int8";
+    case ScanValueType::kUInt8:
+      return "UInt8";
+    case ScanValueType::kInt16:
+      return "Int16";
+    case ScanValueType::kUInt16:
+      return "UInt16";
+    case ScanValueType::kInt32:
+      return "Int32";
+    case ScanValueType::kUInt32:
+      return "UInt32";
+    case ScanValueType::kInt64:
+      return "Int64";
+    case ScanValueType::kUInt64:
+      return "UInt64";
+    case ScanValueType::kFloat:
+      return "Float";
+    case ScanValueType::kDouble:
+      return "Double";
+  }
+  return "Unknown";
+}
+
 // Base for variable-length results (e.g., kString, kByteArray)/
 // template <typename T>
 // struct VariableScanResult {

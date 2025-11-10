@@ -12,15 +12,22 @@ namespace maia {
 
 namespace {
 
-std::optional<uint32_t> ToUint32(std::string_view sview, int base = 10) {
+template <typename T>
+std::optional<T> ParseValue(std::string_view sview, int base = 10) {
   if (base == 16 && sview.starts_with("0x")) {
     sview = sview.substr(2);
   }
   const char* first = sview.data();
   const char* last = first + sview.size();
 
-  uint32_t value;
-  std::from_chars_result result = std::from_chars(first, last, value, base);
+  T value;
+  std::from_chars_result result;
+
+  if constexpr (std::is_floating_point_v<T>) {
+    result = std::from_chars(first, last, value);
+  } else {
+    result = std::from_chars(first, last, value, base);
+  }
 
   if (result.ec != std::errc() || result.ptr != last) {
     return std::nullopt;
@@ -28,21 +35,109 @@ std::optional<uint32_t> ToUint32(std::string_view sview, int base = 10) {
   return value;
 }
 
-std::vector<std::byte> ToByteVector(uint32_t value) {
+template <typename T>
+std::vector<std::byte> ToByteVector(T value) {
   std::vector<std::byte> bytes(
       reinterpret_cast<std::byte*>(&value),
       reinterpret_cast<std::byte*>(&value) + sizeof(value));
   return bytes;
 }
 
-void TextEntryValue(const ScanEntry& entry, bool is_hexadecimal = false) {
-  // TODO: Make this safer, and enable the printing of other data types.
-  auto value_to_show = *reinterpret_cast<const uint32_t*>(entry.data.data());
+// Generic display function for integer types
+template <typename T>
+void DisplayIntegerValue(const ScanEntry& entry,
+                         bool is_hexadecimal,
+                         int hex_width) {
+  auto value = *reinterpret_cast<const T*>(entry.data.data());
   if (is_hexadecimal) {
-    ImGui::TextUnformatted(std::format("0x{:x}", value_to_show).c_str());
+    ImGui::TextUnformatted(std::format("0x{:0{}x}", value, hex_width).c_str());
   } else {
-    ImGui::TextUnformatted(std::format("{}", value_to_show).c_str());
+    ImGui::TextUnformatted(std::format("{}", value).c_str());
   }
+}
+
+// Generic display function for floating-point types
+template <typename T>
+void DisplayFloatValue(const ScanEntry& entry) {
+  auto value = *reinterpret_cast<const T*>(entry.data.data());
+  ImGui::TextUnformatted(std::format("{:.6f}", value).c_str());
+}
+
+void TextEntryValue(const ScanEntry& entry,
+                    ScanValueType type,
+                    bool is_hexadecimal = false) {
+  if (entry.data.size() < sizeof(uint32_t)) {
+    ImGui::TextUnformatted("N/A");
+    return;
+  }
+
+  switch (type) {
+    case ScanValueType::kInt8:
+      DisplayIntegerValue<int8_t>(entry, is_hexadecimal, 2);
+      break;
+    case ScanValueType::kUInt8:
+      DisplayIntegerValue<uint8_t>(entry, is_hexadecimal, 2);
+      break;
+    case ScanValueType::kInt16:
+      DisplayIntegerValue<int16_t>(entry, is_hexadecimal, 4);
+      break;
+    case ScanValueType::kUInt16:
+      DisplayIntegerValue<uint16_t>(entry, is_hexadecimal, 4);
+      break;
+    case ScanValueType::kInt32:
+      DisplayIntegerValue<int32_t>(entry, is_hexadecimal, 8);
+      break;
+    case ScanValueType::kUInt32:
+      DisplayIntegerValue<uint32_t>(entry, is_hexadecimal, 8);
+      break;
+    case ScanValueType::kInt64:
+      DisplayIntegerValue<int64_t>(entry, is_hexadecimal, 16);
+      break;
+    case ScanValueType::kUInt64:
+      DisplayIntegerValue<uint64_t>(entry, is_hexadecimal, 16);
+      break;
+    case ScanValueType::kFloat:
+      DisplayFloatValue<float>(entry);
+      break;
+    case ScanValueType::kDouble:
+      DisplayFloatValue<double>(entry);
+      break;
+  }
+}
+
+// Generic conversion function for any type
+template <typename T>
+std::vector<std::byte> GetBytesForType(const std::string& str, int base) {
+  auto value = ParseValue<T>(str, base);
+  return value ? ToByteVector(*value) : std::vector<std::byte>{};
+}
+
+std::vector<std::byte> GetBytesFromString(const std::string& str,
+                                          ScanValueType type,
+                                          int base) {
+  switch (type) {
+    case ScanValueType::kInt8:
+      return GetBytesForType<int8_t>(str, base);
+    case ScanValueType::kUInt8:
+      return GetBytesForType<uint8_t>(str, base);
+    case ScanValueType::kInt16:
+      return GetBytesForType<int16_t>(str, base);
+    case ScanValueType::kUInt16:
+      return GetBytesForType<uint16_t>(str, base);
+    case ScanValueType::kInt32:
+      return GetBytesForType<int32_t>(str, base);
+    case ScanValueType::kUInt32:
+      return GetBytesForType<uint32_t>(str, base);
+    case ScanValueType::kInt64:
+      return GetBytesForType<int64_t>(str, base);
+    case ScanValueType::kUInt64:
+      return GetBytesForType<uint64_t>(str, base);
+    case ScanValueType::kFloat:
+      return GetBytesForType<float>(str, base);
+    case ScanValueType::kDouble:
+      return GetBytesForType<double>(str, base);
+  }
+  return {};
 }
 
 }  // namespace
@@ -52,6 +147,20 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
     if (ImGui::BeginTable("InputTable", 2)) {
       ImGui::TableSetupColumn("Labels", ImGuiTableColumnFlags_WidthFixed);
       ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Type:");
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::PushItemWidth(-FLT_MIN);
+      if (ImGui::Combo("##ValueType",
+                       &current_type_index_,
+                       "Int8\0UInt8\0Int16\0UInt16\0Int32\0UInt32\0Int64\0UInt6"
+                       "4\0Float\0Double\0\0")) {
+        // Type changed - could add validation here
+      }
+      ImGui::PopItemWidth();
 
       ImGui::TableNextRow();
       ImGui::TableSetColumnIndex(0);
@@ -77,9 +186,13 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
 
     if (ImGui::BeginChild("Table")) {
       const int base = is_hex_input_ ? 16 : 10;
-      auto needle_bytes = ToUint32(str_, base)
-                              .transform(ToByteVector)
-                              .value_or(std::vector<std::byte>());
+
+      // Map combo index to ScanValueType
+      ScanValueType selected_type =
+          static_cast<ScanValueType>(current_type_index_);
+
+      auto needle_bytes = GetBytesFromString(str_, selected_type, base);
+
       if (ImGui::Button("First Scan")) {
         signals_.new_scan_pressed.publish(needle_bytes);
       }
@@ -118,9 +231,8 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
           }
 
           ImGui::TableNextColumn();
-          // TODO: Make this work with other fundamental data types.
           if (entry.data.size() >= sizeof(uint32_t)) {
-            TextEntryValue(entry, is_hex_input_);
+            TextEntryValue(entry, selected_type, is_hex_input_);
           } else {
             ImGui::TextUnformatted("N/A");
           }

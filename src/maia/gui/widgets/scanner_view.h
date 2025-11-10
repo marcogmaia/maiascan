@@ -9,6 +9,7 @@
 #include <entt/signal/sigh.hpp>
 
 #include "maia/application/scan_result_model.h"
+#include "maia/core/scan_types.h"
 
 namespace maia {
 
@@ -44,8 +45,9 @@ class ScannerWidget {
   Signals signals_;
 
   std::string str_;
-  int selected_index_;
-  bool is_hex_input_;
+  int selected_index_ = 0;
+  bool is_hex_input_ = false;
+  int current_type_index_ = 4;  // Default to Int32 (index 4 in the combo)
 };
 
 }  // namespace maia
