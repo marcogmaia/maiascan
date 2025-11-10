@@ -13,7 +13,6 @@ namespace maia {
 namespace detail {
 
 struct VariableParamsBase {
-  static constexpr bool kIsVariable = true;
   ScanComparison type = ScanComparison::kExactValue;
 };
 
@@ -21,9 +20,8 @@ struct VariableParamsBase {
 
 template <typename T>
 struct ScanParamsType {
-  using value_type = ScanValueType<T>::value_type;
+  using value_type = T;
 
-  static constexpr bool kIsVariable = false;
   ScanComparison comparison = ScanComparison::kUnknown;
   value_type value{};
   value_type upper_bound{};
@@ -61,11 +59,11 @@ using ScanParams = std::variant<ScanParamsType<int8_t>,
                                 ScanParamsType<std::vector<std::byte>>>;
 
 template <CScannableType T>
-auto MakeScanParams(ScanComparison comparison, T value1, T value2 = {}) {
+auto MakeScanParams(ScanComparison comparison, T value, T upper_bound = {}) {
   ScanParamsType<T> params;
   params.comparison = comparison;
-  params.value1 = value1;
-  params.value2 = value2;
+  params.value = value;
+  params.upper_bound = upper_bound;
   return params;
 }
 

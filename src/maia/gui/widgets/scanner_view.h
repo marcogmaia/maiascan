@@ -9,20 +9,19 @@
 #include <entt/signal/sigh.hpp>
 
 #include "maia/application/scan_result_model.h"
-#include "maia/core/scan_types.h"
 
 namespace maia {
 
-using ScanValueTypeSelection = std::variant<ScanValueType<int8_t>,
-                                            ScanValueType<uint8_t>,
-                                            ScanValueType<int16_t>,
-                                            ScanValueType<uint16_t>,
-                                            ScanValueType<int32_t>,
-                                            ScanValueType<uint32_t>,
-                                            ScanValueType<int64_t>,
-                                            ScanValueType<uint64_t>,
-                                            ScanValueType<float>,
-                                            ScanValueType<double>>;
+using ScanValueTypeSelection = std::variant<int8_t,
+                                            uint8_t,
+                                            int16_t,
+                                            uint16_t,
+                                            int32_t,
+                                            uint32_t,
+                                            int64_t,
+                                            uint64_t,
+                                            float,
+                                            double>;
 
 class ScannerWidget {
  public:

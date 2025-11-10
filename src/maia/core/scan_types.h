@@ -119,43 +119,24 @@ constexpr bool IsValidForFirstScan(ScanComparison type) {
 template <typename T>
 concept CScannableType = std::integral<T> || std::floating_point<T>;
 
-template <CScannableType T>
-struct ScanValueType {
-  using value_type = T;
-  static constexpr size_t kByteSize = sizeof(T);
-};
-
-template <typename T>
-struct FixedScanResult {
-  using value_type = T;
-  static constexpr bool kIsVariable = false;
-  static constexpr size_t kSizeBytes = sizeof(T);
-
-  std::vector<uintptr_t> addresses;
-
-  explicit operator bool() const noexcept {
-    return !addresses.empty();
-  }
-};
-
 // Base for variable-length results (e.g., kString, kByteArray)/
-template <typename T>
-struct VariableScanResult {
-  using value_type = T;
-  static constexpr bool kIsVariable = true;
-  static constexpr size_t kSizeBytes = sizeof(T);
+// template <typename T>
+// struct VariableScanResult {
+//   using value_type = T;
+//   static constexpr bool kIsVariable = true;
+//   static constexpr size_t kSizeBytes = sizeof(T);
 
-  struct Entry {
-    uintptr_t address = 0;
-    size_t length = 0;  // Length of this specific match
-  };
+//   struct Entry {
+//     uintptr_t address = 0;
+//     size_t length = 0;  // Length of this specific match
+//   };
 
-  std::vector<Entry> entries;
+//   std::vector<Entry> entries;
 
-  explicit operator bool() const noexcept {
-    return !entries.empty();
-  }
-};
+//   explicit operator bool() const noexcept {
+//     return !entries.empty();
+//   }
+// };
 
 // using ScanResult = std::variant<FixedScanResult<int8_t>,
 //                                 FixedScanResult<uint8_t>,
