@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "maia/core/scan_result.h"

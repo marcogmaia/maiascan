@@ -122,21 +122,37 @@ std::vector<MemoryRegion> LiveProcessAccessor::GetMemoryRegions() const {
   return regions;
 }
 
-bool LiveProcessAccessor::ReadMemory(uintptr_t address,
-                                     std::span<std::byte> buffer) const {
-  if (buffer.empty()) {
+bool LiveProcessAccessor::ReadMemory(std::span<const MemoryAddress> addresses,
+                                     size_t bytes_per_address,
+                                     std::span<std::byte> out_buffer) {
+  if (addresses.empty()) {
     return true;
   }
 
-  MemoryPtr address_ptr = ToPtr(address);
+  // Validate buffer size
+  const size_t required_size = addresses.size() * bytes_per_address;
+  if (out_buffer.size() < required_size) {
+    return false;
+  }
 
-  size_t bytes_read = 0;
-  bool result = ReadProcessMemory(
-      handle_, address_ptr, buffer.data(), buffer.size(), &bytes_read);
+  // Read each address individually
+  // TODO: Optimize with platform-specific batch operations:
+  // - Linux: process_vm_readv (true batch in one syscall)
+  // - Windows: NtReadVirtualMemory (still more efficient than loop)
+  for (size_t i = 0; i < addresses.size(); ++i) {
+    MemoryPtr address_ptr = ToPtr(addresses[i]);
+    std::byte* buffer_offset = &out_buffer[i * bytes_per_address];
 
-  // We must check both that the API call succeeded (result != 0)
-  // AND that we read the exact number of bytes we requested.
-  return (result != 0) && (bytes_read == buffer.size());
+    size_t bytes_read = 0;
+    bool result = ReadProcessMemory(
+        handle_, address_ptr, buffer_offset, bytes_per_address, &bytes_read);
+
+    if (!result || bytes_read != bytes_per_address) {
+      return false;  // Fail on first error
+    }
+  }
+
+  return true;
 }
 
 bool LiveProcessAccessor::WriteMemory(uintptr_t address,

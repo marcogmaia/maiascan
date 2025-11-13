@@ -8,7 +8,9 @@ target_sources(
   core
   INTERFACE
     FILE_SET HEADERS
-      FILES i_memory_accessor.h memory_common.h
+      FILES
+        # i_memory_accessor.h
+        memory_common.h
 )
 
 target_link_libraries(

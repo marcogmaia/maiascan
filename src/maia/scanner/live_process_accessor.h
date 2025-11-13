@@ -15,8 +15,9 @@ class LiveProcessAccessor : public IProcess {
  public:
   explicit LiveProcessAccessor(ProcessHandle handle);
 
-  bool ReadMemory(uintptr_t address,
-                  std::span<std::byte> buffer) const override;
+  bool ReadMemory(std::span<const MemoryAddress> addresses,
+                  size_t bytes_per_address,
+                  std::span<std::byte> out_buffer) override;
 
   bool WriteMemory(uintptr_t address,
                    std::span<const std::byte> buffer) override;

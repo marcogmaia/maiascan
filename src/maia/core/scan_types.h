@@ -3,9 +3,6 @@
 #pragma once
 
 #include <concepts>
-#include <string>
-#include <variant>
-#include <vector>
 
 namespace maia {
 
@@ -133,62 +130,21 @@ enum class ScanValueType {
 };
 
 constexpr const char* GetScanValueTypeName(ScanValueType type) {
+  // clang-format off
   switch (type) {
-    case ScanValueType::kInt8:
-      return "Int8";
-    case ScanValueType::kUInt8:
-      return "UInt8";
-    case ScanValueType::kInt16:
-      return "Int16";
-    case ScanValueType::kUInt16:
-      return "UInt16";
-    case ScanValueType::kInt32:
-      return "Int32";
-    case ScanValueType::kUInt32:
-      return "UInt32";
-    case ScanValueType::kInt64:
-      return "Int64";
-    case ScanValueType::kUInt64:
-      return "UInt64";
-    case ScanValueType::kFloat:
-      return "Float";
-    case ScanValueType::kDouble:
-      return "Double";
+    case ScanValueType::kInt8:   return "Int8";
+    case ScanValueType::kUInt8:  return "UInt8";
+    case ScanValueType::kInt16:  return "Int16";
+    case ScanValueType::kUInt16: return "UInt16";
+    case ScanValueType::kInt32:  return "Int32";
+    case ScanValueType::kUInt32: return "UInt32";
+    case ScanValueType::kInt64:  return "Int64";
+    case ScanValueType::kUInt64: return "UInt64";
+    case ScanValueType::kFloat:  return "Float";
+    case ScanValueType::kDouble: return "Double";
   }
+  // clang-format on
   return "Unknown";
 }
-
-// Base for variable-length results (e.g., kString, kByteArray)/
-// template <typename T>
-// struct VariableScanResult {
-//   using value_type = T;
-//   static constexpr bool kIsVariable = true;
-//   static constexpr size_t kSizeBytes = sizeof(T);
-
-//   struct Entry {
-//     uintptr_t address = 0;
-//     size_t length = 0;  // Length of this specific match
-//   };
-
-//   std::vector<Entry> entries;
-
-//   explicit operator bool() const noexcept {
-//     return !entries.empty();
-//   }
-// };
-
-// using ScanResult = std::variant<FixedScanResult<int8_t>,
-//                                 FixedScanResult<uint8_t>,
-//                                 FixedScanResult<int16_t>,
-//                                 FixedScanResult<uint16_t>,
-//                                 FixedScanResult<int32_t>,
-//                                 FixedScanResult<uint32_t>,
-//                                 FixedScanResult<int64_t>,
-//                                 FixedScanResult<uint64_t>,
-//                                 FixedScanResult<float>,
-//                                 FixedScanResult<double>,
-//                                 VariableScanResult<std::string>,
-//                                 VariableScanResult<std::wstring>,
-//                                 VariableScanResult<std::vector<std::byte>>>;
 
 }  // namespace maia

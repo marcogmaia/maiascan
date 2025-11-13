@@ -11,7 +11,6 @@ namespace maia {
 namespace {
 
 using testing::ElementsAre;
-using testing::IsEmpty;
 using testing::Return;
 
 class MockProcess : public IProcess {

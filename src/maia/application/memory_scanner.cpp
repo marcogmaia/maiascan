@@ -41,24 +41,18 @@ template <CScannableType T>
 bool CompareValue(const T& current,
                   const T& target,
                   ScanComparison comparison) {
+  // clang-format off
   switch (comparison) {
-    case ScanComparison::kExactValue:
-      return current == target;
-    case ScanComparison::kNotEqual:
-      return current != target;
-    case ScanComparison::kGreaterThan:
-      return current > target;
-    case ScanComparison::kLessThan:
-      return current < target;
-    case ScanComparison::kBetween:
-      return current >= target &&
-             current <= target;  // Note: upper_bound should be in params
-    case ScanComparison::kNotBetween:
-      return current < target ||
-             current > target;  // Note: upper_bound should be in params
+    case ScanComparison::kExactValue: return current == target;
+    case ScanComparison::kNotEqual: return current != target;
+    case ScanComparison::kGreaterThan: return current > target;
+    case ScanComparison::kLessThan: return current < target;
+    case ScanComparison::kBetween: return current >= target && current <= target;   // Note: upper_bound should be in params
+    case ScanComparison::kNotBetween: return current < target || current > target;  // Note: upper_bound should be in params
     default:
       return false;
   }
+  // clang-format on
 }
 
 template <CScannableType T>
@@ -125,6 +119,26 @@ std::shared_ptr<MemorySnapshot> ScanRegions(
   return snapshot;
 }
 
+// template<CScannableType T> constexpr bool ShouldFilter(ScanComparison
+// comparison, T curr, T prev, T taget) {
+//       switch (comparison) {
+//         // clang-format off
+//       case ScanComparison::kChanged: return curr != prev_value; break;
+//       case ScanComparison::kUnchanged: return curr == params.value; break;
+//       case ScanComparison::kIncreased: return curr > params.value;  break;
+//       case ScanComparison::kDecreased: return curr < params.value; break;
+//       case ScanComparison::kIncreasedBy: return (curr - params.value) ==
+//       params.value; break; case ScanComparison::kDecreasedBy: return
+//       (params.value - curr) == params.value;  break;
+//         // clang-format on
+
+//       default:
+//         should_include =
+//             CompareValue(curr, params.value, params.comparison);
+//         break;
+//     }
+// }
+
 template <CScannableType T>
 std::shared_ptr<MemorySnapshot> NextScanRegions(
     const ScanResult& previous_result,
@@ -132,57 +146,32 @@ std::shared_ptr<MemorySnapshot> NextScanRegions(
     const ScanParamsType<T>& params) {
   auto snapshot = std::make_shared<MemorySnapshot>();
 
-  // For subsequent scans, we only check the addresses from the previous result
   const auto& addresses = previous_result.addresses();
+  const auto& prev_values = previous_result.values<T>();
 
-  for (uintptr_t addr : addresses) {
-    T current_value = ReadAt<T>(process, addr);
+  for (const auto& [addr, prev_value] :
+       std::views::zip(addresses, prev_values)) {
+    const T current_value = ReadAt<T>(process, addr);
 
     bool should_include = false;
+    // clang-format off
     switch (params.comparison) {
-      case ScanComparison::kChanged: {
-        // Compare with previous value
-        auto prev_values = previous_result.values<T>();
-        auto it = std::ranges::find(addresses, addr);
-        if (it != addresses.end()) {
-          size_t index = std::distance(addresses.begin(), it);
-          auto prev_value_it = prev_values.begin();
-          std::advance(prev_value_it, index);
-          if (prev_value_it != prev_values.end()) {
-            should_include = current_value != *prev_value_it;
-          }
-        }
-        break;
-      }
-      case ScanComparison::kUnchanged:
-        // Similar logic for unchanged
-        should_include = current_value == params.value;  // Simplified
-        break;
-      case ScanComparison::kIncreased:
-        should_include = current_value > params.value;  // Simplified
-        break;
-      case ScanComparison::kDecreased:
-        should_include = current_value < params.value;  // Simplified
-        break;
-      case ScanComparison::kIncreasedBy:
-        should_include =
-            (current_value - params.value) == params.value;  // Simplified
-        break;
-      case ScanComparison::kDecreasedBy:
-        should_include =
-            (params.value - current_value) == params.value;  // Simplified
-        break;
+      case ScanComparison::kChanged: should_include = current_value != prev_value; break;
+      case ScanComparison::kUnchanged: should_include = current_value == params.value; break;
+      case ScanComparison::kIncreased: should_include = current_value > params.value;  break;
+      case ScanComparison::kDecreased: should_include = current_value < params.value; break;
+      case ScanComparison::kIncreasedBy: should_include = (current_value - params.value) == params.value; break;
+      case ScanComparison::kDecreasedBy: should_include = (params.value - current_value) == params.value;  break;
       default:
-        // For other comparisons, use the same logic as initial scan
-        should_include =
-            CompareValue(current_value, params.value, params.comparison);
+        should_include = CompareValue(current_value, params.value, params.comparison);
         break;
     }
+    // clang-format on
 
     if (should_include) {
       snapshot->addresses.push_back(addr);
-      std::span<std::byte, sizeof(T)> value_span(
-          reinterpret_cast<std::byte*>(&current_value), sizeof(T));
+      std::span<const std::byte, sizeof(T)> value_span(
+          reinterpret_cast<const std::byte*>(&current_value), sizeof(T));
       snapshot->values.insert(
           snapshot->values.end(), value_span.begin(), value_span.end());
     }
@@ -203,7 +192,7 @@ struct ScanVisitor {
     return ScanResult::FromSnapshot<T>(snapshot);
   }
 
-  ScanResult operator()(const auto& params) {
+  ScanResult operator()(const auto& /* params */) {
     // Handle variable-length types (string, wstring, vector<byte>) - not
     // implemented yet
     LogWarning("Variable-length scan types not yet implemented");
@@ -223,7 +212,7 @@ struct NextScanVisitor {
     return ScanResult::FromSnapshot<T>(snapshot);
   }
 
-  ScanResult operator()(const auto& params) {
+  ScanResult operator()(const auto& /* params */) {
     LogWarning("Variable-length scan types not yet implemented");
     return {};
   }
