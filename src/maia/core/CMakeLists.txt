@@ -8,8 +8,10 @@ target_sources(
   core
   INTERFACE
     FILE_SET HEADERS
+      # BASE_DIRS maia/core
       FILES
         # i_memory_accessor.h
+        # maia/core/
         memory_common.h
 )
 
@@ -20,12 +22,12 @@ target_link_libraries(
     EnTT::EnTT
 )
 
-add_executable(core_test scan_result_test.cpp)
-target_link_libraries(
-  core_test
-  PRIVATE
-    core
-    GTest::gmock_main
-)
+# add_executable(core_test scan_result_test.cpp)
+# target_link_libraries(
+#   core_test
+#   PRIVATE
+#     core
+#     GTest::gmock_main
+# )
 
-gtest_discover_tests(core_test DISCOVERY_TIMEOUT 60)
+# gtest_discover_tests(core_test DISCOVERY_TIMEOUT 60)

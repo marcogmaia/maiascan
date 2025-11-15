@@ -2,14 +2,14 @@
 
 #pragma once
 
-#include <cstdint>
-
 // Platform-specific includes for protection constants
 #ifdef _WIN32
 #include <Windows.h>
 #else
 #include <sys/mman.h>
 #endif
+
+#include <cstdint>
 
 namespace maia {
 

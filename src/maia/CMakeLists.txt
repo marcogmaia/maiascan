@@ -16,6 +16,7 @@ target_sources(
   PUBLIC
     FILE_SET HEADERS
       # TODO: Fix this name "assert2".
+      BASE_DIRS .
       FILES logging.h assert2.h
   PRIVATE
     assert.cpp

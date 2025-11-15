@@ -4,12 +4,14 @@
 
 #include <entt/signal/sigh.hpp>
 
+#include <memory>
 #include <mutex>
 #include <thread>
 
 #include "maia/core/i_memory_scanner.h"
 #include "maia/core/i_process.h"
 #include "maia/core/memory_common.h"
+#include "memory_scanner.h"
 
 namespace maia {
 
@@ -17,6 +19,8 @@ struct ScanEntry {
   MemoryAddress address;
   std::vector<std::byte> data;
 };
+
+// class Snapshot {}
 
 class ScanResultModel {
  public:
@@ -34,21 +38,21 @@ class ScanResultModel {
     return entries_;
   }
 
-  void ScanForValue(std::vector<std::byte> value_to_scan);
+  // void ScanForValue(ScanParams params);
 
   void FirstScan(std::vector<std::byte> value_to_scan);
 
   void FilterChangedValues();
 
-  void SetActiveProcess(IProcess* process);
+  void SetActiveProcess(std::unique_ptr<IProcess> process);
 
   void Clear();
 
  private:
   Signals signals_;
 
-  IProcess* active_process_ = nullptr;
-  std::unique_ptr<IMemoryScanner> memory_scanner_;
+  // IProcess* active_process_ = nullptr;
+  std::unique_ptr<MemoryScanner> memory_scanner_;
 
   std::vector<ScanEntry> entries_;
   std::vector<ScanEntry> prev_entries_;

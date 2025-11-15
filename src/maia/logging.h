@@ -43,13 +43,6 @@ inline void LogError(spdlog::format_string_t<Args...> fmt, Args&&... args) {
   spdlog::default_logger_raw()->error(fmt, std::forward<Args>(args)...);
 }
 
-template <typename... Args>
-[[noreturn]] inline void LogCritical(spdlog::format_string_t<Args...> fmt,
-                                     Args&&... args) {
-  spdlog::default_logger_raw()->critical(fmt, std::forward<Args>(args)...);
-  std::unreachable();
-}
-
 template <typename T>
 inline void LogTrace(const T& msg) {
   spdlog::default_logger_raw()->trace(msg);
@@ -73,12 +66,6 @@ inline void LogWarning(const T& msg) {
 template <typename T>
 inline void LogError(const T& msg) {
   spdlog::default_logger_raw()->error(msg);
-}
-
-template <typename T>
-[[noreturn]] inline void LogCritical(const T& msg) {
-  spdlog::default_logger_raw()->critical(msg);
-  std::unreachable();
 }
 
 }  // namespace maia

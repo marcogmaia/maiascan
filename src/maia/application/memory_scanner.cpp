@@ -3,243 +3,32 @@
 #include "memory_scanner.h"
 
 #include <algorithm>
-#include <cstring>
 #include <ranges>
 #include <span>
 #include <vector>
 
-#include "maia/core/memory_io.h"
-#include "maia/core/scan_result.h"
-#include "maia/logging.h"
-
 namespace maia {
 
-namespace {
+// Snapshot::Snapshot(IProcess& accessor)
+//     : accessor_(accessor) {}
 
-template <CScannableType T>
-std::vector<std::byte> ToBytes(const ScanParamsType<T>& params) {
-  auto s =
-      std::span(reinterpret_cast<const std::byte*>(&params.value), sizeof(T));
-  return std::vector<std::byte>(s.begin(), s.end());
-}
+// void Snapshot::UpdateFromPrevious(IProcess& accessor) {
+//   const size_t value_size = current_layer_.value_size;
+//   std::swap(previous_layer_, current_layer_);
+//   std::vector<std::byte> buffer(current_layer_.addresses.size() *
+//   value_size); accessor.ReadMemory(current_layer_.addresses, value_size,
+//   buffer);
 
-template <CScannableType T>
-void UpdateSnapshotValues(IProcess& process, MemorySnapshot& snapshot) {
-  snapshot.values.clear();
-  snapshot.values.reserve(snapshot.addresses.size() * sizeof(T));
+//   auto new_vals = std::views::chunk(buffer, value_size);
+//   auto prev_vals = std::views::chunk(previous_layer_.values, value_size);
+//   auto curr_vals = std::views::chunk(current_layer_.values, value_size);
 
-  for (const auto& addr : snapshot.addresses) {
-    auto buffer = ReadAt<T>(process, addr);
-    std::span<std::byte, sizeof(T)> buffer_span(
-        reinterpret_cast<std::byte*>(&buffer), sizeof(T));
-    snapshot.values.insert(
-        snapshot.values.end(), buffer_span.begin(), buffer_span.end());
-  }
-}
-
-template <CScannableType T>
-bool CompareValue(const T& current,
-                  const T& target,
-                  ScanComparison comparison) {
-  // clang-format off
-  switch (comparison) {
-    case ScanComparison::kExactValue: return current == target;
-    case ScanComparison::kNotEqual: return current != target;
-    case ScanComparison::kGreaterThan: return current > target;
-    case ScanComparison::kLessThan: return current < target;
-    case ScanComparison::kBetween: return current >= target && current <= target;   // Note: upper_bound should be in params
-    case ScanComparison::kNotBetween: return current < target || current > target;  // Note: upper_bound should be in params
-    default:
-      return false;
-  }
-  // clang-format on
-}
-
-template <CScannableType T>
-std::vector<uintptr_t> FindValuesInRegion(IProcess& process,
-                                          MemoryRegion region,
-                                          const ScanParamsType<T>& params) {
-  std::vector<std::byte> region_memory(region.size);
-  if (!process.ReadMemory(region.base_address, region_memory)) {
-    return {};
-  }
-
-  std::vector<uintptr_t> addresses_found;
-  addresses_found.reserve(256);  // Reserve reasonable initial capacity
-
-  const size_t value_size = sizeof(T);
-  const auto bytes = ToBytes(params);
-
-  // For exact value matching, use std::search for byte pattern matching
-  if (params.comparison == ScanComparison::kExactValue) {
-    auto it = region_memory.begin();
-    while (true) {
-      it = std::search(it, region_memory.end(), bytes.begin(), bytes.end());
-      if (it >= region_memory.end()) {
-        break;
-      }
-
-      size_t offset = std::distance(region_memory.begin(), it);
-      addresses_found.emplace_back(region.base_address + offset);
-      std::advance(it, value_size);
-    }
-  } else {
-    // For other comparisons, check each properly aligned position
-    // Align to type size boundary for proper value reading
-    for (size_t offset = 0; offset + value_size <= region_memory.size();
-         offset += value_size) {
-      T current_value;
-      std::memcpy(&current_value, &region_memory[offset], value_size);
-
-      if (CompareValue(current_value, params.value, params.comparison)) {
-        addresses_found.emplace_back(region.base_address + offset);
-      }
-    }
-  }
-
-  return addresses_found;
-}
-
-template <CScannableType T>
-std::shared_ptr<MemorySnapshot> ScanRegions(
-    std::span<const MemoryRegion> regions,
-    IProcess& process,
-    const ScanParamsType<T>& params) {
-  auto snapshot = std::make_shared<MemorySnapshot>();
-
-  const auto value_finder = [&process, &params](MemoryRegion reg) {
-    return FindValuesInRegion(process, reg, params);
-  };
-
-  auto view = regions | std::views::transform(value_finder);
-  snapshot->addresses =
-      std::views::join(view) | std::ranges::to<std::vector<uintptr_t>>();
-
-  UpdateSnapshotValues<T>(process, *snapshot);
-  return snapshot;
-}
-
-// template<CScannableType T> constexpr bool ShouldFilter(ScanComparison
-// comparison, T curr, T prev, T taget) {
-//       switch (comparison) {
-//         // clang-format off
-//       case ScanComparison::kChanged: return curr != prev_value; break;
-//       case ScanComparison::kUnchanged: return curr == params.value; break;
-//       case ScanComparison::kIncreased: return curr > params.value;  break;
-//       case ScanComparison::kDecreased: return curr < params.value; break;
-//       case ScanComparison::kIncreasedBy: return (curr - params.value) ==
-//       params.value; break; case ScanComparison::kDecreasedBy: return
-//       (params.value - curr) == params.value;  break;
-//         // clang-format on
-
-//       default:
-//         should_include =
-//             CompareValue(curr, params.value, params.comparison);
-//         break;
+//   for (const auto& [new_chunk, prev_chunk, curr_chunk] :
+//        std::views::zip(new_vals, prev_vals, curr_vals)) {
+//     if (!std::ranges::equal(new_chunk, prev_chunk)) {
+//       std::ranges::copy(new_chunk, curr_chunk.begin());
 //     }
+//   }
 // }
-
-template <CScannableType T>
-std::shared_ptr<MemorySnapshot> NextScanRegions(
-    const ScanResult& previous_result,
-    IProcess& process,
-    const ScanParamsType<T>& params) {
-  auto snapshot = std::make_shared<MemorySnapshot>();
-
-  const auto& addresses = previous_result.addresses();
-  const auto& prev_values = previous_result.values<T>();
-
-  for (const auto& [addr, prev_value] :
-       std::views::zip(addresses, prev_values)) {
-    const T current_value = ReadAt<T>(process, addr);
-
-    bool should_include = false;
-    // clang-format off
-    switch (params.comparison) {
-      case ScanComparison::kChanged: should_include = current_value != prev_value; break;
-      case ScanComparison::kUnchanged: should_include = current_value == params.value; break;
-      case ScanComparison::kIncreased: should_include = current_value > params.value;  break;
-      case ScanComparison::kDecreased: should_include = current_value < params.value; break;
-      case ScanComparison::kIncreasedBy: should_include = (current_value - params.value) == params.value; break;
-      case ScanComparison::kDecreasedBy: should_include = (params.value - current_value) == params.value;  break;
-      default:
-        should_include = CompareValue(current_value, params.value, params.comparison);
-        break;
-    }
-    // clang-format on
-
-    if (should_include) {
-      snapshot->addresses.push_back(addr);
-      std::span<const std::byte, sizeof(T)> value_span(
-          reinterpret_cast<const std::byte*>(&current_value), sizeof(T));
-      snapshot->values.insert(
-          snapshot->values.end(), value_span.begin(), value_span.end());
-    }
-  }
-
-  return snapshot;
-}
-
-struct ScanVisitor {
-  std::span<const MemoryRegion> regions;
-  IProcess& process;
-  std::shared_ptr<const MemorySnapshot>& snapshot;
-
-  template <CScannableType T>
-  ScanResult operator()(const ScanParamsType<T>& params) {
-    auto new_snapshot = ScanRegions<T>(regions, process, params);
-    snapshot = new_snapshot;
-    return ScanResult::FromSnapshot<T>(snapshot);
-  }
-
-  ScanResult operator()(const auto& /* params */) {
-    // Handle variable-length types (string, wstring, vector<byte>) - not
-    // implemented yet
-    LogWarning("Variable-length scan types not yet implemented");
-    return {};
-  }
-};
-
-struct NextScanVisitor {
-  const ScanResult& previous_result;
-  IProcess& process;
-  std::shared_ptr<const MemorySnapshot>& snapshot;
-
-  template <CScannableType T>
-  ScanResult operator()(const ScanParamsType<T>& params) {
-    auto new_snapshot = NextScanRegions<T>(previous_result, process, params);
-    snapshot = new_snapshot;
-    return ScanResult::FromSnapshot<T>(snapshot);
-  }
-
-  ScanResult operator()(const auto& /* params */) {
-    LogWarning("Variable-length scan types not yet implemented");
-    return {};
-  }
-};
-
-}  // namespace
-
-ScanResult MemoryScanner::NewScan(const ScanParams& params) {
-  if (!process_.IsProcessValid()) {
-    LogWarning("Process is not valid.");
-    return {};
-  }
-
-  ScanVisitor visitor{
-      .regions = memory_regions_, .process = process_, .snapshot = snapshot_};
-  return std::visit(visitor, params);
-}
-
-ScanResult MemoryScanner::NextScan(const ScanResult& previous_result,
-                                   const ScanParams& params) {
-  if (!process_.IsProcessValid()) {
-    LogWarning("Process is not valid.");
-    return {};
-  }
-
-  NextScanVisitor visitor{previous_result, process_, snapshot_};
-  return std::visit(visitor, params);
-}
 
 }  // namespace maia

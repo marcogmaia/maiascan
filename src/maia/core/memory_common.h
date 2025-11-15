@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "maia/core/memory_protection.h"
+
 namespace maia {
 
 using MemoryAddress = uintptr_t;
@@ -33,7 +35,7 @@ T BytesToFundamentalType(std::span<const Byte> view) {
 struct MemoryRegion {
   uintptr_t base_address{};
   size_t size{};
-  uint32_t protection_flags;  // e.g., PAGE_READWRITE
+  MemoryProtection protection_flags;  // e.g., PAGE_READWRITE
 };
 
 struct ProcessInfo {
