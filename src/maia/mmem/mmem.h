@@ -80,8 +80,8 @@ struct SegmentDescriptor {
 // Process API
 
 // Enumerates all processes on the system, calling callback for each.
-// @param callback Return true to continue enumeration, false to stop
-// @return true if enumeration succeeded, false otherwise
+// Param callback Return true to continue enumeration, false to stop.
+// Returns true if enumeration succeeded, false otherwise.
 bool ListProcesses(std::function<bool(const ProcessDescriptor&)> callback);
 
 // Gets the current process descriptor.

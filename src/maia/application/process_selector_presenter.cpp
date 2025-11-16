@@ -1,14 +1,10 @@
 // Copyright (c) Maia
 
-#include <Windows.h>
-
-// #include <psapi.h>
-// #include <tlhelp32.h>
-
 #include <string>
 
 #include "maia/application/process_selector_presenter.h"
 #include "maia/mmem/mmem.h"
+#include "maia/mmem/process_utils.h"
 
 namespace maia {
 
@@ -28,17 +24,9 @@ void RefreshProcesses(std::vector<ProcessInfo>& processes) {
 }  // namespace
 
 void ProcessSelectorPresenter::OnProcessPickRequested() {
-  POINT p;
-  GetCursorPos(&p);
-  HWND hwnd_under_cursor = WindowFromPoint(p);
-
-  if (!hwnd_under_cursor) {
-    return;
+  if (auto pid = mmem::utils::GetProcessIdFromCursor()) {
+    AttachProcess(*pid);
   }
-
-  DWORD pid = 0;
-  GetWindowThreadProcessId(hwnd_under_cursor, &pid);
-  AttachProcess(pid);
 }
 
 void ProcessSelectorPresenter::AttachProcess(Pid pid) {

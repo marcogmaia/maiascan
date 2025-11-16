@@ -22,7 +22,6 @@ target_link_libraries(
     base
     imgui::imgui
     glfw
-    scanner
     console
     glad::glad
 )

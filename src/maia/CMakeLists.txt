@@ -4,7 +4,6 @@ add_subdirectory(application)
 add_subdirectory(console)
 add_subdirectory(core)
 add_subdirectory(gui)
-add_subdirectory(scanner)
 add_subdirectory(mmem)
 
 find_package(spdlog CONFIG REQUIRED)
@@ -17,7 +16,6 @@ target_sources(
   PUBLIC
     FILE_SET HEADERS
       # TODO: Fix this name "assert2".
-      BASE_DIRS .
       FILES logging.h assert2.h
   PRIVATE
     assert.cpp
@@ -38,5 +36,4 @@ target_link_libraries(
     gui
     core
     application
-    scanner
 )
