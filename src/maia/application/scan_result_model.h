@@ -4,7 +4,6 @@
 
 #include <entt/signal/sigh.hpp>
 
-#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -40,9 +39,11 @@ class ScanResultModel {
 
   void FirstScan(std::vector<std::byte> value_to_scan);
 
+  // void ScanForValue(std::vector<std::byte> value_to_scan) {}
+
   // void FilterChangedValues();
 
-  void SetActiveProcess(std::unique_ptr<IProcess> process);
+  void SetActiveProcess(IProcess* process);
 
   void Clear();
 
@@ -50,7 +51,7 @@ class ScanResultModel {
   Signals signals_;
 
   // IProcess* active_process_ = nullptr;
-  std::unique_ptr<IProcess> process_;
+  IProcess* active_process_{};
 
   std::vector<ScanEntry> entries_;
   std::vector<ScanEntry> prev_entries_;
