@@ -7,7 +7,7 @@
 #include <ranges>
 #include <vector>
 
-#include "maia/assert2.h"
+#include "maia/assert.h"
 #include "maia/core/memory_common.h"
 #include "maia/core/scan_types.h"
 

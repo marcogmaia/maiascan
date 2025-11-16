@@ -2,9 +2,10 @@
 
 #pragma once
 
-#include "core/i_memory_scanner.h"
-#include "core/scan_result.h"
+#include "maia/core/i_memory_scanner.h"
 #include "maia/core/i_process.h"
+#include "maia/core/scan_result.h"
+#include "maia/logging.h"
 
 namespace maia {
 

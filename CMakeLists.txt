@@ -19,8 +19,7 @@ find_package(glad CONFIG REQUIRED)
 find_package(MFC REQUIRED)
 find_package(spdlog REQUIRED)
 
-include_directories("${CMAKE_SOURCE_DIR}/src")
-
+set(MAIA_BASE_DIR "${CMAKE_SOURCE_DIR}/src/")
 include(CTest)
 include(GoogleTest)
 

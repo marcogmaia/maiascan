@@ -8,10 +8,8 @@
 #include <mutex>
 #include <thread>
 
-#include "maia/core/i_memory_scanner.h"
 #include "maia/core/i_process.h"
 #include "maia/core/memory_common.h"
-#include "memory_scanner.h"
 
 namespace maia {
 
@@ -42,7 +40,7 @@ class ScanResultModel {
 
   void FirstScan(std::vector<std::byte> value_to_scan);
 
-  void FilterChangedValues();
+  // void FilterChangedValues();
 
   void SetActiveProcess(std::unique_ptr<IProcess> process);
 
@@ -52,7 +50,7 @@ class ScanResultModel {
   Signals signals_;
 
   // IProcess* active_process_ = nullptr;
-  std::unique_ptr<MemoryScanner> memory_scanner_;
+  std::unique_ptr<IProcess> process_;
 
   std::vector<ScanEntry> entries_;
   std::vector<ScanEntry> prev_entries_;

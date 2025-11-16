@@ -15,11 +15,12 @@ target_sources(
   base
   PUBLIC
     FILE_SET HEADERS
-      # TODO: Fix this name "assert2".
-      FILES logging.h assert2.h
+      BASE_DIRS "${MAIA_BASE_DIR}"
+      FILES ./logging.h ./assert.h
   PRIVATE
     assert.cpp
 )
+
 target_link_libraries(
   base
   PUBLIC

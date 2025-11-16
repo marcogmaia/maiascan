@@ -6,6 +6,7 @@ target_sources(
   gui
   PUBLIC
     FILE_SET HEADERS
+      BASE_DIRS "${MAIA_BASE_DIR}"
       FILES
         imgui_extensions.h
         widgets/process_selector_view.h

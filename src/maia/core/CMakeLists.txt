@@ -9,6 +9,7 @@ target_sources(
   PUBLIC
     FILE_SET HEADERS
       # BASE_DIRS maia/core
+      BASE_DIRS "${MAIA_BASE_DIR}"
       FILES
         # i_memory_accessor.h
         # maia/core/

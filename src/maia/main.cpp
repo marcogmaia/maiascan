@@ -9,9 +9,9 @@
 
 #include "application/scanner_presenter.h"
 #include "maia/application/process_selector_presenter.h"
+#include "maia/application/scan_result_model.h"
 #include "maia/gui/imgui_extensions.h"
 #include "maia/logging.h"
-#include "scan_result_model.h"
 
 namespace maia {
 

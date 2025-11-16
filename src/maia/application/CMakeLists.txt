@@ -6,6 +6,7 @@ target_sources(
   application
   PUBLIC
     FILE_SET HEADERS
+      BASE_DIRS "${MAIA_BASE_DIR}"
       FILES
         memory_scanner.h
         process_model.h
