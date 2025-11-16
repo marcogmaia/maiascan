@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -18,12 +19,26 @@ namespace maia::mmem {
 
 namespace {
 
+// RAII helper for process handles.
+using ProcessHandle =
+    // Use void* as the "type" for the handle.
+    std::unique_ptr<void, decltype([](void* h) {
+                      // Don't close the pseudo-handle for the current process
+                      if (h && h != ::GetCurrentProcess()) {
+                        ::CloseHandle(static_cast<HANDLE>(h));
+                      }
+                    })>;
+
 // Platform helper
-HANDLE OpenProcessHandle(uint32_t pid, DWORD access) {
+ProcessHandle OpenProcessHandle(uint32_t pid, DWORD access) {
+  HANDLE h = nullptr;
   if (pid == GetCurrentProcessId()) {
-    return ::GetCurrentProcess();
+    h = ::GetCurrentProcess();
+  } else {
+    h = ::OpenProcess(access, FALSE, pid);
   }
-  return ::OpenProcess(access, FALSE, pid);
+  // Let the unique_ptr manage the handle
+  return ProcessHandle(h);
 }
 
 // Helper to extract filename from path
@@ -144,6 +159,7 @@ bool ListProcesses(std::function<bool(const ProcessDescriptor&)> callback) {
   // Enumerate processes
   DWORD processes[1024];
   DWORD cb_needed;
+  // We must explicitly call EnumProcessesW to avoid macro issues
   if (!::EnumProcesses(processes, sizeof(processes), &cb_needed)) {
     return false;
   }
@@ -155,59 +171,48 @@ bool ListProcesses(std::function<bool(const ProcessDescriptor&)> callback) {
       continue;
     }
 
-    HANDLE h_process =
+    ProcessHandle h_process =
         OpenProcessHandle(pid, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
     if (!h_process) {
       continue;
     }
 
-    // RAII handle guard (optional but safer)
-    struct HandleGuard {
-      HANDLE h;
-
-      ~HandleGuard() {
-        if (h && h != ::GetCurrentProcess()) {
-          ::CloseHandle(h);
-        }
-      }
-    } guard{h_process};
-
     ProcessDescriptor desc = {};
     desc.pid = pid;
     desc.ppid = parent_map[pid];  // O(1) lookup
-    desc.arch = DetectArchitecture(h_process);
+    desc.arch = DetectArchitecture(h_process.get());
     desc.bits =
         (desc.arch == Architecture::kX64 || desc.arch == Architecture::kAArch64)
             ? 64
             : 32;
-    desc.start_time = GetProcessStartTime(h_process);
-    GetProcessInfo(h_process, desc);
+    desc.start_time = GetProcessStartTime(h_process.get());
+    GetProcessInfo(h_process.get(), desc);
 
     if (!callback(desc)) {
       break;
     }
-  }
+  }  // h_process is automatically closed here
   return true;
 }
 
 ProcessDescriptor GetCurrentProcess() {
   ProcessDescriptor desc = {};
+  HANDLE h_current = ::GetCurrentProcess();
   desc.pid = GetCurrentProcessId();
   desc.ppid = 0;
-  desc.arch = DetectArchitecture(::GetCurrentProcess());
+  desc.arch = DetectArchitecture(h_current);
   desc.bits =
       (desc.arch == Architecture::kX64 || desc.arch == Architecture::kAArch64)
           ? 64
           : 32;
-  desc.start_time = GetProcessStartTime(::GetCurrentProcess());
-
-  GetProcessInfo(::GetCurrentProcess(), desc);
+  desc.start_time = GetProcessStartTime(h_current);
+  GetProcessInfo(h_current, desc);
 
   return desc;
 }
 
 std::optional<ProcessDescriptor> GetProcess(uint32_t pid) {
-  HANDLE h_process =
+  ProcessHandle h_process =
       OpenProcessHandle(pid, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
   if (!h_process) {
     return std::nullopt;
@@ -216,12 +221,12 @@ std::optional<ProcessDescriptor> GetProcess(uint32_t pid) {
   ProcessDescriptor desc = {};
   desc.pid = pid;
   desc.ppid = 0;
-  desc.arch = DetectArchitecture(h_process);
+  desc.arch = DetectArchitecture(h_process.get());
   desc.bits =
       (desc.arch == Architecture::kX64 || desc.arch == Architecture::kAArch64)
           ? 64
           : 32;
-  desc.start_time = GetProcessStartTime(h_process);
+  desc.start_time = GetProcessStartTime(h_process.get());
 
   // Get parent PID
   PROCESSENTRY32 pe32 = {};
@@ -239,17 +244,13 @@ std::optional<ProcessDescriptor> GetProcess(uint32_t pid) {
     ::CloseHandle(h_snapshot);
   }
 
-  GetProcessInfo(h_process, desc);
-
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
+  GetProcessInfo(h_process.get(), desc);
 
   return desc;
 }
 
 std::optional<std::string> GetCommandLine(const ProcessDescriptor& process) {
-  HANDLE h_process = OpenProcessHandle(
+  ProcessHandle h_process = OpenProcessHandle(
       process.pid, PROCESS_VM_READ | PROCESS_QUERY_INFORMATION);
   if (!h_process) {
     return std::nullopt;
@@ -258,18 +259,11 @@ std::optional<std::string> GetCommandLine(const ProcessDescriptor& process) {
   // Check if it's the current process
   if (process.pid == GetCurrentProcessId()) {
     char* cmdline = ::GetCommandLineA();
-    std::string result(cmdline);
-    if (h_process != ::GetCurrentProcess()) {
-      ::CloseHandle(h_process);
-    }
-    return result;
+    return std::string(cmdline);
   }
 
   // For remote process, we need to read PEB (complex, return placeholder for
   // now) Real implementation would need to read PEB and ProcessParameters
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
   return std::nullopt;
 }
 
@@ -286,18 +280,15 @@ std::optional<ProcessDescriptor> FindProcess(std::string_view name) {
 }
 
 bool IsProcessAlive(const ProcessDescriptor& process) {
-  HANDLE h_process = OpenProcessHandle(process.pid, PROCESS_QUERY_INFORMATION);
+  ProcessHandle h_process =
+      OpenProcessHandle(process.pid, PROCESS_QUERY_INFORMATION);
   if (!h_process) {
     return false;
   }
 
   DWORD exit_code;
-  bool alive =
-      ::GetExitCodeProcess(h_process, &exit_code) && exit_code == STILL_ACTIVE;
-
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
+  bool alive = ::GetExitCodeProcess(h_process.get(), &exit_code) &&
+               exit_code == STILL_ACTIVE;
 
   return alive;
 }
@@ -379,7 +370,7 @@ bool EnumModules(std::function<bool(const ModuleDescriptor&)> callback) {
 
 bool EnumModules(const ProcessDescriptor& process,
                  std::function<bool(const ModuleDescriptor&)> callback) {
-  HANDLE h_process = OpenProcessHandle(
+  ProcessHandle h_process = OpenProcessHandle(
       process.pid, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
   if (!h_process) {
     return false;
@@ -388,7 +379,8 @@ bool EnumModules(const ProcessDescriptor& process,
   HMODULE modules[1024];
   DWORD cb_needed;
 
-  if (::EnumProcessModules(h_process, modules, sizeof(modules), &cb_needed)) {
+  if (::EnumProcessModules(
+          h_process.get(), modules, sizeof(modules), &cb_needed)) {
     DWORD count = cb_needed / sizeof(HMODULE);
     for (DWORD i = 0; i < count; i++) {
       ModuleDescriptor desc = {};
@@ -397,7 +389,7 @@ bool EnumModules(const ProcessDescriptor& process,
       // Get module information
       MODULEINFO mod_info = {};
       if (::GetModuleInformation(
-              h_process, modules[i], &mod_info, sizeof(mod_info))) {
+              h_process.get(), modules[i], &mod_info, sizeof(mod_info))) {
         desc.size = mod_info.SizeOfImage;
         desc.end = desc.base + desc.size;
       }
@@ -405,7 +397,7 @@ bool EnumModules(const ProcessDescriptor& process,
       // Get module path and name
       char path[MAX_PATH];
       DWORD path_len =
-          ::GetModuleFileNameExA(h_process, modules[i], path, MAX_PATH);
+          ::GetModuleFileNameExA(h_process.get(), modules[i], path, MAX_PATH);
       if (path_len > 0 && path_len < MAX_PATH) {
         desc.path = path;
         desc.name = GetFileName(path);
@@ -415,10 +407,6 @@ bool EnumModules(const ProcessDescriptor& process,
         break;
       }
     }
-  }
-
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
   }
 
   return true;
@@ -448,7 +436,7 @@ bool LoadModule(std::string_view path, ModuleDescriptor* module_out) {
 bool LoadModule(const ProcessDescriptor& process,
                 std::string_view path,
                 ModuleDescriptor* module_out) {
-  HANDLE h_process = OpenProcessHandle(
+  ProcessHandle h_process = OpenProcessHandle(
       process.pid,
       PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION |
           PROCESS_VM_WRITE | PROCESS_VM_READ);
@@ -470,19 +458,10 @@ bool LoadModule(const ProcessDescriptor& process,
       module_out->path = path;
       module_out->name = GetFileName(path);
     }
-
-    if (h_process != ::GetCurrentProcess()) {
-      ::CloseHandle(h_process);
-    }
-
     return true;
   }
 
   // Remote thread injection would be needed for other processes
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
-
   return false;
 }
 
@@ -508,7 +487,8 @@ bool EnumSegments(std::function<bool(const SegmentDescriptor&)> callback) {
 
 bool EnumSegments(const ProcessDescriptor& process,
                   std::function<bool(const SegmentDescriptor&)> callback) {
-  HANDLE h_process = OpenProcessHandle(process.pid, PROCESS_QUERY_INFORMATION);
+  ProcessHandle h_process =
+      OpenProcessHandle(process.pid, PROCESS_QUERY_INFORMATION);
   if (!h_process) {
     return false;
   }
@@ -517,9 +497,10 @@ bool EnumSegments(const ProcessDescriptor& process,
   MEMORY_BASIC_INFORMATION mbi = {};
   uintptr_t address = 0;
 
-  while (::VirtualQueryEx(
-             h_process, std::bit_cast<LPCVOID>(address), &mbi, sizeof(mbi)) ==
-         sizeof(mbi)) {
+  while (::VirtualQueryEx(h_process.get(),
+                          std::bit_cast<LPCVOID>(address),
+                          &mbi,
+                          sizeof(mbi)) == sizeof(mbi)) {
     if (mbi.State == MEM_COMMIT && mbi.RegionSize > 0) {
       SegmentDescriptor desc = {};
       desc.base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
@@ -538,10 +519,6 @@ bool EnumSegments(const ProcessDescriptor& process,
     }
   }
 
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
-
   return true;
 }
 
@@ -551,32 +528,25 @@ std::optional<SegmentDescriptor> FindSegment(uintptr_t address) {
 
 std::optional<SegmentDescriptor> FindSegment(const ProcessDescriptor& process,
                                              uintptr_t address) {
-  HANDLE h_process = OpenProcessHandle(process.pid, PROCESS_QUERY_INFORMATION);
+  ProcessHandle h_process =
+      OpenProcessHandle(process.pid, PROCESS_QUERY_INFORMATION);
   if (!h_process) {
     return std::nullopt;
   }
 
   MEMORY_BASIC_INFORMATION mbi = {};
-  if (::VirtualQueryEx(
-          h_process, std::bit_cast<LPCVOID>(address), &mbi, sizeof(mbi)) ==
-      sizeof(mbi)) {
+  if (::VirtualQueryEx(h_process.get(),
+                       std::bit_cast<LPCVOID>(address),
+                       &mbi,
+                       sizeof(mbi)) == sizeof(mbi)) {
     if (mbi.State == MEM_COMMIT) {
       SegmentDescriptor desc = {};
       desc.base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
       desc.size = mbi.RegionSize;
       desc.end = desc.base + desc.size;
       desc.protection = WinProtectionToEnum(mbi.Protect);
-
-      if (h_process != ::GetCurrentProcess()) {
-        ::CloseHandle(h_process);
-      }
-
       return desc;
     }
-  }
-
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
   }
 
   return std::nullopt;
@@ -598,21 +568,17 @@ size_t ReadMemory(const ProcessDescriptor& process,
     return 0;
   }
 
-  HANDLE h_process = OpenProcessHandle(process.pid, PROCESS_VM_READ);
+  ProcessHandle h_process = OpenProcessHandle(process.pid, PROCESS_VM_READ);
   if (!h_process) {
     return 0;
   }
 
   SIZE_T bytes_read = 0;
-  bool success = ::ReadProcessMemory(h_process,
+  bool success = ::ReadProcessMemory(h_process.get(),
                                      std::bit_cast<LPCVOID>(source),
                                      dest.data(),
                                      dest.size(),
                                      &bytes_read) != FALSE;
-
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
 
   return success ? bytes_read : 0;
 }
@@ -631,37 +597,55 @@ size_t WriteMemory(const ProcessDescriptor& process,
     return 0;
   }
 
-  HANDLE h_process =
+  ProcessHandle h_process =
       OpenProcessHandle(process.pid, PROCESS_VM_WRITE | PROCESS_VM_OPERATION);
   if (!h_process) {
     return 0;
   }
 
   SIZE_T bytes_written = 0;
-  bool success = ::WriteProcessMemory(h_process,
+  bool success = ::WriteProcessMemory(h_process.get(),
                                       std::bit_cast<LPVOID>(dest),
                                       source.data(),
                                       source.size(),
                                       &bytes_written) != FALSE;
 
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
-
   return success ? bytes_written : 0;
 }
 
 size_t MemoryFill(uintptr_t dest, std::byte value, size_t size) {
-  std::vector<std::byte> pattern(size, value);
-  return WriteMemory(dest, pattern);
+  return MemoryFill(GetCurrentProcess(), dest, value, size);
 }
 
 size_t MemoryFill(const ProcessDescriptor& process,
                   uintptr_t dest,
                   std::byte value,
                   size_t size) {
-  std::vector<std::byte> pattern(size, value);
-  return WriteMemory(process, dest, pattern);
+  if (dest == 0 || size == 0) {
+    return 0;
+  }
+
+  // Create a small, fixed-size chunk
+  constexpr size_t kChunkSize = 4096;
+  std::vector<std::byte> chunk(kChunkSize, value);
+
+  size_t total_written = 0;
+  while (total_written < size) {
+    // Calculate how much to write in this iteration
+    size_t bytes_to_write = std::min(kChunkSize, size - total_written);
+    std::span<const std::byte> write_span = {chunk.data(), bytes_to_write};
+
+    size_t bytes_written =
+        WriteMemory(process, dest + total_written, write_span);
+
+    total_written += bytes_written;
+
+    // If we didn't write the full chunk, a write error occurred
+    if (bytes_written != bytes_to_write) {
+      break;
+    }
+  }
+  return total_written;
 }
 
 bool ProtectMemory(uintptr_t address,
@@ -676,13 +660,14 @@ bool ProtectMemory(const ProcessDescriptor& process,
                    size_t size,
                    Protection prot,
                    Protection* old_prot) {
-  HANDLE h_process = OpenProcessHandle(process.pid, PROCESS_VM_OPERATION);
+  ProcessHandle h_process =
+      OpenProcessHandle(process.pid, PROCESS_VM_OPERATION);
   if (!h_process) {
     return false;
   }
 
   DWORD old_protect = 0;
-  bool success = ::VirtualProtectEx(h_process,
+  bool success = ::VirtualProtectEx(h_process.get(),
                                     std::bit_cast<LPVOID>(address),
                                     size,
                                     EnumToWinProtection(prot),
@@ -692,12 +677,8 @@ bool ProtectMemory(const ProcessDescriptor& process,
     *old_prot = WinProtectionToEnum(old_protect);
   }
 
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
-
   return success;
-}
+}  // h_process is automatically closed here
 
 std::optional<ProcessAddress> AllocateMemory(ProcessSize size,
                                              Protection prot) {
@@ -707,21 +688,17 @@ std::optional<ProcessAddress> AllocateMemory(ProcessSize size,
 std::optional<ProcessAddress> AllocateMemory(const ProcessDescriptor& process,
                                              ProcessSize size,
                                              Protection prot) {
-  HANDLE h_process = OpenProcessHandle(
+  ProcessHandle h_process = OpenProcessHandle(
       process.pid, PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE);
   if (!h_process) {
     return std::nullopt;
   }
 
-  LPVOID address = ::VirtualAllocEx(h_process,
+  LPVOID address = ::VirtualAllocEx(h_process.get(),
                                     nullptr,
                                     size,
                                     MEM_COMMIT | MEM_RESERVE,
                                     EnumToWinProtection(prot));
-
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
 
   if (!address) {
     return std::nullopt;
@@ -736,18 +713,18 @@ bool FreeMemory(uintptr_t address, size_t size) {
 bool FreeMemory(const ProcessDescriptor& process,
                 uintptr_t address,
                 size_t size) {
-  HANDLE h_process = OpenProcessHandle(process.pid, PROCESS_VM_OPERATION);
+  ProcessHandle h_process =
+      OpenProcessHandle(process.pid, PROCESS_VM_OPERATION);
   if (!h_process) {
     return false;
   }
 
+  // For VirtualFreeEx with MEM_RELEASE, the size must be 0.
+  // The address must be the base address from VirtualAllocEx.
   bool success =
       ::VirtualFreeEx(
-          h_process, std::bit_cast<LPVOID>(address), 0, MEM_RELEASE) != FALSE;
-
-  if (h_process != ::GetCurrentProcess()) {
-    ::CloseHandle(h_process);
-  }
+          h_process.get(), std::bit_cast<LPVOID>(address), 0, MEM_RELEASE) !=
+      FALSE;
 
   return success;
 }
@@ -765,7 +742,7 @@ std::optional<ProcessAddress> ResolvePointerPath(
 
   for (size_t i = 0; i < offsets.size(); i++) {
     if (i > 0) {
-      // Read pointer sized for the TARGET process
+      // Read pointer sized for the TARGET process.
       if (process.bits == 64) {
         uint64_t ptr_value = 0;
         if (ReadMemory(process,
@@ -818,12 +795,15 @@ std::optional<uintptr_t> ScanData(const ProcessDescriptor& process,
     return std::nullopt;
   }
 
-  auto it = std::search(buffer.begin(),
-                        buffer.begin() + bytes_read - data.size() + 1,
-                        data.begin(),
-                        data.end());
+  // Adjust search range to avoid reading past the buffer.
+  auto end_it = buffer.begin() + bytes_read;
+  if (bytes_read >= data.size()) {
+    end_it = buffer.begin() + bytes_read - data.size() + 1;
+  }
 
-  if (it != buffer.begin() + bytes_read - data.size() + 1) {
+  auto it = std::search(buffer.begin(), end_it, data.begin(), data.end());
+
+  if (it != end_it) {
     size_t offset = std::distance(buffer.begin(), it);
     return address + offset;
   }
@@ -883,21 +863,28 @@ std::optional<uintptr_t> ScanSignature(const ProcessDescriptor& process,
   std::vector<std::byte> pattern;
   std::string mask;
 
-  for (size_t i = 0; i < signature.size(); i += 3) {
+  for (size_t i = 0; i < signature.size();) {
     std::string_view byte_str = signature.substr(i, 2);
     if (byte_str == "??") {
       pattern.push_back(std::byte{0});
       mask.push_back('?');
+      i += 2;
     } else if (byte_str.size() == 2) {
       char* endptr;
-      int value = std::strtol(byte_str.data(), &endptr, 16);
-      if (*endptr == '\0' || endptr == byte_str.data() + 2) {
+      char buf[3] = {byte_str[0], byte_str[1], '\0'};
+      int value = std::strtol(buf, &endptr, 16);
+      if (*endptr == '\0') {
         pattern.push_back(static_cast<std::byte>(value));
         mask.push_back('x');
       }
+      i += 2;
+    } else {
+      // Skip invalid characters.
+      ++i;
     }
-    if (i + 2 < signature.size() && signature[i + 2] != ' ') {
-      break;
+    // Skip spaces.
+    if (i < signature.size() && signature[i] == ' ') {
+      ++i;
     }
   }
 

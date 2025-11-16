@@ -8,82 +8,11 @@
 #include <string>
 
 #include "maia/application/process_selector_presenter.h"
-#include "maia/logging.h"
 #include "maia/mmem/mmem.h"
 
 namespace maia {
 
 namespace {
-
-std::string TCharToString(const TCHAR* tchar_str) {
-#ifdef UNICODE
-  std::wstring wstr(tchar_str);
-  if (wstr.empty()) {
-    return "";
-  }
-  int size_needed = WideCharToMultiByte(CP_UTF8,
-                                        0,
-                                        wstr.data(),
-                                        static_cast<int>(wstr.size()),
-                                        NULL,
-                                        0,
-                                        NULL,
-                                        NULL);
-  std::string str_to(size_needed, 0);
-  WideCharToMultiByte(CP_UTF8,
-                      0,
-                      wstr.data(),
-                      static_cast<int>(wstr.size()),
-                      str_to.data(),
-                      size_needed,
-                      NULL,
-                      NULL);
-  return str_to;
-#else
-  return std::string(tchar_str);
-#endif
-}
-
-std::string GetLastErrorMessage(DWORD error_code) {
-  if (error_code == 0) {
-    return "No error";  // Or whatever you prefer for success
-  }
-
-  std::string message(512, 0);
-
-  size_t size =
-      FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                     nullptr,
-                     error_code,
-                     MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                     message.data(),
-                     message.size(),
-                     nullptr);
-
-  if (size == 0) {
-    // The error code couldn't be found or another error occurred.
-    return "Unknown error " + std::to_string(error_code);
-  }
-
-  // Resize the string to the actual length of the message.
-  message.resize(size);
-
-  // Remove trailing newline characters that FormatMessage often adds.
-  if (!message.empty()) {
-    message.erase(message.find_last_not_of(" \n\r\t") + 1);
-  }
-
-  return message;
-}
-
-std::string GetProcessNameFromPid(DWORD pid) {
-  if (pid == 0) {
-    return "N/A";
-  }
-
-  auto desc = mmem::GetProcess(pid);
-  return desc->name;
-}
 
 void RefreshProcesses(std::vector<ProcessInfo>& processes) {
   processes.clear();
@@ -114,8 +43,11 @@ void ProcessSelectorPresenter::OnProcessPickRequested() {
 
 void ProcessSelectorPresenter::AttachProcess(Pid pid) {
   if (process_model_.AttachToProcess(pid)) {
-    selected_process_name_ = GetProcessNameFromPid(pid);
+    selected_process_name_ = mmem::GetProcess(pid)->name;
     selected_pid_ = pid;
+  } else {
+    selected_process_name_ = "N/A";
+    selected_pid_ = 0;
   }
 }
 
