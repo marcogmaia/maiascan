@@ -5,10 +5,7 @@
 #include <bit>
 #include <cstdint>
 #include <span>
-#include <string>
 #include <vector>
-
-#include "maia/core/memory_protection.h"
 
 namespace maia {
 
@@ -32,16 +29,19 @@ T BytesToFundamentalType(std::span<const Byte> view) {
   return *std::bit_cast<T*>(view.data());
 }
 
-struct MemoryRegion {
-  uintptr_t base_address{};
-  size_t size{};
-  MemoryProtection protection_flags;  // e.g., PAGE_READWRITE
-};
+// using MemoryRegion = mmem::Mem
 
-struct ProcessInfo {
-  std::string name;
-  Pid pid;
-};
+// struct MemoryRegion {
+//   uintptr_t base;   // Segment base address
+//   uintptr_t end;    // Segment end address
+//   size_t size;      // Segment size in bytes
+//   Protection prot;  // Memory protection flags
+// };
+
+// struct ProcessInfo {
+//   std::string name;
+//   Pid pid;
+// };
 
 // struct Page {
 //   MemoryPtr address;

@@ -8,10 +8,9 @@ target_sources(
   scanner
   PUBLIC
     FILE_SET HEADERS
-      FILES live_process_accessor.h scanner.h
+      FILES scanner.h
   PRIVATE
     scanner.cpp
-    live_process_accessor.cpp
 )
 
 target_link_libraries(scanner PUBLIC base)

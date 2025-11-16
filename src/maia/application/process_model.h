@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "maia/core/i_process_attacher.h"
+#include "maia/core/process.h"
 
 #include <entt/signal/sigh.hpp>
 
@@ -14,15 +14,14 @@ class ProcessModel {
     entt::sigh<void(IProcess*)> active_process_changed;
   };
 
-  explicit ProcessModel(IProcessAttacher& process_attacher)
-      : process_attacher_(process_attacher) {}
-
   // Return true in case the attach was successful.
   bool AttachToProcess(Pid pid) {
-    active_process_ = process_attacher_.AttachTo(pid);
-    if (!active_process_) {
+    auto proc = Process::Create(pid);
+    if (!proc) {
       return false;
     }
+
+    active_process_ = std::make_unique<Process>(std::move(*proc));
     signals_.active_process_changed.publish(active_process_.get());
     return true;
   }
@@ -38,7 +37,6 @@ class ProcessModel {
 
  private:
   Signals signals_;
-  IProcessAttacher& process_attacher_;
   std::unique_ptr<IProcess> active_process_;
 };
 

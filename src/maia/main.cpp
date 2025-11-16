@@ -12,7 +12,6 @@
 #include "maia/gui/imgui_extensions.h"
 #include "maia/logging.h"
 #include "scan_result_model.h"
-#include "scanner/process_attacher.h"
 
 namespace maia {
 
@@ -75,8 +74,7 @@ int main() {
 
   ImVec4 clear_color = ImVec4(0.06f, 0.06f, 0.08f, 1.0f);
 
-  maia::ProcessAttacher process_attacher{};
-  maia::ProcessModel process_model{process_attacher};
+  maia::ProcessModel process_model{};
   maia::ProcessSelectorView proc_selector_view{};
   maia::ProcessSelectorPresenter process_selector{process_model,
                                                   proc_selector_view};

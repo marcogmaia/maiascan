@@ -6,8 +6,11 @@
 #include <vector>
 
 #include "maia/core/memory_common.h"
+#include "maia/mmem/mmem.h"
 
 namespace maia {
+
+using MemoryRegion = mmem::SegmentDescriptor;
 
 class IProcess {
  public:

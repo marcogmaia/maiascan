@@ -5,7 +5,7 @@
 #include <concepts>
 #include <iterator>
 
-namespace scanner {
+namespace maia {
 
 /// \brief Concept for a valid transform_if operation using iterators.
 ///
@@ -93,4 +93,4 @@ constexpr O transform_if(R&& range, O out_first, Func transform_op, Pred pred) {
                       std::move(pred));
 }
 
-}  // namespace scanner
+}  // namespace maia

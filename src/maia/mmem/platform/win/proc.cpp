@@ -4,6 +4,8 @@
 
 #include "maia/mmem/proc.h"
 
+#include <limits>
+
 #include <bit>
 #include <span>
 
@@ -17,17 +19,18 @@ HANDLE OpenProcess(DWORD pid, DWORD access) {
   return ::OpenProcess(access, FALSE, pid);
 }
 
-size_t ReadMemoryEx(const ProcessDescriptor* process,
+size_t ReadMemoryEx(const ProcessDescriptor& process,
                     uintptr_t source,
                     std::span<std::byte> dest) {
   HANDLE hproc;
   SIZE_T bytes_read;
 
-  if (!process || source == UINTPTR_MAX || dest.empty()) {
+  constexpr auto kInvalidAddress = std::numeric_limits<uintptr_t>::max();
+  if (source == kInvalidAddress || dest.empty()) {
     return 0;
   }
 
-  hproc = OpenProcess(process->pid, PROCESS_VM_READ);
+  hproc = OpenProcess(process.pid, PROCESS_VM_READ);
   if (!hproc) {
     return 0;
   }
