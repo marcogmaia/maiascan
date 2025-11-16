@@ -11,6 +11,7 @@
 #include <bit>
 #include <cstring>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace maia::mmem {
@@ -126,64 +127,66 @@ uint64_t GetProcessStartTime(HANDLE process) {
 }  // anonymous namespace
 
 // Process API
+bool ListProcesses(std::function<bool(const ProcessDescriptor&)> callback) {
+  // Build PID → PPID map in one pass
+  std::unordered_map<DWORD, DWORD> parent_map;
+  HANDLE h_snapshot = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (h_snapshot != INVALID_HANDLE_VALUE) {
+    PROCESSENTRY32 pe32 = {.dwSize = sizeof(pe32)};
+    if (::Process32First(h_snapshot, &pe32)) {
+      do {
+        parent_map[pe32.th32ProcessID] = pe32.th32ParentProcessID;
+      } while (::Process32Next(h_snapshot, &pe32));
+    }
+    ::CloseHandle(h_snapshot);
+  }
 
-bool EnumProcesses(std::function<bool(const ProcessDescriptor&)> callback) {
+  // Enumerate processes
   DWORD processes[1024];
   DWORD cb_needed;
-
   if (!::EnumProcesses(processes, sizeof(processes), &cb_needed)) {
     return false;
   }
 
   DWORD count = cb_needed / sizeof(DWORD);
-  for (DWORD i = 0; i < count; i++) {
-    if (processes[i] == 0) {
+  for (DWORD i = 0; i < count; ++i) {
+    const DWORD pid = processes[i];
+    if (pid == 0) {
       continue;
     }
 
-    HANDLE h_process = OpenProcessHandle(
-        processes[i], PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
+    HANDLE h_process =
+        OpenProcessHandle(pid, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
     if (!h_process) {
       continue;
     }
 
+    // RAII handle guard (optional but safer)
+    struct HandleGuard {
+      HANDLE h;
+
+      ~HandleGuard() {
+        if (h && h != ::GetCurrentProcess()) {
+          ::CloseHandle(h);
+        }
+      }
+    } guard{h_process};
+
     ProcessDescriptor desc = {};
-    desc.pid = processes[i];
-    desc.ppid = 0;
+    desc.pid = pid;
+    desc.ppid = parent_map[pid];  // O(1) lookup
     desc.arch = DetectArchitecture(h_process);
     desc.bits =
         (desc.arch == Architecture::kX64 || desc.arch == Architecture::kAArch64)
             ? 64
             : 32;
     desc.start_time = GetProcessStartTime(h_process);
-
-    // Get parent PID
-    PROCESSENTRY32 pe32 = {};
-    pe32.dwSize = sizeof(pe32);
-    HANDLE h_snapshot = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (h_snapshot != INVALID_HANDLE_VALUE) {
-      if (::Process32First(h_snapshot, &pe32)) {
-        do {
-          if (pe32.th32ProcessID == processes[i]) {
-            desc.ppid = pe32.th32ParentProcessID;
-            break;
-          }
-        } while (::Process32Next(h_snapshot, &pe32));
-      }
-      ::CloseHandle(h_snapshot);
-    }
-
     GetProcessInfo(h_process, desc);
-
-    if (h_process != ::GetCurrentProcess()) {
-      ::CloseHandle(h_process);
-    }
 
     if (!callback(desc)) {
       break;
     }
   }
-
   return true;
 }
 
@@ -272,7 +275,7 @@ std::optional<std::string> GetCommandLine(const ProcessDescriptor& process) {
 
 std::optional<ProcessDescriptor> FindProcess(std::string_view name) {
   std::optional<ProcessDescriptor> found;
-  EnumProcesses([&found, name](const ProcessDescriptor& process) {
+  ListProcesses([&found, name](const ProcessDescriptor& process) {
     if (GetFileName(process.path) == name || process.name == name) {
       found = process;
       return false;
@@ -522,7 +525,7 @@ bool EnumSegments(const ProcessDescriptor& process,
       desc.base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
       desc.size = mbi.RegionSize;
       desc.end = desc.base + desc.size;
-      desc.prot = WinProtectionToEnum(mbi.Protect);
+      desc.protection = WinProtectionToEnum(mbi.Protect);
 
       if (!callback(desc)) {
         break;
@@ -562,7 +565,7 @@ std::optional<SegmentDescriptor> FindSegment(const ProcessDescriptor& process,
       desc.base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
       desc.size = mbi.RegionSize;
       desc.end = desc.base + desc.size;
-      desc.prot = WinProtectionToEnum(mbi.Protect);
+      desc.protection = WinProtectionToEnum(mbi.Protect);
 
       if (h_process != ::GetCurrentProcess()) {
         ::CloseHandle(h_process);

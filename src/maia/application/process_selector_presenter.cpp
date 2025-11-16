@@ -1,13 +1,15 @@
 // Copyright (c) Maia
 
 #include <Windows.h>
-#include <psapi.h>
-#include <tlhelp32.h>
+
+// #include <psapi.h>
+// #include <tlhelp32.h>
 
 #include <string>
 
 #include "maia/application/process_selector_presenter.h"
 #include "maia/logging.h"
+#include "maia/mmem/mmem.h"
 
 namespace maia {
 
@@ -79,55 +81,19 @@ std::string GetProcessNameFromPid(DWORD pid) {
     return "N/A";
   }
 
-  HANDLE h_process =
-      OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-
-  if (h_process == nullptr) {
-    // TODO: this logging should be moved to where we first try to open the
-    // process.
-    auto errc = static_cast<uint32_t>(GetLastError());
-    auto message = GetLastErrorMessage(errc);
-    LogWarning("Error 0x{:04x}: {}", errc, message);
-    return std::format("<{}>", message);
-  }
-
-  TCHAR process_name[MAX_PATH] = TEXT("<unknown>");
-
-  if (GetModuleFileNameEx(h_process, nullptr, process_name, MAX_PATH)) {
-    std::string full_path = TCharToString(process_name);
-    size_t last_slash = full_path.find_last_of("\\/");
-    CloseHandle(h_process);
-    if (last_slash != std::string::npos) {
-      return full_path.substr(last_slash + 1);
-    } else {
-      return full_path;
-    }
-  }
-
-  CloseHandle(h_process);
-  return TCharToString(process_name);
+  auto desc = mmem::GetProcess(pid);
+  return desc->name;
 }
 
-void RefreshProcessList(std::vector<ProcessInfo>& processes) {
+void RefreshProcesses(std::vector<ProcessInfo>& processes) {
   processes.clear();
 
-  HANDLE h_snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (h_snapshot == INVALID_HANDLE_VALUE) {
-    LogError("CreateToolhelp32Snapshot failed!");
-    return;
-  }
+  const auto get_processes = [&processes](const mmem::ProcessDescriptor& desc) {
+    processes.emplace_back(desc.name, desc.pid);
+    return true;
+  };
 
-  PROCESSENTRY32 pe32;
-  // Must set the size.
-  pe32.dwSize = sizeof(PROCESSENTRY32);
-
-  if (Process32First(h_snapshot, &pe32)) {
-    do {
-      processes.emplace_back(TCharToString(pe32.szExeFile), pe32.th32ProcessID);
-    } while (Process32Next(h_snapshot, &pe32));
-  }
-
-  CloseHandle(h_snapshot);
+  mmem::ListProcesses(get_processes);
 }
 
 }  // namespace
@@ -171,7 +137,7 @@ void ProcessSelectorPresenter::Render() {
 }
 
 void ProcessSelectorPresenter::RefreshProcessList() {
-  ::maia::RefreshProcessList(process_list_);
+  RefreshProcesses(process_list_);
 }
 
 }  // namespace maia

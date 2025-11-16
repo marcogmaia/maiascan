@@ -2,6 +2,7 @@
 
 #include "maia/core/process.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "maia/core/memory_common.h"

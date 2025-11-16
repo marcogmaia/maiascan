@@ -69,10 +69,10 @@ struct ModuleDescriptor {
 
 // Information about a memory segment.
 struct SegmentDescriptor {
-  uintptr_t base;   // Segment base address
-  uintptr_t end;    // Segment end address
-  size_t size;      // Segment size in bytes
-  Protection prot;  // Memory protection flags
+  uintptr_t base;         // Segment base address
+  uintptr_t end;          // Segment end address
+  size_t size;            // Segment size in bytes
+  Protection protection;  // Memory protection flags
 };
 
 // clang-format off
@@ -82,7 +82,7 @@ struct SegmentDescriptor {
 // Enumerates all processes on the system, calling callback for each.
 // @param callback Return true to continue enumeration, false to stop
 // @return true if enumeration succeeded, false otherwise
-bool EnumProcesses(std::function<bool(const ProcessDescriptor&)> callback);
+bool ListProcesses(std::function<bool(const ProcessDescriptor&)> callback);
 
 // Gets the current process descriptor.
 ProcessDescriptor GetCurrentProcess();

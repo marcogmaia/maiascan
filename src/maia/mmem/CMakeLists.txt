@@ -2,14 +2,7 @@
 
 add_library(mmem)
 
-target_sources(
-  mmem
-  PUBLIC
-    # proc.h
-    # platform/win/proc.cpp
-    mmem.cpp
-    mmem.h
-)
+target_sources(mmem PUBLIC FILE_SET HEADERS FILES mmem.h PRIVATE mmem.cpp)
 
 target_link_libraries(mmem PUBLIC base)
 

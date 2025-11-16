@@ -5,6 +5,7 @@
 #include <bit>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace maia {
@@ -38,10 +39,10 @@ T BytesToFundamentalType(std::span<const Byte> view) {
 //   Protection prot;  // Memory protection flags
 // };
 
-// struct ProcessInfo {
-//   std::string name;
-//   Pid pid;
-// };
+struct ProcessInfo {
+  std::string name;
+  Pid pid;
+};
 
 // struct Page {
 //   MemoryPtr address;
