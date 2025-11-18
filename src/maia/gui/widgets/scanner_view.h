@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <variant>
+// #include <variant>
 
 #include <imgui.h>
 
@@ -13,26 +13,16 @@
 
 namespace maia {
 
-using ScanValueTypeSelection = std::variant<int8_t,
-                                            uint8_t,
-                                            int16_t,
-                                            uint16_t,
-                                            int32_t,
-                                            uint32_t,
-                                            int64_t,
-                                            uint64_t,
-                                            float,
-                                            double>;
-
 class ScannerWidget {
  public:
   class Signals {
    public:
     entt::sigh<void(std::vector<std::byte> value_to_scan)> new_scan_pressed;
     entt::sigh<void(std::vector<std::byte> value_to_scan)> scan_button_pressed;
+    // TODO:
+    entt::sigh<void(ScanComparison)> scan_comparison_selected;
     entt::sigh<void()> filter_changed;
     entt::sigh<void(ScanEntry)> entry_selected;
-    entt::sigh<void(ScanValueTypeSelection)> value_type_selected;
   };
 
   void Render(const std::vector<ScanEntry>& entries);

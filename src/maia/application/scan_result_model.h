@@ -9,6 +9,7 @@
 
 #include "maia/core/i_process.h"
 #include "maia/core/memory_common.h"
+#include "maia/core/scan_types.h"
 
 namespace maia {
 
@@ -41,9 +42,18 @@ class ScanResultModel {
 
   // void ScanForValue(std::vector<std::byte> value_to_scan) {}
 
+  // TODO: Implement here the next scan for changed, increased and decreased,
+  // this function queries the actual entries addresses and then filters the
+  // addresses accordingly to the values it points to.
+  void NextScan();
+
   // void FilterChangedValues();
 
   void SetActiveProcess(IProcess* process);
+
+  void SetScanComparison(ScanComparison scan_comparison) {
+    scan_comparison_ = scan_comparison;
+  }
 
   void Clear();
 
@@ -52,6 +62,8 @@ class ScanResultModel {
 
   // IProcess* active_process_ = nullptr;
   IProcess* active_process_{};
+
+  ScanComparison scan_comparison_;
 
   std::vector<ScanEntry> entries_;
   std::vector<ScanEntry> prev_entries_;

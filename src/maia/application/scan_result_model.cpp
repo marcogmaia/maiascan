@@ -3,6 +3,7 @@
 #include "maia/application/scan_result_model.h"
 
 #include <algorithm>
+#include <concepts>
 #include <span>
 
 #include "maia/logging.h"
@@ -29,6 +30,51 @@ std::optional<std::vector<std::byte>> ReadRegion(const MemoryRegion& region,
 
 bool CanScan(IProcess* process) {
   return process && process->IsProcessValid();
+}
+
+// Templated integer comparison helper
+template <typename T>
+constexpr bool is_integer_value_changed(
+    const std::span<const std::byte>& current,
+    const std::span<const std::byte>& previous) {
+  if constexpr (std::is_integral_v<T>) {
+    auto curr = std::bit_cast<T>(current.first<sizeof(T)>());
+    auto prev = std::bit_cast<T>(previous.first<sizeof(T)>());
+    return curr != prev;
+  }
+  return false;
+}
+
+template <typename T>
+  requires std::is_trivially_copyable_v<T>
+constexpr bool is_value_increased(std::span<const std::byte> current,
+                                  std::span<const std::byte> previous) {
+  if (current.size() < sizeof(T) || previous.size() < sizeof(T)) {
+    return false;
+  }
+
+  T curr;
+  T prev;
+  std::memcpy(&curr, current.data(), sizeof(T));
+  std::memcpy(&prev, previous.data(), sizeof(T));
+
+  return curr < prev;
+}
+
+template <typename T>
+  requires std::is_trivially_copyable_v<T>
+constexpr bool IsValueIncreased(std::span<const std::byte> current,
+                                std::span<const std::byte> previous) {
+  if (current.size() < sizeof(T) || previous.size() < sizeof(T)) {
+    return false;
+  }
+
+  T curr;
+  T prev;
+  std::memcpy(&curr, current.data(), sizeof(T));
+  std::memcpy(&prev, previous.data(), sizeof(T));
+
+  return curr > prev;
 }
 
 }  // namespace
@@ -97,6 +143,158 @@ void ScanResultModel::SetActiveProcess(IProcess* process) {
 void ScanResultModel::Clear() {
   entries_.clear();
   prev_entries_.clear();
+}
+
+void ScanResultModel::NextScan() {
+  std::scoped_lock lock(mutex_);
+
+  if (entries_.empty()) {
+    return;
+  }
+
+  if (!CanScan(active_process_)) {
+    LogWarning("Process is invalid for next scan.");
+    return;
+  }
+
+  // Store previous scan results for comparison
+  prev_entries_ = entries_;  // Copy, not move
+
+  // Extract all addresses for efficient batch reading
+  std::vector<MemoryAddress> addresses;
+  addresses.reserve(entries_.size());
+  for (const auto& entry : entries_) {
+    addresses.push_back(entry.address);
+  }
+
+  // Validate uniform value size across entries
+  const size_t value_size = entries_[0].data.size();
+  if (value_size == 0 || value_size > 8) {
+    LogWarning("Invalid value size {} for next scan.", value_size);
+    return;
+  }
+
+  // #ifndef NDEBUG
+  //   // Debug check for uniform size
+  //   if (!std::ranges::all_of(entries_, [value_size](const auto& e) {
+  //         return e.data.size() == value_size;
+  //       })) {
+  //     LogWarning("Value sizes are not uniform across entries.");
+  //     return;
+  //   }
+  // #endif
+
+  // Read current values from all addresses in a single batch operation
+  std::vector<std::byte> buffer(addresses.size() * value_size);
+  if (!active_process_->ReadMemory(addresses, value_size, buffer)) {
+    LogWarning("Failed to read memory during next scan.");
+    return;
+  }
+
+  // Helper lambda for byte span equality
+  auto bytes_equal = [](std::span<const std::byte> a,
+                        std::span<const std::byte> b) {
+    return std::equal(a.begin(), a.end(), b.begin(), b.end());
+  };
+
+  // Filter entries based on comparison mode
+  std::vector<ScanEntry> filtered_entries;
+  filtered_entries.reserve(entries_.size());
+
+  for (size_t i = 0; i < entries_.size(); ++i) {
+    const auto& prev_entry = prev_entries_[i];
+    std::span<const std::byte> current_bytes(&buffer[i * value_size],
+                                             value_size);
+    std::span<const std::byte> prev_bytes(prev_entry.data);
+
+    bool should_keep = false;
+
+    switch (scan_comparison_) {
+      case ScanComparison::kChanged:
+        should_keep = !bytes_equal(current_bytes, prev_bytes);
+        break;
+
+      case ScanComparison::kUnchanged:
+        should_keep = bytes_equal(current_bytes, prev_bytes);
+        break;
+
+      case ScanComparison::kIncreased:
+        switch (value_size) {
+          case 1:
+            should_keep =
+                is_value_increased<uint8_t>(current_bytes, prev_bytes);
+            break;
+          case 2:
+            should_keep =
+                is_value_increased<uint16_t>(current_bytes, prev_bytes);
+            break;
+          case 4:
+            should_keep =
+                is_value_increased<uint32_t>(current_bytes, prev_bytes);
+            break;
+          case 8:
+            should_keep =
+                is_value_increased<uint64_t>(current_bytes, prev_bytes);
+            break;
+        }
+        break;
+
+      case ScanComparison::kDecreased:
+        switch (value_size) {
+          case 1:
+            should_keep = IsValueIncreased<uint8_t>(current_bytes, prev_bytes);
+            break;
+          case 2:
+            should_keep = IsValueIncreased<uint16_t>(current_bytes, prev_bytes);
+            break;
+          case 4:
+            should_keep = IsValueIncreased<uint32_t>(current_bytes, prev_bytes);
+            break;
+          case 8:
+            should_keep = IsValueIncreased<uint64_t>(current_bytes, prev_bytes);
+            break;
+        }
+        break;
+
+      case ScanComparison::kIncreasedBy:
+      case ScanComparison::kDecreasedBy:
+        // TODO: Add int64_t compare_value_ member with setter
+        // should_keep = (current_val - prev_val) == compare_value_;
+        LogWarning(
+            "Scan comparison 'IncreasedBy/DecreasedBy' requires delta value "
+            "parameter");
+        break;
+
+      case ScanComparison::kExactValue:
+      case ScanComparison::kNotEqual:
+      case ScanComparison::kGreaterThan:
+      case ScanComparison::kLessThan:
+      case ScanComparison::kBetween:
+      case ScanComparison::kNotBetween:
+        // TODO: Add std::vector<std::byte> target_value_ member(s) with setters
+        LogWarning("Scan comparison mode requires target value parameter(s)");
+        break;
+
+      case ScanComparison::kUnknown:
+      default:
+        LogWarning("Unknown scan comparison mode: {}",
+                   static_cast<int>(scan_comparison_));
+        break;
+    }
+
+    if (should_keep) {
+      // Update entry with current value (preserve address, update data)
+      filtered_entries.emplace_back(
+          prev_entry.address,
+          std::vector<std::byte>(current_bytes.begin(), current_bytes.end()));
+    }
+  }
+
+  // Replace entries with filtered results
+  entries_ = std::move(filtered_entries);
+
+  // Notify UI/components of updated results
+  signals_.memory_changed.publish(entries_);
 }
 
 }  // namespace maia

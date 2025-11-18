@@ -48,7 +48,9 @@ std::vector<std::byte> ToByteVector(T value) {
 
 // Generic display function for integer types
 template <typename T>
-void DisplayValue(const ScanEntry& entry, bool is_hexadecimal, int hex_width) {
+void DrawEntryValue(const ScanEntry& entry,
+                    bool is_hexadecimal,
+                    int hex_width) {
   auto value = *reinterpret_cast<const T*>(entry.data.data());
   if (is_hexadecimal) {
     ImGui::TextUnformatted(std::format("0x{:0{}x}", value, hex_width).c_str());
@@ -59,14 +61,14 @@ void DisplayValue(const ScanEntry& entry, bool is_hexadecimal, int hex_width) {
 
 // Generic display function for floating-point types
 template <typename T>
-void DisplayValue(const ScanEntry& entry) {
+void DrawEntryValue(const ScanEntry& entry) {
   auto value = *reinterpret_cast<const T*>(entry.data.data());
   ImGui::TextUnformatted(std::format("{:.6f}", value).c_str());
 }
 
-void TextEntryValue(const ScanEntry& entry,
-                    ScanValueType type,
-                    bool is_hexadecimal = false) {
+void DrawAddressValueEntry(const ScanEntry& entry,
+                           ScanValueType type,
+                           bool is_hexadecimal = false) {
   if (entry.data.size() < sizeof(uint32_t)) {
     ImGui::TextUnformatted("N/A");
     return;
@@ -74,16 +76,16 @@ void TextEntryValue(const ScanEntry& entry,
 
   // clang-format off
   switch (type) {
-    case ScanValueType::kInt8:   { DisplayValue<int8_t>(entry, is_hexadecimal,    2); break; }
-    case ScanValueType::kUInt8:  { DisplayValue<uint8_t>(entry, is_hexadecimal,   2); break; }
-    case ScanValueType::kInt16:  { DisplayValue<int16_t>(entry, is_hexadecimal,   4); break; }
-    case ScanValueType::kUInt16: { DisplayValue<uint16_t>(entry, is_hexadecimal,  4); break; }
-    case ScanValueType::kInt32:  { DisplayValue<int32_t>(entry, is_hexadecimal,   8); break; }
-    case ScanValueType::kUInt32: { DisplayValue<uint32_t>(entry, is_hexadecimal,  8); break; }
-    case ScanValueType::kInt64:  { DisplayValue<int64_t>(entry, is_hexadecimal,  16); break; }
-    case ScanValueType::kUInt64: { DisplayValue<uint64_t>(entry, is_hexadecimal, 16); break; }
-    case ScanValueType::kFloat:  { DisplayValue<float>(entry); break; }
-    case ScanValueType::kDouble: { DisplayValue<double>(entry); break; }
+    case ScanValueType::kInt8:   { DrawEntryValue<int8_t>(entry, is_hexadecimal,    2); break; }
+    case ScanValueType::kUInt8:  { DrawEntryValue<uint8_t>(entry, is_hexadecimal,   2); break; }
+    case ScanValueType::kInt16:  { DrawEntryValue<int16_t>(entry, is_hexadecimal,   4); break; }
+    case ScanValueType::kUInt16: { DrawEntryValue<uint16_t>(entry, is_hexadecimal,  4); break; }
+    case ScanValueType::kInt32:  { DrawEntryValue<int32_t>(entry, is_hexadecimal,   8); break; }
+    case ScanValueType::kUInt32: { DrawEntryValue<uint32_t>(entry, is_hexadecimal,  8); break; }
+    case ScanValueType::kInt64:  { DrawEntryValue<int64_t>(entry, is_hexadecimal,  16); break; }
+    case ScanValueType::kUInt64: { DrawEntryValue<uint64_t>(entry, is_hexadecimal, 16); break; }
+    case ScanValueType::kFloat:  { DrawEntryValue<float>(entry);  break; }
+    case ScanValueType::kDouble: { DrawEntryValue<double>(entry); break; }
   }
   // clang-format on
 }
@@ -233,7 +235,7 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
 
           ImGui::TableNextColumn();
           if (entry.data.size() >= sizeof(uint32_t)) {
-            TextEntryValue(entry, selected_type, is_hex_input_);
+            DrawAddressValueEntry(entry, selected_type, is_hex_input_);
           } else {
             ImGui::TextUnformatted("N/A");
           }
