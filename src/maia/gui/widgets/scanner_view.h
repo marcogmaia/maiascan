@@ -47,7 +47,7 @@ class ScannerWidget {
   std::string str_;
   int selected_index_ = 0;
   bool is_hex_input_ = false;
-  int current_type_index_ = 4;  // Default to Int32 (index 4 in the combo)
+  int current_type_index_ = static_cast<int>(ScanValueType::kInt32);
 };
 
 }  // namespace maia

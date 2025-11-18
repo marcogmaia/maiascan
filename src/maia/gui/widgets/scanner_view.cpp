@@ -2,11 +2,14 @@
 
 #include "maia/gui/widgets/scanner_view.h"
 
+#include <array>
 #include <format>
 #include <optional>
 #include <string_view>
 
 #include <imgui_stdlib.h>
+
+#include "maia/logging.h"
 
 namespace maia {
 
@@ -45,9 +48,7 @@ std::vector<std::byte> ToByteVector(T value) {
 
 // Generic display function for integer types
 template <typename T>
-void DisplayIntegerValue(const ScanEntry& entry,
-                         bool is_hexadecimal,
-                         int hex_width) {
+void DisplayValue(const ScanEntry& entry, bool is_hexadecimal, int hex_width) {
   auto value = *reinterpret_cast<const T*>(entry.data.data());
   if (is_hexadecimal) {
     ImGui::TextUnformatted(std::format("0x{:0{}x}", value, hex_width).c_str());
@@ -58,7 +59,7 @@ void DisplayIntegerValue(const ScanEntry& entry,
 
 // Generic display function for floating-point types
 template <typename T>
-void DisplayFloatValue(const ScanEntry& entry) {
+void DisplayValue(const ScanEntry& entry) {
   auto value = *reinterpret_cast<const T*>(entry.data.data());
   ImGui::TextUnformatted(std::format("{:.6f}", value).c_str());
 }
@@ -71,74 +72,76 @@ void TextEntryValue(const ScanEntry& entry,
     return;
   }
 
+  // clang-format off
   switch (type) {
-    case ScanValueType::kInt8:
-      DisplayIntegerValue<int8_t>(entry, is_hexadecimal, 2);
-      break;
-    case ScanValueType::kUInt8:
-      DisplayIntegerValue<uint8_t>(entry, is_hexadecimal, 2);
-      break;
-    case ScanValueType::kInt16:
-      DisplayIntegerValue<int16_t>(entry, is_hexadecimal, 4);
-      break;
-    case ScanValueType::kUInt16:
-      DisplayIntegerValue<uint16_t>(entry, is_hexadecimal, 4);
-      break;
-    case ScanValueType::kInt32:
-      DisplayIntegerValue<int32_t>(entry, is_hexadecimal, 8);
-      break;
-    case ScanValueType::kUInt32:
-      DisplayIntegerValue<uint32_t>(entry, is_hexadecimal, 8);
-      break;
-    case ScanValueType::kInt64:
-      DisplayIntegerValue<int64_t>(entry, is_hexadecimal, 16);
-      break;
-    case ScanValueType::kUInt64:
-      DisplayIntegerValue<uint64_t>(entry, is_hexadecimal, 16);
-      break;
-    case ScanValueType::kFloat:
-      DisplayFloatValue<float>(entry);
-      break;
-    case ScanValueType::kDouble:
-      DisplayFloatValue<double>(entry);
-      break;
+    case ScanValueType::kInt8:   { DisplayValue<int8_t>(entry, is_hexadecimal,    2); break; }
+    case ScanValueType::kUInt8:  { DisplayValue<uint8_t>(entry, is_hexadecimal,   2); break; }
+    case ScanValueType::kInt16:  { DisplayValue<int16_t>(entry, is_hexadecimal,   4); break; }
+    case ScanValueType::kUInt16: { DisplayValue<uint16_t>(entry, is_hexadecimal,  4); break; }
+    case ScanValueType::kInt32:  { DisplayValue<int32_t>(entry, is_hexadecimal,   8); break; }
+    case ScanValueType::kUInt32: { DisplayValue<uint32_t>(entry, is_hexadecimal,  8); break; }
+    case ScanValueType::kInt64:  { DisplayValue<int64_t>(entry, is_hexadecimal,  16); break; }
+    case ScanValueType::kUInt64: { DisplayValue<uint64_t>(entry, is_hexadecimal, 16); break; }
+    case ScanValueType::kFloat:  { DisplayValue<float>(entry); break; }
+    case ScanValueType::kDouble: { DisplayValue<double>(entry); break; }
   }
+  // clang-format on
 }
 
 // Generic conversion function for any type
 template <typename T>
-std::vector<std::byte> GetBytesForType(const std::string& str, int base) {
+std::vector<std::byte> GetBytes(const std::string& str, int base) {
   auto value = ParseValue<T>(str, base);
   return value ? ToByteVector(*value) : std::vector<std::byte>{};
 }
 
-std::vector<std::byte> GetBytesFromString(const std::string& str,
-                                          ScanValueType type,
-                                          int base) {
+std::vector<std::byte> ParseToBytes(const std::string& str,
+                                    ScanValueType type,
+                                    int base) {
+  // clang-format off
   switch (type) {
-    case ScanValueType::kInt8:
-      return GetBytesForType<int8_t>(str, base);
-    case ScanValueType::kUInt8:
-      return GetBytesForType<uint8_t>(str, base);
-    case ScanValueType::kInt16:
-      return GetBytesForType<int16_t>(str, base);
-    case ScanValueType::kUInt16:
-      return GetBytesForType<uint16_t>(str, base);
-    case ScanValueType::kInt32:
-      return GetBytesForType<int32_t>(str, base);
-    case ScanValueType::kUInt32:
-      return GetBytesForType<uint32_t>(str, base);
-    case ScanValueType::kInt64:
-      return GetBytesForType<int64_t>(str, base);
-    case ScanValueType::kUInt64:
-      return GetBytesForType<uint64_t>(str, base);
-    case ScanValueType::kFloat:
-      return GetBytesForType<float>(str, base);
-    case ScanValueType::kDouble:
-      return GetBytesForType<double>(str, base);
+    case ScanValueType::kInt8:   return GetBytes<int8_t>(str, base);
+    case ScanValueType::kUInt8:  return GetBytes<uint8_t>(str, base);
+    case ScanValueType::kInt16:  return GetBytes<int16_t>(str, base);
+    case ScanValueType::kUInt16: return GetBytes<uint16_t>(str, base);
+    case ScanValueType::kInt32:  return GetBytes<int32_t>(str, base);
+    case ScanValueType::kUInt32: return GetBytes<uint32_t>(str, base);
+    case ScanValueType::kInt64:  return GetBytes<int64_t>(str, base);
+    case ScanValueType::kUInt64: return GetBytes<uint64_t>(str, base);
+    case ScanValueType::kFloat:  return GetBytes<float>(str, base);
+    case ScanValueType::kDouble: return GetBytes<double>(str, base);
+    default:
+      LogWarning("Unsupported format.");
+      return {};
   }
-  return {};
+  // clang-format on
 }
+
+constexpr std::array<ScanValueType, 10> kScanValueTypeByIndex = {
+    ScanValueType::kInt8,
+    ScanValueType::kUInt8,
+    ScanValueType::kInt16,
+    ScanValueType::kUInt16,
+    ScanValueType::kInt32,
+    ScanValueType::kUInt32,
+    ScanValueType::kInt64,
+    ScanValueType::kUInt64,
+    ScanValueType::kFloat,
+    ScanValueType::kDouble,
+};
+
+constexpr std::array<const char*, 10> kScanValueTypeLabels = {
+    "Int8",
+    "UInt8",
+    "Int16",
+    "UInt16",
+    "Int32",
+    "UInt32",
+    "Int64",
+    "UInt64",
+    "Float",
+    "Double",
+};
 
 }  // namespace
 
@@ -156,8 +159,8 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
       ImGui::PushItemWidth(-FLT_MIN);
       if (ImGui::Combo("##ValueType",
                        &current_type_index_,
-                       "Int8\0UInt8\0Int16\0UInt16\0Int32\0UInt32\0Int64\0UInt6"
-                       "4\0Float\0Double\0\0")) {
+                       kScanValueTypeLabels.data(),
+                       static_cast<int>(kScanValueTypeLabels.size()))) {
         // Type changed - could add validation here
       }
       ImGui::PopItemWidth();
@@ -187,11 +190,9 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
     if (ImGui::BeginChild("Table")) {
       const int base = is_hex_input_ ? 16 : 10;
 
-      // Map combo index to ScanValueType
-      ScanValueType selected_type =
-          static_cast<ScanValueType>(current_type_index_);
-
-      auto needle_bytes = GetBytesFromString(str_, selected_type, base);
+      const ScanValueType selected_type =
+          kScanValueTypeByIndex.at(current_type_index_);
+      auto needle_bytes = ParseToBytes(str_, selected_type, base);
 
       if (ImGui::Button("First Scan")) {
         signals_.new_scan_pressed.publish(needle_bytes);
