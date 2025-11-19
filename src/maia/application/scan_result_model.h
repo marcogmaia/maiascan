@@ -13,6 +13,10 @@
 
 namespace maia {
 
+// TODO: Fix this struct, this creates memory fragmentation. Can create millions
+// of allocations which is very poor performant. A better strategy is to create
+// a single big buffer of bytes, and the we can index it by the value type byte
+// size stride.
 struct ScanEntry {
   MemoryAddress address;
   std::vector<std::byte> data;
