@@ -26,7 +26,7 @@ class ScanResultModel {
     entt::sigh<void(std::vector<ScanEntry>)> memory_changed;
   };
 
-  // ScanResultModel() = default;
+  ScanResultModel();
 
   Signals& signals() {
     return signals_;

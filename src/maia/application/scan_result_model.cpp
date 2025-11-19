@@ -128,8 +128,6 @@ void ScanResultModel::FirstScan(std::vector<std::byte> value_to_scan) {
 
   entries_ = std::move(new_entries);
   signals_.memory_changed.publish(entries_);
-
-  StartAutoUpdate();
 }
 
 void ScanResultModel::SetActiveProcess(IProcess* process) {
@@ -310,5 +308,9 @@ void ScanResultModel::NextScan() {
   // Notify UI/components of updated results
   signals_.memory_changed.publish(entries_);
 }
+
+ScanResultModel::ScanResultModel() {
+  StartAutoUpdate();
+};
 
 }  // namespace maia
