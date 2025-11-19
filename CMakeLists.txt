@@ -10,6 +10,13 @@ project(
     CXX
 )
 
+# TODO: remove this from here. This is for sccache.
+set(
+  CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+  "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
+)
+cmake_policy(SET CMP0141 NEW)
+
 find_package(GTest REQUIRED)
 
 find_package(CLI11 CONFIG REQUIRED)
