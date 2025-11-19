@@ -145,6 +145,39 @@ constexpr std::array<const char*, 10> kScanValueTypeLabels = {
     "Double",
 };
 
+// Add these arrays for scan comparison selection
+constexpr std::array<const char*, 13> kScanComparisonLabels = {
+    "Unknown",
+    "Exact Value",
+    "Not Equal",
+    "Greater Than",
+    "Less Than",
+    "Between",
+    "Not Between",
+    "Changed",
+    "Unchanged",
+    "Increased",
+    "Decreased",
+    "Increased By",
+    "Decreased By",
+};
+
+constexpr std::array<ScanComparison, 13> kScanComparisonByIndex = {
+    ScanComparison::kUnknown,
+    ScanComparison::kExactValue,
+    ScanComparison::kNotEqual,
+    ScanComparison::kGreaterThan,
+    ScanComparison::kLessThan,
+    ScanComparison::kBetween,
+    ScanComparison::kNotBetween,
+    ScanComparison::kChanged,
+    ScanComparison::kUnchanged,
+    ScanComparison::kIncreased,
+    ScanComparison::kDecreased,
+    ScanComparison::kIncreasedBy,
+    ScanComparison::kDecreasedBy,
+};
+
 }  // namespace
 
 void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
@@ -164,6 +197,19 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
                        kScanValueTypeLabels.data(),
                        static_cast<int>(kScanValueTypeLabels.size()))) {
         // Type changed - could add validation here
+      }
+      ImGui::PopItemWidth();
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("Comparison:");
+      ImGui::TableSetColumnIndex(1);
+      ImGui::PushItemWidth(-FLT_MIN);
+      if (ImGui::Combo("##ScanComparison",
+                       &selected_comparison_index_,
+                       kScanComparisonLabels.data(),
+                       static_cast<int>(kScanComparisonLabels.size()))) {
+        EmitSetComparisonSelected();
       }
       ImGui::PopItemWidth();
 
@@ -201,7 +247,7 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
       }
       ImGui::SameLine();
       if (ImGui::Button("Scan")) {
-        signals_.scan_button_pressed.publish(needle_bytes);
+        signals_.next_scan_pressed.publish();
       }
 
       ImGui::SameLine();
@@ -246,6 +292,11 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
     }
   }
   ImGui::End();
+}
+
+void ScannerWidget::EmitSetComparisonSelected() const {
+  signals_.scan_comparison_selected.publish(
+      kScanComparisonByIndex[selected_comparison_index_]);
 }
 
 }  // namespace maia

@@ -19,6 +19,7 @@ class ScannerWidget {
    public:
     entt::sigh<void(std::vector<std::byte> value_to_scan)> new_scan_pressed;
     entt::sigh<void(std::vector<std::byte> value_to_scan)> scan_button_pressed;
+    entt::sigh<void()> next_scan_pressed;
     // TODO:
     entt::sigh<void(ScanComparison)> scan_comparison_selected;
     entt::sigh<void()> filter_changed;
@@ -32,12 +33,15 @@ class ScannerWidget {
   }
 
  private:
+  void EmitSetComparisonSelected() const;
+
   Signals signals_;
 
   std::string str_;
   int selected_index_ = 0;
   bool is_hex_input_ = false;
   int current_type_index_ = static_cast<int>(ScanValueType::kInt32);
+  int selected_comparison_index_ = static_cast<int>(ScanComparison::kChanged);
 };
 
 }  // namespace maia

@@ -47,8 +47,8 @@ constexpr bool is_integer_value_changed(
 
 template <typename T>
   requires std::is_trivially_copyable_v<T>
-constexpr bool is_value_increased(std::span<const std::byte> current,
-                                  std::span<const std::byte> previous) {
+constexpr bool IsValueDecreased(std::span<const std::byte> current,
+                                std::span<const std::byte> previous) {
   if (current.size() < sizeof(T) || previous.size() < sizeof(T)) {
     return false;
   }
@@ -218,43 +218,25 @@ void ScanResultModel::NextScan() {
         should_keep = bytes_equal(current_bytes, prev_bytes);
         break;
 
+        // clang-format off
       case ScanComparison::kIncreased:
         switch (value_size) {
-          case 1:
-            should_keep =
-                is_value_increased<uint8_t>(current_bytes, prev_bytes);
-            break;
-          case 2:
-            should_keep =
-                is_value_increased<uint16_t>(current_bytes, prev_bytes);
-            break;
-          case 4:
-            should_keep =
-                is_value_increased<uint32_t>(current_bytes, prev_bytes);
-            break;
-          case 8:
-            should_keep =
-                is_value_increased<uint64_t>(current_bytes, prev_bytes);
-            break;
+          case 1: should_keep = IsValueIncreased<uint8_t>(current_bytes, prev_bytes); break;
+          case 2: should_keep = IsValueIncreased<uint16_t>(current_bytes, prev_bytes); break;
+          case 4: should_keep = IsValueIncreased<uint32_t>(current_bytes, prev_bytes); break;
+          case 8: should_keep = IsValueIncreased<uint64_t>(current_bytes, prev_bytes); break;
         }
         break;
 
       case ScanComparison::kDecreased:
         switch (value_size) {
-          case 1:
-            should_keep = IsValueIncreased<uint8_t>(current_bytes, prev_bytes);
-            break;
-          case 2:
-            should_keep = IsValueIncreased<uint16_t>(current_bytes, prev_bytes);
-            break;
-          case 4:
-            should_keep = IsValueIncreased<uint32_t>(current_bytes, prev_bytes);
-            break;
-          case 8:
-            should_keep = IsValueIncreased<uint64_t>(current_bytes, prev_bytes);
-            break;
+          case 1: should_keep = IsValueDecreased<uint8_t>(current_bytes, prev_bytes); break;
+          case 2: should_keep = IsValueDecreased<uint16_t>(current_bytes, prev_bytes); break;
+          case 4: should_keep = IsValueDecreased<uint32_t>(current_bytes, prev_bytes); break;
+          case 8: should_keep = IsValueDecreased<uint64_t>(current_bytes, prev_bytes); break;
         }
         break;
+        // clang-format on
 
       case ScanComparison::kIncreasedBy:
       case ScanComparison::kDecreasedBy:
