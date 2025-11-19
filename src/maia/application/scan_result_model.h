@@ -57,13 +57,22 @@ class ScanResultModel {
 
   void Clear();
 
+  /// \brief Starts a background thread that refreshes values every second.
+  void StartAutoUpdate();
+
+  /// \brief Stops the background update thread.
+  void StopAutoUpdate();
+
  private:
+  /// \brief Helper to refresh the data of current entries without filtering.
+  void UpdateCurrentValues();
+
   Signals signals_;
 
   // IProcess* active_process_ = nullptr;
   IProcess* active_process_{};
 
-  ScanComparison scan_comparison_;
+  ScanComparison scan_comparison_{ScanComparison::kChanged};
 
   std::vector<ScanEntry> entries_;
   std::vector<ScanEntry> prev_entries_;

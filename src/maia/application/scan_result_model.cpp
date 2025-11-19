@@ -3,7 +3,8 @@
 #include "maia/application/scan_result_model.h"
 
 #include <algorithm>
-#include <concepts>
+#include <array>
+#include <ranges>
 #include <span>
 
 #include "maia/logging.h"
@@ -32,17 +33,21 @@ bool CanScan(IProcess* process) {
   return process && process->IsProcessValid();
 }
 
-// Templated integer comparison helper
+// Safely loads a value from a byte span.
 template <typename T>
-constexpr bool is_integer_value_changed(
-    const std::span<const std::byte>& current,
-    const std::span<const std::byte>& previous) {
-  if constexpr (std::is_integral_v<T>) {
-    auto curr = std::bit_cast<T>(current.first<sizeof(T)>());
-    auto prev = std::bit_cast<T>(previous.first<sizeof(T)>());
-    return curr != prev;
+  requires std::is_trivially_copyable_v<T>
+constexpr T LoadValue(std::span<const std::byte> bytes) {
+  std::array<std::byte, sizeof(T)> buffer{};
+  std::copy_n(bytes.begin(), sizeof(T), buffer.begin());
+  return std::bit_cast<T>(buffer);
+}
+
+constexpr bool IsValueChanged(std::span<const std::byte> current,
+                              std::span<const std::byte> previous) {
+  if (current.size() != previous.size()) {
+    return false;
   }
-  return false;
+  return !std::ranges::equal(current, previous);
 }
 
 template <typename T>
@@ -52,13 +57,7 @@ constexpr bool IsValueDecreased(std::span<const std::byte> current,
   if (current.size() < sizeof(T) || previous.size() < sizeof(T)) {
     return false;
   }
-
-  T curr;
-  T prev;
-  std::memcpy(&curr, current.data(), sizeof(T));
-  std::memcpy(&prev, previous.data(), sizeof(T));
-
-  return curr < prev;
+  return LoadValue<T>(current) < LoadValue<T>(previous);
 }
 
 template <typename T>
@@ -69,12 +68,7 @@ constexpr bool IsValueIncreased(std::span<const std::byte> current,
     return false;
   }
 
-  T curr;
-  T prev;
-  std::memcpy(&curr, current.data(), sizeof(T));
-  std::memcpy(&prev, previous.data(), sizeof(T));
-
-  return curr > prev;
+  return LoadValue<T>(current) > LoadValue<T>(previous);
 }
 
 }  // namespace
@@ -134,6 +128,8 @@ void ScanResultModel::FirstScan(std::vector<std::byte> value_to_scan) {
 
   entries_ = std::move(new_entries);
   signals_.memory_changed.publish(entries_);
+
+  StartAutoUpdate();
 }
 
 void ScanResultModel::SetActiveProcess(IProcess* process) {
@@ -143,6 +139,55 @@ void ScanResultModel::SetActiveProcess(IProcess* process) {
 void ScanResultModel::Clear() {
   entries_.clear();
   prev_entries_.clear();
+}
+
+void ScanResultModel::UpdateCurrentValues() {
+  std::scoped_lock lock(mutex_);
+
+  if (entries_.empty() || !CanScan(active_process_)) {
+    return;
+  }
+
+  // We assume all entries have the same size based on the first scan logic
+  const size_t value_size = entries_[0].data.size();
+
+  auto addresses = entries_ | std::views::transform(&ScanEntry::address) |
+                   std::ranges::to<std::vector<MemoryAddress>>();
+
+  std::vector<std::byte> buffer(addresses.size() * value_size);
+
+  if (!active_process_->ReadMemory(addresses, value_size, buffer)) {
+    return;
+  }
+
+  auto new_values = buffer | std::views::chunk(value_size);
+
+  for (auto [entry, new_val] : std::views::zip(entries_, new_values)) {
+    std::ranges::copy(new_val, entry.data.begin());
+  }
+
+  signals_.memory_changed.publish(entries_);
+}
+
+void ScanResultModel::StartAutoUpdate() {
+  // If already running, do nothing.
+  if (task_.joinable()) {
+    return;
+  }
+
+  task_ = std::jthread([this](std::stop_token stop_token) {
+    while (!stop_token.stop_requested()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      UpdateCurrentValues();
+    }
+  });
+}
+
+void ScanResultModel::StopAutoUpdate() {
+  if (task_.joinable()) {
+    task_.request_stop();
+    task_.join();
+  }
 }
 
 void ScanResultModel::NextScan() {
@@ -157,22 +202,20 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // Store previous scan results for comparison
-  prev_entries_ = entries_;  // Copy, not move
-
-  // Extract all addresses for efficient batch reading
-  std::vector<MemoryAddress> addresses;
-  addresses.reserve(entries_.size());
-  for (const auto& entry : entries_) {
-    addresses.push_back(entry.address);
-  }
-
   // Validate uniform value size across entries
   const size_t value_size = entries_[0].data.size();
   if (value_size == 0 || value_size > 8) {
     LogWarning("Invalid value size {} for next scan.", value_size);
     return;
   }
+
+  // Store previous scan results for comparison
+  prev_entries_ = entries_;  // Copy, not move
+
+  // Extract all addresses for efficient batch reading
+  const std::vector<MemoryAddress> addresses =
+      entries_ | std::views::transform(&ScanEntry::address) |
+      std::ranges::to<std::vector<MemoryAddress>>();
 
   // #ifndef NDEBUG
   //   // Debug check for uniform size
@@ -191,12 +234,6 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // Helper lambda for byte span equality
-  auto bytes_equal = [](std::span<const std::byte> a,
-                        std::span<const std::byte> b) {
-    return std::equal(a.begin(), a.end(), b.begin(), b.end());
-  };
-
   // Filter entries based on comparison mode
   std::vector<ScanEntry> filtered_entries;
   filtered_entries.reserve(entries_.size());
@@ -210,15 +247,10 @@ void ScanResultModel::NextScan() {
     bool should_keep = false;
 
     switch (scan_comparison_) {
-      case ScanComparison::kChanged:
-        should_keep = !bytes_equal(current_bytes, prev_bytes);
-        break;
-
-      case ScanComparison::kUnchanged:
-        should_keep = bytes_equal(current_bytes, prev_bytes);
-        break;
-
         // clang-format off
+      case ScanComparison::kChanged:   should_keep = !std::ranges::equal(current_bytes, prev_bytes); break;
+      case ScanComparison::kUnchanged: should_keep =  std::ranges::equal(current_bytes, prev_bytes); break;
+
       case ScanComparison::kIncreased:
         switch (value_size) {
           case 1: should_keep = IsValueIncreased<uint8_t>(current_bytes, prev_bytes); break;

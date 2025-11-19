@@ -22,7 +22,7 @@ class ScannerWidget {
     entt::sigh<void()> next_scan_pressed;
     // TODO:
     entt::sigh<void(ScanComparison)> scan_comparison_selected;
-    entt::sigh<void()> filter_changed;
+    // entt::sigh<void()> filter_changed;
     entt::sigh<void(ScanEntry)> entry_selected;
   };
 

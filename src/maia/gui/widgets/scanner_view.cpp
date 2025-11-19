@@ -246,15 +246,9 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
         signals_.new_scan_pressed.publish(needle_bytes);
       }
       ImGui::SameLine();
-      if (ImGui::Button("Scan")) {
+      if (ImGui::Button("Next Scan")) {
         signals_.next_scan_pressed.publish();
       }
-
-      ImGui::SameLine();
-      if (ImGui::Button("Filter Changed")) {
-        signals_.filter_changed.publish();
-      }
-      ImGui::SetItemTooltip("Filter out all values\nthat have been changed.");
 
       const ImGuiTableFlags flags = ImGuiTableFlags_RowBg;
 
