@@ -201,8 +201,7 @@ TEST_F(ScanResultModelTest, NextScanIncreasedValueFiltersResults) {
   bool found_100 = false;
   bool found_200 = false;
 
-  for (size_t i = 0; i < entries.addresses.size(); ++i) {
-    uintptr_t addr = entries.addresses[i];
+  for (const auto addr : entries.addresses) {
     if (addr == 0x100000 + 100) {
       found_100 = true;
     }
