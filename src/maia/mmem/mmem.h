@@ -18,10 +18,10 @@ enum class Protection : uint32_t {
   kRead = (1 << 0),     // Read access
   kWrite = (1 << 1),    // Write access
   kExecute = (1 << 2),  // Execute access
-  kXR = kExecute | kRead,
-  kXW = kExecute | kWrite,
-  kRW = kRead | kWrite,
-  kXRW = kExecute | kRead | kWrite,
+  kExecuteRead = kExecute | kRead,
+  kExecuteWrite = kExecute | kWrite,
+  kReadWrite = kRead | kWrite,
+  kExecuteReadWrite = kExecute | kRead | kWrite,
 };
 
 // Processor architecture types detected in target processes.

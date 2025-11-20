@@ -22,11 +22,12 @@ target_sources(
 
 target_link_libraries(application PUBLIC core)
 
-# add_executable(memory_scanner_test memory_scanner_test.cpp)
-# target_link_libraries(
-#   memory_scanner_test
-#   PRIVATE
-#     application
-#     GTest::gmock_main
-# )
-# add_test(NAME memory_scanner_test COMMAND memory_scanner_test)
+add_executable(memory_scanner_test scan_result_model_test.cpp)
+target_link_libraries(
+  memory_scanner_test
+  PRIVATE
+    application
+    GTest::gmock_main
+)
+
+gtest_discover_tests(memory_scanner_test DISCOVERY_TIMEOUT 60)

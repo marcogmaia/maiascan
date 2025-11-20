@@ -4,8 +4,8 @@
 
 #include <algorithm>
 #include <array>
-#include <ranges>
 #include <span>
+#include <vector>
 
 #include "maia/logging.h"
 #include "maia/mmem/mmem.h"
@@ -20,15 +20,6 @@ constexpr bool IsReadable(mmem::Protection prot) noexcept {
   return (prot_val & read_val) != 0;
 }
 
-std::optional<std::vector<std::byte>> ReadRegion(const MemoryRegion& region,
-                                                 IProcess& process) {
-  std::vector<std::byte> buffer(region.size);
-  if (!process.ReadMemory({&region.base, 1}, region.size, buffer)) {
-    return std::nullopt;
-  }
-  return buffer;
-}
-
 bool CanScan(IProcess* process) {
   return process && process->IsProcessValid();
 }
@@ -38,7 +29,8 @@ template <typename T>
   requires std::is_trivially_copyable_v<T>
 constexpr T LoadValue(std::span<const std::byte> bytes) {
   std::array<std::byte, sizeof(T)> buffer{};
-  std::copy_n(bytes.begin(), sizeof(T), buffer.begin());
+  const size_t copy_size = std::min(bytes.size(), sizeof(T));
+  std::copy_n(bytes.begin(), copy_size, buffer.begin());
   return std::bit_cast<T>(buffer);
 }
 
@@ -67,28 +59,19 @@ constexpr bool IsValueIncreased(std::span<const std::byte> current,
   if (current.size() < sizeof(T) || previous.size() < sizeof(T)) {
     return false;
   }
-
   return LoadValue<T>(current) > LoadValue<T>(previous);
 }
 
-// Helper to check a single type
-// Check that f.operator()<T>() is valid and returns something convertible to
-// bool.
 template <typename F, typename T>
 concept CheckScanType = requires(F& f) {
   { f.template operator()<T>() } -> std::convertible_to<bool>;
 };
 
-// The main concept: Ensures the functor works for all critical variants
 template <typename F>
 concept CScanPredicate = CheckScanType<F, uint8_t> &&
                          CheckScanType<F, uint64_t> && CheckScanType<F, double>;
 
-// We don't need to list every single integer; checking the boundaries
-// (u8, u64, double) usually covers the generic lambda's validity.
-
 // clang-format off
-// Runtime enum to a compile-time template instantiation.
 template <CScanPredicate Func>
 constexpr auto DispatchScanType(ScanValueType type, Func&& func) {
   switch (type) {
@@ -102,8 +85,7 @@ constexpr auto DispatchScanType(ScanValueType type, Func&& func) {
     case ScanValueType::kInt64:  return func.template operator()<int64_t>();
     case ScanValueType::kFloat:  return func.template operator()<float>();
     case ScanValueType::kDouble: return func.template operator()<double>();
-    default:
-      return false;
+    default: return false;
   }
 }
 
@@ -119,26 +101,39 @@ constexpr size_t GetDataTypeSize(ScanValueType type) {
     case ScanValueType::kInt64:  return sizeof(int64_t);
     case ScanValueType::kFloat:  return sizeof(float);
     case ScanValueType::kDouble: return sizeof(double);
-    default:
-      return sizeof(uint32_t);
+    default: return sizeof(uint32_t);
   }
 }
 
 // clang-format on
 
+void ClearStorage(ScanStorage& storage) {
+  storage.addresses.clear();
+  storage.raw_values_buffer.clear();
+  storage.stride = 0;
+}
+
 }  // namespace
+
+ScanResultModel::ScanResultModel() {
+  StartAutoUpdate();
+}
 
 void ScanResultModel::FirstScan() {
   std::scoped_lock lock(mutex_);
+  LogInfo("First scan...");
 
   if (!CanScan(active_process_)) {
     LogWarning("Process is invalid for first scan.");
     return;
   }
 
+  // Archive current results to previous (optional, but good for undo logic
+  // later)
   prev_entries_ = std::move(curr_entries_);
-  curr_entries_.clear();
+  ClearStorage(curr_entries_);
 
+  // Initialize comparison logic
   if (scan_comparison_ != ScanComparison::kExactValue) {
     scan_comparison_ = ScanComparison::kUnknown;
   }
@@ -160,11 +155,14 @@ void ScanResultModel::FirstScan() {
     return;
   }
 
-  // Heuristic: Unknown scans create massive lists; reserve carefully.
-  // Realistically, 'Unknown' on 1GB of RAM = 250 million entries.
-  // This vector implementation will consume ~9GB RAM for 1GB scan.
-  // Warning: This needs optimization, our entries are naive.
-  curr_entries_.reserve(is_exact_scan ? 4096 : 100000);
+  // Temporary local storage for building results
+  ScanStorage storage;
+  storage.stride = scan_stride;
+
+  // Reservation heuristics (adjust based on available RAM/preferences)
+  constexpr size_t kEstimatedEntries = 100000;
+  storage.addresses.reserve(kEstimatedEntries);
+  storage.raw_values_buffer.reserve(kEstimatedEntries * scan_stride);
 
   auto regions = active_process_->GetMemoryRegions();
 
@@ -173,7 +171,6 @@ void ScanResultModel::FirstScan() {
       continue;
     }
 
-    // Read the entire region
     std::vector<std::byte> region_buffer(region.size);
     if (!active_process_->ReadMemory(
             {&region.base, 1}, region.size, region_buffer)) {
@@ -196,71 +193,41 @@ void ScanResultModel::FirstScan() {
 
         uintptr_t found_address =
             region.base + std::distance(region_buffer.begin(), it);
-        curr_entries_.emplace_back(found_address, target_scan_value_);
 
-        // Advance by 1 (standard cheat engine behavior to find
-        // overlapping/unaligned) Or advance by scan_stride for aligned-only
-        // speed.
+        storage.addresses.push_back(found_address);
+        storage.raw_values_buffer.insert(
+            storage.raw_values_buffer.end(), val_begin, val_end);
+
         std::advance(it, 1);
       }
     }
     // --- STRATEGY B: Unknown Initial Value (Snapshot) ---
     else {
-      // Loop through the buffer respecting alignment stride
-      // e.g., if stride is 4, we grab 0, 4, 8, 12...
-      // We do NOT grab 1, 2, 3 because "Unknown" scans usually assume alignment
-      // to reduce the result set size.
-
       const size_t limit = region_buffer.size() - scan_stride;
 
       for (size_t offset = 0; offset <= limit; offset += scan_stride) {
-        // Create a snapshot of this address
         auto data_start = region_buffer.begin() + offset;
 
-        curr_entries_.emplace_back(
-            region.base + offset,
-            std::vector<std::byte>(data_start, data_start + scan_stride));
+        storage.addresses.push_back(region.base + offset);
+        storage.raw_values_buffer.insert(storage.raw_values_buffer.end(),
+                                         data_start,
+                                         data_start + scan_stride);
       }
     }
   }
 
+  // Commit results.
+  curr_entries_ = std::move(storage);
   signals_.memory_changed.publish(curr_entries_);
-}
 
-void ScanResultModel::SetActiveProcess(IProcess* process) {
-  active_process_ = process;
-}
-
-void ScanResultModel::Clear() {
-  curr_entries_.clear();
-  prev_entries_.clear();
-}
-
-void ScanResultModel::StartAutoUpdate() {
-  // If already running, do nothing.
-  if (task_.joinable()) {
-    return;
-  }
-
-  task_ = std::jthread([this](std::stop_token stop_token) {
-    while (!stop_token.stop_requested()) {
-      UpdateCurrentValues();
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-  });
-}
-
-void ScanResultModel::StopAutoUpdate() {
-  if (task_.joinable()) {
-    task_.request_stop();
-    task_.join();
-  }
+  LogInfo("Found {} addresses.", curr_entries_.addresses.size());
 }
 
 void ScanResultModel::NextScan() {
   std::scoped_lock lock(mutex_);
 
-  if (curr_entries_.empty()) {
+  // 1. Validate State
+  if (curr_entries_.addresses.empty()) {
     return;
   }
 
@@ -269,20 +236,35 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  prev_entries_ = curr_entries_;
+  // 2. Move Current -> Previous (Snapshot)
+  // This makes curr_entries_ empty and ready to accept filtered results.
+  prev_entries_ = std::move(curr_entries_);
 
-  const auto addresses = curr_entries_ |
-                         std::views::transform(&ScanEntry::address) |
-                         std::ranges::to<std::vector<MemoryAddress>>();
+  const size_t count = prev_entries_.addresses.size();
+  const size_t stride = prev_entries_.stride;
 
-  const size_t value_size = curr_entries_[0].data.size();
-  std::vector<std::byte> buffer(addresses.size() * value_size);
-
-  if (!active_process_->ReadMemory(addresses, value_size, buffer)) {
-    LogWarning("Failed to read memory during next scan.");
+  if (count == 0 || stride == 0) {
     return;
   }
 
+  // 3. Read Current Memory (Batch)
+  // We read the live values of all addresses found in the previous scan.
+  std::vector<std::byte> current_memory_buffer(count * stride);
+  if (!active_process_->ReadMemory(
+          prev_entries_.addresses, stride, current_memory_buffer)) {
+    LogWarning("Failed to read memory batch during next scan.");
+    // Restore previous entries on failure so we don't lose data
+    curr_entries_ = std::move(prev_entries_);
+    return;
+  }
+
+  // 4. Prepare Filtered Storage
+  ScanStorage filtered_storage;
+  filtered_storage.stride = stride;
+  filtered_storage.addresses.reserve(count);
+  filtered_storage.raw_values_buffer.reserve(count * stride);
+
+  // 5. Comparison Logic
   const auto check_condition = [&](std::span<const std::byte> curr,
                                    std::span<const std::byte> prev) -> bool {
     switch (scan_comparison_) {
@@ -301,60 +283,95 @@ void ScanResultModel::NextScan() {
           return IsValueDecreased<T>(curr, prev);
         });
 
+      case ScanComparison::kExactValue:
+        return std::ranges::equal(curr, target_scan_value_);
+
       default:
         return false;
     }
   };
 
-  std::vector<ScanEntry> filtered_entries;
-  filtered_entries.reserve(curr_entries_.size());
+  // 6. Filter Loop (Structure of Arrays)
+  const std::byte* curr_ptr = current_memory_buffer.data();
+  const std::byte* prev_ptr = prev_entries_.raw_values_buffer.data();
 
-  const std::byte* cursor = buffer.data();
-  for (size_t i = 0; i < curr_entries_.size(); ++i) {
-    std::span<const std::byte> current_bytes(cursor, value_size);
-    std::span<const std::byte> prev_bytes(prev_entries_[i].data);
+  for (size_t i = 0; i < count; ++i) {
+    std::span<const std::byte> val_curr(curr_ptr, stride);
+    std::span<const std::byte> val_prev(prev_ptr, stride);
 
-    if (check_condition(current_bytes, prev_bytes)) {
-      filtered_entries.emplace_back(
-          prev_entries_[i].address,
-          std::vector<std::byte>(current_bytes.begin(), current_bytes.end()));
+    if (check_condition(val_curr, val_prev)) {
+      // Match Found: Keep Address + NEW Value
+      filtered_storage.addresses.push_back(prev_entries_.addresses[i]);
+      filtered_storage.raw_values_buffer.insert(
+          filtered_storage.raw_values_buffer.end(),
+          val_curr.begin(),
+          val_curr.end());
     }
 
-    cursor += value_size;
+    curr_ptr += stride;
+    prev_ptr += stride;
   }
 
-  curr_entries_ = std::move(filtered_entries);
+  // 7. Commit Results
+  curr_entries_ = std::move(filtered_storage);
   signals_.memory_changed.publish(curr_entries_);
 }
 
 void ScanResultModel::UpdateCurrentValues() {
   std::scoped_lock lock(mutex_);
 
-  if (curr_entries_.empty() || !CanScan(active_process_)) {
+  if (curr_entries_.addresses.empty() || !CanScan(active_process_)) {
     return;
   }
 
-  auto addresses = curr_entries_ | std::views::transform(&ScanEntry::address) |
-                   std::ranges::to<std::vector<MemoryAddress>>();
+  // Bulk read directly into the existing raw_values_buffer.
+  // Since curr_entries_ uses SoA, raw_values_buffer is already a flat vector
+  // exactly the size needed (addresses.size() * stride).
+  bool success = active_process_->ReadMemory(curr_entries_.addresses,
+                                             curr_entries_.stride,
+                                             curr_entries_.raw_values_buffer);
 
-  const size_t value_size = curr_entries_[0].data.size();
-  std::vector<std::byte> buffer(addresses.size() * value_size);
-
-  if (!active_process_->ReadMemory(addresses, value_size, buffer)) {
-    return;
+  if (success) {
+    signals_.memory_changed.publish(curr_entries_);
   }
-
-  auto new_values = buffer | std::views::chunk(value_size);
-
-  for (auto [entry, new_val] : std::views::zip(curr_entries_, new_values)) {
-    std::ranges::copy(new_val, entry.data.begin());
-  }
-
-  signals_.memory_changed.publish(curr_entries_);
 }
 
-ScanResultModel::ScanResultModel() {
-  StartAutoUpdate();
-};
+void ScanResultModel::SetActiveProcess(IProcess* process) {
+  std::scoped_lock lock(mutex_);
+  if (!CanScan(process)) {
+    LogWarning("Invalid process selected.");
+    return;
+  }
+  active_process_ = process;
+  LogInfo("Active process changed: {}", process->GetProcessName());
+}
+
+void ScanResultModel::Clear() {
+  std::scoped_lock lock(mutex_);
+  ClearStorage(curr_entries_);
+  ClearStorage(prev_entries_);
+}
+
+void ScanResultModel::StartAutoUpdate() {
+  if (task_.joinable()) {
+    return;
+  }
+
+  task_ = std::jthread([this](std::stop_token stop_token) {
+    while (!stop_token.stop_requested()) {
+      if (curr_entries_.addresses.size() < 10000) {
+        UpdateCurrentValues();
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+  });
+}
+
+void ScanResultModel::StopAutoUpdate() {
+  if (task_.joinable()) {
+    task_.request_stop();
+    task_.join();
+  }
+}
 
 }  // namespace maia

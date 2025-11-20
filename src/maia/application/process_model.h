@@ -14,6 +14,19 @@ class ProcessModel {
     entt::sigh<void(IProcess*)> active_process_changed;
   };
 
+  struct Sinks {
+    ProcessModel& model;
+
+    // clang-format off
+    auto ActiveProcessChanged() { return entt::sink(model.signals_.active_process_changed); };
+
+    // clang-format on
+  };
+
+  Sinks sinks() {
+    return Sinks{*this};
+  }
+
   // Return true in case the attach was successful.
   bool AttachToProcess(Pid pid) {
     auto proc = Process::Create(pid);

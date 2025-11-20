@@ -11,20 +11,17 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
       process_model_(process_model),
       scanner_widget_(scanner_widget) {
   // clang-format off
-  sinks_
-  .Connect<&ScanResultModel::FirstScan>(scanner_widget_.signals().new_scan_pressed, scan_result_model_)
-  // .Connect<&ScanResultModel::FilterChangedValues>(scanner_widget.signals().filter_changed, scan_result_model_)
-        // .Connect<&ScanResultModel::ScanForValue>(scanner_widget_.signals().scan_button_pressed, scan_result_model_)
 
-        .Connect<&ScanResultModel::SetScanComparison>(scanner_widget_.signals().scan_comparison_selected, scan_result_model_)
-        .Connect<&ScanResultModel::NextScan>(scanner_widget_.signals().next_scan_pressed, scan_result_model_)
-        .Connect<&ScanResultModel::SetActiveProcess>(process_model_.signals().active_process_changed, scan_result_model_)
-        ;
+  connections_.emplace_back(scanner_widget_.sinks().NewScanPressed().connect<&ScanResultModel::FirstScan>(scan_result_model_));
+  connections_.emplace_back(scanner_widget_.sinks().NextScanPressed().connect<&ScanResultModel::NextScan>(scan_result_model_));
+  connections_.emplace_back(scanner_widget_.sinks().ScanComparisonSelected().connect<&ScanResultModel::SetScanComparison>(scan_result_model_));
 
+  connections_.emplace_back(process_model_.sinks().ActiveProcessChanged().connect<&ScanResultModel::SetActiveProcess>(scan_result_model_));
   // clang-format on
 
-  scanner_widget_.signals().scan_comparison_selected.publish(
-      ScanComparison::kChanged);
+  // TODO: Set initial state.
+  // scanner_widget_.signals().scan_comparison_selected.publish(
+  //     ScanComparison::kChanged);
 }
 
 }  // namespace maia

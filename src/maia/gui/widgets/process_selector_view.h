@@ -30,6 +30,21 @@ class ProcessSelectorView {
     entt::sigh<void()> process_pick_requested;
   };
 
+  struct Sinks {
+    ProcessSelectorView& view;
+
+    // clang-format off
+    auto RefreshRequested() { return entt::sink(view.signals_.refresh_requested); };
+    auto ProcessSelectedFromList() { return entt::sink(view.signals_.process_selected_from_list); };
+    auto ProcessPickRequested() { return entt::sink(view.signals_.process_pick_requested); };
+
+    // clang-format on
+  };
+
+  Sinks sinks() {
+    return Sinks{*this};
+  }
+
   // Main render function. The Presenter should call this every frame.
   void Render(bool* p_open,
               const std::vector<ProcessInfo>& processes,

@@ -44,9 +44,9 @@ ProcessSelectorPresenter::ProcessSelectorPresenter(
     : process_model_(process_model),
       process_selector_view_(process_selector_view) {
   // clang-format off
-  sinks_.Connect<&ProcessSelectorPresenter::OnProcessPickRequested>(process_selector_view_.signals().process_pick_requested, *this)
-        .Connect<&ProcessSelectorPresenter::RefreshProcessList>(process_selector_view_.signals().refresh_requested, *this)
-        .Connect<&ProcessSelectorPresenter::AttachProcess>(process_selector_view.signals().process_selected_from_list, *this);
+  process_selector_view.sinks().ProcessPickRequested().connect<&ProcessSelectorPresenter::OnProcessPickRequested>(*this);
+  process_selector_view.sinks().RefreshRequested().connect<&ProcessSelectorPresenter::RefreshProcessList>(*this);
+  process_selector_view.sinks().ProcessSelectedFromList().connect<&ProcessSelectorPresenter::AttachProcess>(*this);
   // clang-format on
   RefreshProcessList();
 }

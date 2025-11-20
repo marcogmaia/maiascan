@@ -55,11 +55,11 @@ Protection WinProtectionToEnum(DWORD protect) {
   // Mask out modifier bits (GUARD, NOCACHE, WRITECOMBINE)
   // clang-format off
   switch (protect & 0xFF) {
-    case PAGE_EXECUTE_READWRITE: return Protection::kXRW;
+    case PAGE_EXECUTE_READWRITE: return Protection::kExecuteReadWrite;
     case PAGE_EXECUTE_READ:      [[fallthrough]];
-    case PAGE_EXECUTE_WRITECOPY: return Protection::kXR;  // Approximate
+    case PAGE_EXECUTE_WRITECOPY: return Protection::kExecuteRead;  // Approximate
     case PAGE_EXECUTE:           return Protection::kExecute;
-    case PAGE_READWRITE:         return Protection::kRW;
+    case PAGE_READWRITE:         return Protection::kReadWrite;
     case PAGE_WRITECOPY:         [[fallthrough]];
     case PAGE_READONLY:          return Protection::kRead;
     default:
@@ -72,14 +72,14 @@ Protection WinProtectionToEnum(DWORD protect) {
 DWORD EnumToWinProtection(Protection prot) {
   // clang-format off
   switch (prot) {
-    case Protection::kNone:    return PAGE_NOACCESS;
-    case Protection::kRead:    return PAGE_READONLY;
-    case Protection::kWrite:   return PAGE_READWRITE;
-    case Protection::kExecute: return PAGE_EXECUTE;
-    case Protection::kXR:      return PAGE_EXECUTE_READ;
-    case Protection::kXW:      return PAGE_EXECUTE_READWRITE;
-    case Protection::kRW:      return PAGE_READWRITE;
-    case Protection::kXRW:     return PAGE_EXECUTE_READWRITE;
+    case Protection::kNone:             return PAGE_NOACCESS;
+    case Protection::kRead:             return PAGE_READONLY;
+    case Protection::kWrite:            return PAGE_READWRITE;
+    case Protection::kExecute:          return PAGE_EXECUTE;
+    case Protection::kExecuteRead:      return PAGE_EXECUTE_READ;
+    case Protection::kExecuteWrite:     return PAGE_EXECUTE_READWRITE;
+    case Protection::kReadWrite:        return PAGE_READWRITE;
+    case Protection::kExecuteReadWrite: return PAGE_EXECUTE_READWRITE;
     default:
       return PAGE_NOACCESS;
   }
