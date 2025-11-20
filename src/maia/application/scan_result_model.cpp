@@ -116,7 +116,8 @@ void ClearStorage(ScanStorage& storage) {
 }  // namespace
 
 ScanResultModel::ScanResultModel() {
-  StartAutoUpdate();
+  // TODO: replace this with a signal to set the auto-start.
+  // StartAutoUpdate();
 }
 
 void ScanResultModel::FirstScan() {
