@@ -226,7 +226,7 @@ void ScanResultModel::FirstScan() {
 void ScanResultModel::NextScan() {
   std::scoped_lock lock(mutex_);
 
-  // 1. Validate State
+  // Validate State
   if (curr_entries_.addresses.empty()) {
     return;
   }
@@ -236,7 +236,7 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // 2. Move Current -> Previous (Snapshot)
+  // Move Current -> Previous (Snapshot)
   // This makes curr_entries_ empty and ready to accept filtered results.
   prev_entries_ = std::move(curr_entries_);
 
@@ -247,7 +247,7 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // 3. Read Current Memory (Batch)
+  // Read Current Memory (Batch)
   // We read the live values of all addresses found in the previous scan.
   std::vector<std::byte> current_memory_buffer(count * stride);
   if (!active_process_->ReadMemory(
@@ -258,13 +258,13 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // 4. Prepare Filtered Storage
+  // Prepare Filtered Storage
   ScanStorage filtered_storage;
   filtered_storage.stride = stride;
   filtered_storage.addresses.reserve(count);
   filtered_storage.raw_values_buffer.reserve(count * stride);
 
-  // 5. Comparison Logic
+  // Comparison Logic
   const auto check_condition = [&](std::span<const std::byte> curr,
                                    std::span<const std::byte> prev) -> bool {
     switch (scan_comparison_) {
@@ -291,7 +291,7 @@ void ScanResultModel::NextScan() {
     }
   };
 
-  // 6. Filter Loop (Structure of Arrays)
+  // Filter Loop (Structure of Arrays)
   const std::byte* curr_ptr = current_memory_buffer.data();
   const std::byte* prev_ptr = prev_entries_.raw_values_buffer.data();
 
@@ -312,7 +312,7 @@ void ScanResultModel::NextScan() {
     prev_ptr += stride;
   }
 
-  // 7. Commit Results
+  // Commit Results
   curr_entries_ = std::move(filtered_storage);
   signals_.memory_changed.publish(curr_entries_);
 }
