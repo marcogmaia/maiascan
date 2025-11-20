@@ -71,63 +71,160 @@ constexpr bool IsValueIncreased(std::span<const std::byte> current,
   return LoadValue<T>(current) > LoadValue<T>(previous);
 }
 
+// Helper to check a single type
+// Check that f.operator()<T>() is valid and returns something convertible to
+// bool.
+template <typename F, typename T>
+concept CheckScanType = requires(F& f) {
+  { f.template operator()<T>() } -> std::convertible_to<bool>;
+};
+
+// The main concept: Ensures the functor works for all critical variants
+template <typename F>
+concept CScanPredicate = CheckScanType<F, uint8_t> &&
+                         CheckScanType<F, uint64_t> && CheckScanType<F, double>;
+
+// We don't need to list every single integer; checking the boundaries
+// (u8, u64, double) usually covers the generic lambda's validity.
+
+// clang-format off
+// Runtime enum to a compile-time template instantiation.
+template <CScanPredicate Func>
+constexpr auto DispatchScanType(ScanValueType type, Func&& func) {
+  switch (type) {
+    case ScanValueType::kUInt8:  return func.template operator()<uint8_t>();
+    case ScanValueType::kUInt16: return func.template operator()<uint16_t>();
+    case ScanValueType::kUInt32: return func.template operator()<uint32_t>();
+    case ScanValueType::kUInt64: return func.template operator()<uint64_t>();
+    case ScanValueType::kInt8:   return func.template operator()<int8_t>();
+    case ScanValueType::kInt16:  return func.template operator()<int16_t>();
+    case ScanValueType::kInt32:  return func.template operator()<int32_t>();
+    case ScanValueType::kInt64:  return func.template operator()<int64_t>();
+    case ScanValueType::kFloat:  return func.template operator()<float>();
+    case ScanValueType::kDouble: return func.template operator()<double>();
+    default:
+      return false;
+  }
+}
+
+constexpr size_t GetDataTypeSize(ScanValueType type) {
+  switch (type) {
+    case ScanValueType::kUInt8:  return sizeof(uint8_t);
+    case ScanValueType::kUInt16: return sizeof(uint16_t);
+    case ScanValueType::kUInt32: return sizeof(uint32_t);
+    case ScanValueType::kUInt64: return sizeof(uint64_t);
+    case ScanValueType::kInt8:   return sizeof(int8_t);
+    case ScanValueType::kInt16:  return sizeof(int16_t);
+    case ScanValueType::kInt32:  return sizeof(int32_t);
+    case ScanValueType::kInt64:  return sizeof(int64_t);
+    case ScanValueType::kFloat:  return sizeof(float);
+    case ScanValueType::kDouble: return sizeof(double);
+    default:
+      return sizeof(uint32_t);
+  }
+}
+
+// clang-format on
+
 }  // namespace
 
-void ScanResultModel::FirstScan(std::vector<std::byte> value_to_scan) {
-  if (!CanScan(active_process_)) {
-    LogWarning("Process is invalid.");
-    return;
-  }
-  // Lock the mutex for the entire operation
+void ScanResultModel::FirstScan() {
   std::scoped_lock lock(mutex_);
 
-  prev_entries_ = std::move(entries_);
-  entries_.clear();
-
-  if (value_to_scan.empty()) {
-    signals_.memory_changed.publish(entries_);
+  if (!CanScan(active_process_)) {
+    LogWarning("Process is invalid for first scan.");
     return;
   }
 
-  constexpr auto kPageSize = 4096;
-  std::vector<ScanEntry> new_entries;
-  new_entries.reserve(kPageSize);
+  prev_entries_ = std::move(curr_entries_);
+  curr_entries_.clear();
+
+  if (scan_comparison_ != ScanComparison::kExactValue) {
+    scan_comparison_ = ScanComparison::kUnknown;
+  }
+
+  const bool is_exact_scan = (scan_comparison_ == ScanComparison::kExactValue);
+  size_t scan_stride = 0;
+
+  if (is_exact_scan) {
+    if (target_scan_value_.empty()) {
+      LogWarning("FirstScan (Exact) requested, but Target Value is empty.");
+      return;
+    }
+    scan_stride = target_scan_value_.size();
+  } else {
+    scan_stride = GetDataTypeSize(scan_value_type_);
+  }
+
+  if (scan_stride == 0) {
+    return;
+  }
+
+  // Heuristic: Unknown scans create massive lists; reserve carefully.
+  // Realistically, 'Unknown' on 1GB of RAM = 250 million entries.
+  // This vector implementation will consume ~9GB RAM for 1GB scan.
+  // Warning: This needs optimization, our entries are naive.
+  curr_entries_.reserve(is_exact_scan ? 4096 : 100000);
 
   auto regions = active_process_->GetMemoryRegions();
 
   for (const auto& region : regions) {
-    // Skip non-readable regions
     if (!IsReadable(region.protection)) {
       continue;
     }
 
-    // Read the entire region.
-    std::optional<std::vector<std::byte>> region_buffer =
-        ReadRegion(region, *active_process_);
-    if (!region_buffer) {
+    // Read the entire region
+    std::vector<std::byte> region_buffer(region.size);
+    if (!active_process_->ReadMemory(
+            {&region.base, 1}, region.size, region_buffer)) {
       continue;
     }
 
-    // Search for the value pattern in this region.
-    auto& read_buffer = *region_buffer;
-    auto it = read_buffer.begin();
-    auto end = read_buffer.end();
-    while (true) {
-      it = std::search(it, end, value_to_scan.begin(), value_to_scan.end());
-      if (it == end) {
-        break;  // Not found
+    auto it = region_buffer.begin();
+    const auto end = region_buffer.end();
+
+    // --- STRATEGY A: Exact Value (Search) ---
+    if (is_exact_scan) {
+      const auto val_begin = target_scan_value_.begin();
+      const auto val_end = target_scan_value_.end();
+
+      while (true) {
+        it = std::search(it, end, val_begin, val_end);
+        if (it == end) {
+          break;
+        }
+
+        uintptr_t found_address =
+            region.base + std::distance(region_buffer.begin(), it);
+        curr_entries_.emplace_back(found_address, target_scan_value_);
+
+        // Advance by 1 (standard cheat engine behavior to find
+        // overlapping/unaligned) Or advance by scan_stride for aligned-only
+        // speed.
+        std::advance(it, 1);
       }
+    }
+    // --- STRATEGY B: Unknown Initial Value (Snapshot) ---
+    else {
+      // Loop through the buffer respecting alignment stride
+      // e.g., if stride is 4, we grab 0, 4, 8, 12...
+      // We do NOT grab 1, 2, 3 because "Unknown" scans usually assume alignment
+      // to reduce the result set size.
 
-      size_t offset = std::distance(read_buffer.begin(), it);
-      new_entries.emplace_back(region.base + offset, value_to_scan);
+      const size_t limit = region_buffer.size() - scan_stride;
 
-      // Move past this match to find the next one.
-      std::advance(it, value_to_scan.size());
+      for (size_t offset = 0; offset <= limit; offset += scan_stride) {
+        // Create a snapshot of this address
+        auto data_start = region_buffer.begin() + offset;
+
+        curr_entries_.emplace_back(
+            region.base + offset,
+            std::vector<std::byte>(data_start, data_start + scan_stride));
+      }
     }
   }
 
-  entries_ = std::move(new_entries);
-  signals_.memory_changed.publish(entries_);
+  signals_.memory_changed.publish(curr_entries_);
 }
 
 void ScanResultModel::SetActiveProcess(IProcess* process) {
@@ -135,36 +232,8 @@ void ScanResultModel::SetActiveProcess(IProcess* process) {
 }
 
 void ScanResultModel::Clear() {
-  entries_.clear();
+  curr_entries_.clear();
   prev_entries_.clear();
-}
-
-void ScanResultModel::UpdateCurrentValues() {
-  std::scoped_lock lock(mutex_);
-
-  if (entries_.empty() || !CanScan(active_process_)) {
-    return;
-  }
-
-  // We assume all entries have the same size based on the first scan logic
-  const size_t value_size = entries_[0].data.size();
-
-  auto addresses = entries_ | std::views::transform(&ScanEntry::address) |
-                   std::ranges::to<std::vector<MemoryAddress>>();
-
-  std::vector<std::byte> buffer(addresses.size() * value_size);
-
-  if (!active_process_->ReadMemory(addresses, value_size, buffer)) {
-    return;
-  }
-
-  auto new_values = buffer | std::views::chunk(value_size);
-
-  for (auto [entry, new_val] : std::views::zip(entries_, new_values)) {
-    std::ranges::copy(new_val, entry.data.begin());
-  }
-
-  signals_.memory_changed.publish(entries_);
 }
 
 void ScanResultModel::StartAutoUpdate() {
@@ -175,8 +244,8 @@ void ScanResultModel::StartAutoUpdate() {
 
   task_ = std::jthread([this](std::stop_token stop_token) {
     while (!stop_token.stop_requested()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
       UpdateCurrentValues();
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
   });
 }
@@ -191,7 +260,7 @@ void ScanResultModel::StopAutoUpdate() {
 void ScanResultModel::NextScan() {
   std::scoped_lock lock(mutex_);
 
-  if (entries_.empty()) {
+  if (curr_entries_.empty()) {
     return;
   }
 
@@ -200,113 +269,88 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // Validate uniform value size across entries
-  const size_t value_size = entries_[0].data.size();
-  if (value_size == 0 || value_size > 8) {
-    LogWarning("Invalid value size {} for next scan.", value_size);
-    return;
-  }
+  prev_entries_ = curr_entries_;
 
-  // Store previous scan results for comparison
-  prev_entries_ = entries_;  // Copy, not move
+  const auto addresses = curr_entries_ |
+                         std::views::transform(&ScanEntry::address) |
+                         std::ranges::to<std::vector<MemoryAddress>>();
 
-  // Extract all addresses for efficient batch reading
-  const std::vector<MemoryAddress> addresses =
-      entries_ | std::views::transform(&ScanEntry::address) |
-      std::ranges::to<std::vector<MemoryAddress>>();
-
-  // #ifndef NDEBUG
-  //   // Debug check for uniform size
-  //   if (!std::ranges::all_of(entries_, [value_size](const auto& e) {
-  //         return e.data.size() == value_size;
-  //       })) {
-  //     LogWarning("Value sizes are not uniform across entries.");
-  //     return;
-  //   }
-  // #endif
-
-  // Read current values from all addresses in a single batch operation
+  const size_t value_size = curr_entries_[0].data.size();
   std::vector<std::byte> buffer(addresses.size() * value_size);
+
   if (!active_process_->ReadMemory(addresses, value_size, buffer)) {
     LogWarning("Failed to read memory during next scan.");
     return;
   }
 
-  // Filter entries based on comparison mode
-  std::vector<ScanEntry> filtered_entries;
-  filtered_entries.reserve(entries_.size());
-
-  for (size_t i = 0; i < entries_.size(); ++i) {
-    const auto& prev_entry = prev_entries_[i];
-    std::span<const std::byte> current_bytes(&buffer[i * value_size],
-                                             value_size);
-    std::span<const std::byte> prev_bytes(prev_entry.data);
-
-    bool should_keep = false;
-
+  const auto check_condition = [&](std::span<const std::byte> curr,
+                                   std::span<const std::byte> prev) -> bool {
     switch (scan_comparison_) {
-        // clang-format off
-      case ScanComparison::kChanged:   should_keep = !std::ranges::equal(current_bytes, prev_bytes); break;
-      case ScanComparison::kUnchanged: should_keep =  std::ranges::equal(current_bytes, prev_bytes); break;
+      case ScanComparison::kChanged:
+        return IsValueChanged(curr, prev);
+      case ScanComparison::kUnchanged:
+        return !IsValueChanged(curr, prev);
 
       case ScanComparison::kIncreased:
-        switch (value_size) {
-          case 1: should_keep = IsValueIncreased<uint8_t>(current_bytes, prev_bytes); break;
-          case 2: should_keep = IsValueIncreased<uint16_t>(current_bytes, prev_bytes); break;
-          case 4: should_keep = IsValueIncreased<uint32_t>(current_bytes, prev_bytes); break;
-          case 8: should_keep = IsValueIncreased<uint64_t>(current_bytes, prev_bytes); break;
-        }
-        break;
+        return DispatchScanType(scan_value_type_, [&]<typename T>() {
+          return IsValueIncreased<T>(curr, prev);
+        });
 
       case ScanComparison::kDecreased:
-        switch (value_size) {
-          case 1: should_keep = IsValueDecreased<uint8_t>(current_bytes, prev_bytes); break;
-          case 2: should_keep = IsValueDecreased<uint16_t>(current_bytes, prev_bytes); break;
-          case 4: should_keep = IsValueDecreased<uint32_t>(current_bytes, prev_bytes); break;
-          case 8: should_keep = IsValueDecreased<uint64_t>(current_bytes, prev_bytes); break;
-        }
-        break;
-        // clang-format on
+        return DispatchScanType(scan_value_type_, [&]<typename T>() {
+          return IsValueDecreased<T>(curr, prev);
+        });
 
-      case ScanComparison::kIncreasedBy:
-      case ScanComparison::kDecreasedBy:
-        // TODO: Add int64_t compare_value_ member with setter
-        // should_keep = (current_val - prev_val) == compare_value_;
-        LogWarning(
-            "Scan comparison 'IncreasedBy/DecreasedBy' requires delta value "
-            "parameter");
-        break;
-
-      case ScanComparison::kExactValue:
-      case ScanComparison::kNotEqual:
-      case ScanComparison::kGreaterThan:
-      case ScanComparison::kLessThan:
-      case ScanComparison::kBetween:
-      case ScanComparison::kNotBetween:
-        // TODO: Add std::vector<std::byte> target_value_ member(s) with setters
-        LogWarning("Scan comparison mode requires target value parameter(s)");
-        break;
-
-      case ScanComparison::kUnknown:
       default:
-        LogWarning("Unknown scan comparison mode: {}",
-                   static_cast<int>(scan_comparison_));
-        break;
+        return false;
     }
+  };
 
-    if (should_keep) {
-      // Update entry with current value (preserve address, update data)
+  std::vector<ScanEntry> filtered_entries;
+  filtered_entries.reserve(curr_entries_.size());
+
+  const std::byte* cursor = buffer.data();
+  for (size_t i = 0; i < curr_entries_.size(); ++i) {
+    std::span<const std::byte> current_bytes(cursor, value_size);
+    std::span<const std::byte> prev_bytes(prev_entries_[i].data);
+
+    if (check_condition(current_bytes, prev_bytes)) {
       filtered_entries.emplace_back(
-          prev_entry.address,
+          prev_entries_[i].address,
           std::vector<std::byte>(current_bytes.begin(), current_bytes.end()));
     }
+
+    cursor += value_size;
   }
 
-  // Replace entries with filtered results
-  entries_ = std::move(filtered_entries);
+  curr_entries_ = std::move(filtered_entries);
+  signals_.memory_changed.publish(curr_entries_);
+}
 
-  // Notify UI/components of updated results
-  signals_.memory_changed.publish(entries_);
+void ScanResultModel::UpdateCurrentValues() {
+  std::scoped_lock lock(mutex_);
+
+  if (curr_entries_.empty() || !CanScan(active_process_)) {
+    return;
+  }
+
+  auto addresses = curr_entries_ | std::views::transform(&ScanEntry::address) |
+                   std::ranges::to<std::vector<MemoryAddress>>();
+
+  const size_t value_size = curr_entries_[0].data.size();
+  std::vector<std::byte> buffer(addresses.size() * value_size);
+
+  if (!active_process_->ReadMemory(addresses, value_size, buffer)) {
+    return;
+  }
+
+  auto new_values = buffer | std::views::chunk(value_size);
+
+  for (auto [entry, new_val] : std::views::zip(curr_entries_, new_values)) {
+    std::ranges::copy(new_val, entry.data.begin());
+  }
+
+  signals_.memory_changed.publish(curr_entries_);
 }
 
 ScanResultModel::ScanResultModel() {

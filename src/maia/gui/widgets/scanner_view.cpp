@@ -233,23 +233,23 @@ void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
       ImGui::EndTable();
     }
 
+    const int base = is_hex_input_ ? 16 : 10;
+
+    const ScanValueType selected_type =
+        kScanValueTypeByIndex.at(current_type_index_);
+    auto needle_bytes = ParseToBytes(str_, selected_type, base);
+
+    // clang-format off
     ImGui::Separator();
+    if (ImGui::Button("First Scan")) { signals_.new_scan_pressed.publish(needle_bytes); } ImGui::SameLine();
+    if (ImGui::Button("Next Scan")) { signals_.next_scan_pressed.publish(); }
+    ImGui::Separator();
+    // clang-format on
 
-    if (ImGui::BeginChild("Table")) {
-      const int base = is_hex_input_ ? 16 : 10;
-
-      const ScanValueType selected_type =
-          kScanValueTypeByIndex.at(current_type_index_);
-      auto needle_bytes = ParseToBytes(str_, selected_type, base);
-
-      if (ImGui::Button("First Scan")) {
-        signals_.new_scan_pressed.publish(needle_bytes);
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Next Scan")) {
-        signals_.next_scan_pressed.publish();
-      }
-
+    if (entries.size() > 2000) {
+      ImGui::TextUnformatted(
+          std::format("Values found: {}", entries.size()).c_str());
+    } else if (ImGui::BeginChild("Table")) {
       const ImGuiTableFlags flags = ImGuiTableFlags_RowBg;
 
       if (ImGui::BeginTable("Tab", 2, flags)) {

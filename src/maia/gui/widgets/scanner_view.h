@@ -23,10 +23,10 @@ class ScannerWidget {
     // TODO:
     entt::sigh<void(ScanComparison)> scan_comparison_selected;
     // entt::sigh<void()> filter_changed;
-    entt::sigh<void(ScanEntry)> entry_selected;
+    entt::sigh<void(ScanStorage)> entry_selected;
   };
 
-  void Render(const std::vector<ScanEntry>& entries);
+  void Render(const std::vector<ScanStorage>& entries);
 
   Signals& signals() {
     return signals_;
