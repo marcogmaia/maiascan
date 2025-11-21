@@ -19,6 +19,79 @@ namespace maia::mmem {
 
 namespace {
 
+namespace internal {
+
+using PfnNtReadVirtualMemory = NTSTATUS(NTAPI*)(HANDLE ProcessHandle,
+                                                PVOID BaseAddress,
+                                                PVOID Buffer,
+                                                SIZE_T NumberOfBytesToRead,
+                                                PSIZE_T NumberOfBytesRead);
+
+/// \brief Helper to retrieve the NtReadVirtualMemory function pointer.
+/// \return Pointer to the function or nullptr if not found.
+PfnNtReadVirtualMemory GetNtReadVirtualMemory() {
+  static PfnNtReadVirtualMemory func = []() -> PfnNtReadVirtualMemory {
+    HMODULE h_ntdll = ::GetModuleHandleW(L"ntdll.dll");
+    if (!h_ntdll) {
+      return nullptr;
+    }
+    return reinterpret_cast<PfnNtReadVirtualMemory>(
+        ::GetProcAddress(h_ntdll, "NtReadVirtualMemory"));
+  }();
+  return func;
+}
+
+/// \brief High-performance memory read using undocumented NT API.
+/// \param h_process A valid handle to the target process (PROCESS_VM_READ).
+/// \param source The address to read from.
+/// \param dest The destination buffer.
+/// \return Number of bytes successfully read.
+size_t ReadMemoryInternal(HANDLE h_process,
+                          uintptr_t source,
+                          std::span<std::byte> dest) {
+  if (!h_process || source == 0 || dest.empty()) {
+    return 0;
+  }
+
+  static const auto kNtRead = GetNtReadVirtualMemory();
+
+  // Fallback to standard API if NT function is missing (rare).
+  if (!kNtRead) {
+    SIZE_T bytes_read = 0;
+    ::ReadProcessMemory(h_process,
+                        std::bit_cast<LPCVOID>(source),
+                        dest.data(),
+                        dest.size(),
+                        &bytes_read);
+    return bytes_read;
+  }
+
+  SIZE_T bytes_read = 0;
+  NTSTATUS status = kNtRead(h_process,
+                            std::bit_cast<PVOID>(source),
+                            dest.data(),
+                            dest.size(),
+                            &bytes_read);
+
+  // NT_SUCCESS(status) is generally (status >= 0).
+  return (status >= 0) ? bytes_read : 0;
+}
+
+}  // namespace internal
+
+SIZE_T ReadMemoryPublicApi(HANDLE h_proc,
+                           uintptr_t source,
+                           std::span<std::byte> dest) {
+  SIZE_T bytes_read = 0;
+  bool success = ::ReadProcessMemory(h_proc,
+                                     std::bit_cast<LPCVOID>(source),
+                                     dest.data(),
+                                     dest.size(),
+                                     &bytes_read) != FALSE;
+
+  return success ? bytes_read : 0;
+}
+
 // RAII helper for process handles.
 using ProcessHandle =
     // Use void* as the "type" for the handle.
@@ -573,14 +646,7 @@ size_t ReadMemory(const ProcessDescriptor& process,
     return 0;
   }
 
-  SIZE_T bytes_read = 0;
-  bool success = ::ReadProcessMemory(h_process.get(),
-                                     std::bit_cast<LPCVOID>(source),
-                                     dest.data(),
-                                     dest.size(),
-                                     &bytes_read) != FALSE;
-
-  return success ? bytes_read : 0;
+  return internal::ReadMemoryInternal(h_process.get(), source, dest);
 }
 
 size_t WriteMemory(uintptr_t dest, std::span<const std::byte> source) {
