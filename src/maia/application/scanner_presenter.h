@@ -4,7 +4,6 @@
 
 #include "maia/application/process_model.h"
 #include "maia/application/scan_result_model.h"
-#include "maia/core/signals.h"
 #include "maia/gui/widgets/scanner_view.h"
 
 namespace maia {
@@ -20,11 +19,13 @@ class ScannerPresenter {
   }
 
  private:
+  void OnAutoUpdateChanged(bool is_checked);
+
   ScanResultModel& scan_result_model_;
   ProcessModel& process_model_;
   ScannerWidget& scanner_widget_;
 
-  SinkStorage sinks_;
+  std::vector<entt::scoped_connection> connections_;
 };
 
 }  // namespace maia

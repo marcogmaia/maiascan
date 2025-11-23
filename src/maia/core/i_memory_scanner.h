@@ -2,36 +2,70 @@
 
 #pragma once
 
-#include <span>
+#include <string>
+#include <variant>
 #include <vector>
+
+#include "maia/core/scan_result.h"
+#include "maia/core/scan_types.h"
 
 namespace maia {
 
-/// \brief Defines a contract for performing memory scanning operations
-/// against a specific process.
-class IMemoryScanner {
- public:
-  virtual ~IMemoryScanner() = default;
+namespace detail {
 
-  /// \brief Performs an initial scan of the process.
-  /// \param value A span representing the value to search for.
-  /// \return A std::vector of addresses where the value was found.
-  virtual std::vector<uintptr_t> FirstScan(
-      std::span<const std::byte> value) = 0;
-
-  // /// \brief Performs a subsequent scan for an exact value.
-  // /// \param previous_results A span of addresses from the last scan.
-  // /// \param new_value A span representing the new value to search for.
-  // /// \return A std::vector of addresses that still match the new value.
-  // [[nodiscard]] virtual std::vector<uintptr_t> NextScanExactValue(
-  //     std::span<const uintptr_t> previous_results,
-  //     std::span<const std::byte> new_value) = 0;
-
-  // /// \brief Performs a scan for values that have not changed.
-  // /// \param previous_results A span of addresses from the last scan.
-  // /// \return A std::vector of addresses whose values are unchanged.
-  // [[nodiscard]] virtual std::vector<uintptr_t> NextScanUnchangedValue(
-  //     std::span<const uintptr_t> previous_results) = 0;
+struct VariableParamsBase {
+  ScanComparison type = ScanComparison::kExactValue;
 };
+
+}  // namespace detail
+
+template <typename T>
+struct ScanParamsType {
+  using value_type = T;
+
+  ScanComparison comparison = ScanComparison::kUnknown;
+  value_type value{};
+  value_type upper_bound{};
+};
+
+template <>
+struct ScanParamsType<std::string> : detail::VariableParamsBase {
+  std::string pattern;
+  bool case_sensitive = false;
+};
+
+template <>
+struct ScanParamsType<std::wstring> : detail::VariableParamsBase {
+  std::wstring pattern;
+  bool case_sensitive = false;
+};
+
+template <>
+struct ScanParamsType<std::vector<std::byte>> : detail::VariableParamsBase {
+  std::vector<std::byte> pattern;
+};
+
+using ScanParams = std::variant<ScanParamsType<int8_t>,
+                                ScanParamsType<uint8_t>,
+                                ScanParamsType<int16_t>,
+                                ScanParamsType<uint16_t>,
+                                ScanParamsType<int32_t>,
+                                ScanParamsType<uint32_t>,
+                                ScanParamsType<int64_t>,
+                                ScanParamsType<uint64_t>,
+                                ScanParamsType<float>,
+                                ScanParamsType<double>,
+                                ScanParamsType<std::string>,
+                                ScanParamsType<std::wstring>,
+                                ScanParamsType<std::vector<std::byte>>>;
+
+template <CScannableType T>
+auto MakeScanParams(ScanComparison comparison, T value, T upper_bound = {}) {
+  ScanParamsType<T> params;
+  params.comparison = comparison;
+  params.value = value;
+  params.upper_bound = upper_bound;
+  return params;
+}
 
 }  // namespace maia

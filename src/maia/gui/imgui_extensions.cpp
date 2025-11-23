@@ -1,6 +1,6 @@
 // Copyright (c) Maia
 
-#include "gui/imgui_extensions.h"
+#include "maia/gui/imgui_extensions.h"
 
 #include <expected>
 

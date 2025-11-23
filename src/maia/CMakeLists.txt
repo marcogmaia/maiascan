@@ -4,18 +4,29 @@ add_subdirectory(application)
 add_subdirectory(console)
 add_subdirectory(core)
 add_subdirectory(gui)
-add_subdirectory(scanner)
+add_subdirectory(mmem)
 
 find_package(spdlog CONFIG REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
+find_package(libassert CONFIG REQUIRED)
 
-add_library(base INTERFACE)
-target_sources(base INTERFACE FILE_SET HEADERS FILES logging.h)
+add_library(base)
+target_sources(
+  base
+  PUBLIC
+    FILE_SET HEADERS
+      BASE_DIRS "${MAIA_BASE_DIR}"
+      FILES ./logging.h ./assert.h
+  PRIVATE
+    assert.cpp
+)
+
 target_link_libraries(
   base
-  INTERFACE
+  PUBLIC
     spdlog::spdlog
     EnTT::EnTT
+    libassert::assert
 )
 
 add_executable(maiascan main.cpp)
@@ -26,5 +37,4 @@ target_link_libraries(
     gui
     core
     application
-    scanner
 )

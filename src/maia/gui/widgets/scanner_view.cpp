@@ -2,23 +2,38 @@
 
 #include "maia/gui/widgets/scanner_view.h"
 
-#include <format>
+#include <array>
+#include <charconv>
+#include <cstring>
 #include <optional>
 #include <string_view>
+#include <vector>
+
+#include <imgui.h>
+#include <imgui_stdlib.h>
+
+#include "maia/gui/widgets/results_table.h"
 
 namespace maia {
 
 namespace {
 
-std::optional<uint32_t> ToUint32(std::string_view sview, int base = 10) {
+template <typename T>
+std::optional<T> ParseValue(std::string_view sview, int base = 10) {
   if (base == 16 && sview.starts_with("0x")) {
     sview = sview.substr(2);
   }
   const char* first = sview.data();
   const char* last = first + sview.size();
 
-  uint32_t value;
-  std::from_chars_result result = std::from_chars(first, last, value, base);
+  T value;
+  std::from_chars_result result;
+
+  if constexpr (std::is_floating_point_v<T>) {
+    result = std::from_chars(first, last, value);
+  } else {
+    result = std::from_chars(first, last, value, base);
+  }
 
   if (result.ec != std::errc() || result.ptr != last) {
     return std::nullopt;
@@ -26,109 +41,210 @@ std::optional<uint32_t> ToUint32(std::string_view sview, int base = 10) {
   return value;
 }
 
-std::vector<std::byte> ToByteVector(uint32_t value) {
-  std::vector<std::byte> bytes(
-      reinterpret_cast<std::byte*>(&value),
-      reinterpret_cast<std::byte*>(&value) + sizeof(value));
+template <typename T>
+std::vector<std::byte> ToByteVector(T value) {
+  std::vector<std::byte> bytes(sizeof(T));
+  std::memcpy(bytes.data(), &value, sizeof(T));
   return bytes;
 }
 
-void TextEntryValue(const ScanEntry& entry, bool is_hexadecimal = false) {
-  // TODO: Make this safer, and enable the printing of other data types.
-  auto value_to_show = *reinterpret_cast<const uint32_t*>(entry.data.data());
-  if (is_hexadecimal) {
-    ImGui::TextUnformatted(std::format("0x{:x}", value_to_show).c_str());
-  } else {
-    ImGui::TextUnformatted(std::format("{}", value_to_show).c_str());
+template <typename T>
+std::vector<std::byte> GetBytes(const std::string& str, int base) {
+  return ParseValue<T>(str, base)
+      .transform(ToByteVector<T>)
+      .value_or(std::vector<std::byte>{});
+}
+
+// clang-format off
+
+std::vector<std::byte> ParseStringByType(const std::string& str,
+                                         ScanValueType type,
+                                         int base) {
+  switch (type) {
+    case ScanValueType::kInt8:   return GetBytes<int8_t>(str, base);
+    case ScanValueType::kUInt8:  return GetBytes<uint8_t>(str, base);
+    case ScanValueType::kInt16:  return GetBytes<int16_t>(str, base);
+    case ScanValueType::kUInt16: return GetBytes<uint16_t>(str, base);
+    case ScanValueType::kInt32:  return GetBytes<int32_t>(str, base);
+    case ScanValueType::kUInt32: return GetBytes<uint32_t>(str, base);
+    case ScanValueType::kInt64:  return GetBytes<int64_t>(str, base);
+    case ScanValueType::kUInt64: return GetBytes<uint64_t>(str, base);
+    case ScanValueType::kFloat:  return GetBytes<float>(str, base);
+    case ScanValueType::kDouble: return GetBytes<double>(str, base);
+    default: return {};
   }
 }
 
+// clang-format on
+
+constexpr std::array<ScanValueType, 10> kScanValueTypeByIndex = {
+    ScanValueType::kInt8,
+    ScanValueType::kUInt8,
+    ScanValueType::kInt16,
+    ScanValueType::kUInt16,
+    ScanValueType::kInt32,
+    ScanValueType::kUInt32,
+    ScanValueType::kInt64,
+    ScanValueType::kUInt64,
+    ScanValueType::kFloat,
+    ScanValueType::kDouble,
+};
+
+constexpr std::array<const char*, 10> kScanValueTypeLabels = {
+    "Int8",
+    "UInt8",
+    "Int16",
+    "UInt16",
+    "Int32",
+    "UInt32",
+    "Int64",
+    "UInt64",
+    "Float",
+    "Double",
+};
+
+constexpr std::array<const char*, 13> kScanComparisonLabels = {
+    "Unknown",
+    "Exact Value",
+    "Not Equal",
+    "Greater Than",
+    "Less Than",
+    "Between",
+    "Not Between",
+    "Changed",
+    "Unchanged",
+    "Increased",
+    "Decreased",
+    "Increased By",
+    "Decreased By",
+};
+
+constexpr std::array<ScanComparison, 13> kScanComparisonByIndex = {
+    ScanComparison::kUnknown,
+    ScanComparison::kExactValue,
+    ScanComparison::kNotEqual,
+    ScanComparison::kGreaterThan,
+    ScanComparison::kLessThan,
+    ScanComparison::kBetween,
+    ScanComparison::kNotBetween,
+    ScanComparison::kChanged,
+    ScanComparison::kUnchanged,
+    ScanComparison::kIncreased,
+    ScanComparison::kDecreased,
+    ScanComparison::kIncreasedBy,
+    ScanComparison::kDecreasedBy,
+};
+
 }  // namespace
 
-void ScannerWidget::Render(const std::vector<ScanEntry>& entries) {
-  if (ImGui::Begin("Scanner")) {
-    if (ImGui::BeginTable("InputTable", 2)) {
-      ImGui::TableSetupColumn("Labels", ImGuiTableColumnFlags_WidthFixed);
-      ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
+void ScannerWidget::Render(const ScanStorage& entries) {
+  if (!ImGui::Begin("Scanner")) {
+    ImGui::End();
+    return;
+  }
 
+  // Render Search Configuration (Type, Comparison, Input).
+  const auto render_search_options = [this]() {
+    if (!ImGui::BeginTable("InputTable", 2)) {
+      return;
+    }
+
+    ImGui::TableSetupColumn("Labels", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
+
+    const auto draw_row = [](const char* label, auto&& widget_fn) {
       ImGui::TableNextRow();
       ImGui::TableSetColumnIndex(0);
-      ImGui::Text("Value:");
-
+      ImGui::TextUnformatted(label);
       ImGui::TableSetColumnIndex(1);
-      // Makes the input fill the cell.
       ImGui::PushItemWidth(-FLT_MIN);
-      ImGui::InputText("##Input", &str_);
+      widget_fn();
       ImGui::PopItemWidth();
+    };
 
-      ImGui::TableNextRow();
-      ImGui::TableSetColumnIndex(0);
-      ImGui::Text("Hex");
+    draw_row("Type:", [this]() {
+      ImGui::Combo("##ValueType",
+                   &current_type_index_,
+                   kScanValueTypeLabels.data(),
+                   static_cast<int>(kScanValueTypeLabels.size()));
+    });
 
-      ImGui::TableSetColumnIndex(1);
-      ImGui::Checkbox("##HexInput", &is_hex_input_);
+    draw_row("Comparison:", [this]() {
+      if (ImGui::Combo("##ScanComparison",
+                       &selected_comparison_index_,
+                       kScanComparisonLabels.data(),
+                       static_cast<int>(kScanComparisonLabels.size()))) {
+        EmitSetComparisonSelected();
+      }
+    });
 
-      ImGui::EndTable();
-    }
+    draw_row("Value:", [this]() {
+      if (ImGui::InputText("##Input", &str_)) {
+        const int base = is_hex_input_ ? 16 : 10;
+        const auto type = kScanValueTypeByIndex.at(current_type_index_);
+        auto bytes = ParseStringByType(str_, type, base);
+        signals_.target_value_selected.publish(bytes);
+      }
+    });
 
+    draw_row("Options:", [this]() {
+      ImGui::Checkbox("Hex Input", &is_hex_input_);
+      ImGui::SameLine();
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20.0f);
+      if (ImGui::Checkbox("Auto Update", &auto_update_enabled_)) {
+        signals_.auto_update_changed.publish(auto_update_enabled_);
+      }
+    });
+
+    ImGui::EndTable();
+  };
+
+  // Render Action Buttons.
+  const auto render_actions = [this]() {
     ImGui::Separator();
-
-    if (ImGui::BeginChild("Table")) {
-      const int base = is_hex_input_ ? 16 : 10;
-      auto needle_bytes = ToUint32(str_, base)
-                              .transform(ToByteVector)
-                              .value_or(std::vector<std::byte>());
-      if (ImGui::Button("First Scan")) {
-        signals_.new_scan_pressed.publish(needle_bytes);
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Scan")) {
-        signals_.scan_button_pressed.publish(needle_bytes);
-      }
-
-      ImGui::SameLine();
-      if (ImGui::Button("Filter Changed")) {
-        signals_.filter_changed.publish();
-      }
-      ImGui::SetItemTooltip("Filter out all values\nthat have been changed.");
-
-      const ImGuiTableFlags flags = ImGuiTableFlags_RowBg;
-
-      if (ImGui::BeginTable("Tab", 2, flags)) {
-        ImGui::TableSetupColumn("Address");
-        ImGui::TableSetupColumn("Value");
-
-        ImGui::TableHeadersRow();
-
-        for (int i = 0; i < entries.size(); ++i) {
-          const auto& entry = entries[i];  // NOLINT
-          ImGui::TableNextRow();
-          ImGui::TableNextColumn();
-          const bool is_selected = (selected_index_ == i);
-          std::string address_str = std::format("0x{:x}", entry.address);
-
-          // ImGuiSelectableFlags_SpanAllColumns makes it fill the whole row.
-          if (ImGui::Selectable(address_str.c_str(),
-                                is_selected,
-                                ImGuiSelectableFlags_SpanAllColumns)) {
-            selected_index_ = i;
-            signals_.entry_selected.publish(entry);
-          }
-
-          ImGui::TableNextColumn();
-          // TODO: Make this work with other fundamental data types.
-          if (entry.data.size() >= sizeof(uint32_t)) {
-            TextEntryValue(entry, is_hex_input_);
-          } else {
-            ImGui::TextUnformatted("N/A");
-          }
-        }
-        ImGui::EndTable();
-      }
-      ImGui::EndChild();
+    if (ImGui::Button("First Scan")) {
+      signals_.new_scan_pressed.publish();
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Next Scan")) {
+      signals_.next_scan_pressed.publish();
+    }
+    ImGui::Separator();
+  };
+
+  // Execution Flow.
+  render_search_options();
+  render_actions();
+
+  // Render the number of results found.
+  const size_t total_count = entries.addresses.size();
+  if (total_count > 0) {
+    if (total_count > 10'000) {
+      constexpr auto kWarningYellow = ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
+      ImGui::TextColored(
+          kWarningYellow, "Found: %zu (Too many, please refine)", total_count);
+    } else {
+      ImGui::Text("Found: %zu", total_count);
+    }
+    ImGui::Spacing();
+  } else {
+    ImGui::TextDisabled("No results.");
+  }
+  ImGui::Separator();
+
+  // Render Result Table.
+  if (ImGui::BeginChild("Table")) {
+    ResultsTable table_renderer;
+    const auto type = kScanValueTypeByIndex.at(current_type_index_);
+    table_renderer.Render(entries, type, is_hex_input_, selected_index_);
+    ImGui::EndChild();
   }
   ImGui::End();
+}
+
+void ScannerWidget::EmitSetComparisonSelected() const {
+  signals_.scan_comparison_selected.publish(
+      kScanComparisonByIndex[selected_comparison_index_]);
 }
 
 }  // namespace maia

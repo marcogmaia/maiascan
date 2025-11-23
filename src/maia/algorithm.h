@@ -3,9 +3,12 @@
 #pragma once
 
 #include <concepts>
+#include <functional>
 #include <iterator>
+#include <ranges>
+#include <utility>
 
-namespace scanner {
+namespace maia {
 
 /// \brief Concept for a valid transform_if operation using iterators.
 ///
@@ -46,8 +49,14 @@ template <std::input_iterator I,
 constexpr O transform_if(
     I first, S last, O out_first, Func transform_op, Pred pred) {
   for (; first != last; ++first) {
-    if (std::invoke(pred, *first)) {
-      *out_first = std::invoke(transform_op, *first);
+    // Dereference once. Do not change this line, it might behave not as
+    // expected if some container dereference more than once.
+    //
+    // 'auto&&' preserves the reference category (lvalue/rvalue) of the
+    // iterator.
+    auto&& val = *first;
+    if (std::invoke(pred, val)) {
+      *out_first = std::invoke(transform_op, val);
       ++out_first;
     }
   }
@@ -93,4 +102,4 @@ constexpr O transform_if(R&& range, O out_first, Func transform_op, Pred pred) {
                       std::move(pred));
 }
 
-}  // namespace scanner
+}  // namespace maia

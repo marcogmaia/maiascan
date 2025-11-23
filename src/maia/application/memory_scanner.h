@@ -2,65 +2,55 @@
 
 #pragma once
 
-#include <algorithm>
-#include <ranges>
-
 #include "maia/core/i_memory_scanner.h"
 #include "maia/core/i_process.h"
+#include "maia/core/scan_result.h"
 #include "maia/logging.h"
 
 namespace maia {
 
-class MemoryScanner : public IMemoryScanner {
+class MemoryScanner {
  public:
-  explicit MemoryScanner(IProcess& process)
-      : process_(process),
-        memory_regions_(process_.GetMemoryRegions()) {}
+  explicit MemoryScanner(std::unique_ptr<IProcess> process)
+      : process_(std::move(process)),
+        memory_regions_(process_->GetMemoryRegions()) {}
 
-  std::vector<uintptr_t> FirstScan(std::span<const std::byte> value) override {
-    if (!process_.IsProcessValid()) {
-      LogWarning("Process is invalid.");
-      return {};
-    }
+  // ScanResult NewScan(const ScanParams& params);
 
-    const auto value_finder = [this, value](MemoryRegion reg) {
-      return FindValuesInRegion(reg, value);
-    };
-    auto view = memory_regions_ | std::views::transform(value_finder);
-    return std::views::join(view) | std::ranges::to<std::vector<uintptr_t>>();
-  }
+  // ScanResult NextScan(const ScanResult& previous_result,
+  //                     const ScanParams& params);
+
+  // void UpdateFromPrevious(IProcess& accessor) {
+  //   // This is where we beat CheatEngine!
+  //   // Instead of scanning all memory, only check addresses from previous
+  //   scan
+
+  //   std::vector<std::byte> new_values(current_layer_.addresses.size() *
+  //                                     current_layer_.value_size);
+
+  //   // Use batch ReadMemory (Component 3) - single syscall on Linux
+  //   accessor.ReadMemory(std::span(current_layer_.addresses),
+  //                       current_layer_.value_size,
+  //                       std::span(new_values));
+
+  //   // Compare old vs new values and update current_layer_
+  //   for (size_t i = 0; i < current_layer_.addresses.size(); ++i) {
+  //     size_t offset = i * current_layer_.value_size;
+  //     if (memcmp(&new_values[offset],
+  //                &previous_layer_.values[offset],
+  //                current_layer_.value_size) != 0) {
+  //       // Value changed - update current layer
+  //       memcpy(&current_layer_.values[offset],
+  //              &new_values[offset],
+  //              current_layer_.value_size);
+  //     }
+  //   }
+  // }
 
  private:
-  std::vector<uintptr_t> FindValuesInRegion(MemoryRegion region,
-                                            std::span<const std::byte> value) {
-    std::vector<std::byte> region_memory(region.size);
-    if (value.empty() ||
-        !process_.ReadMemory(region.base_address, region_memory)) {
-      return {};
-    }
-
-    constexpr size_t kPageSize = 4096;
-    std::vector<uintptr_t> addresses_found;
-    addresses_found.reserve(kPageSize);
-
-    size_t offset = 0;
-    auto it = region_memory.begin();
-    while (true) {
-      it = std::search(it, region_memory.end(), value.begin(), value.end());
-      if (it >= region_memory.end()) {
-        break;
-      }
-
-      offset = std::distance(region_memory.begin(), it);
-      addresses_found.emplace_back(region.base_address + offset);
-      std::advance(it, value.size());
-    }
-    return addresses_found;
-  }
-
-  IProcess& process_;
-
+  std::unique_ptr<IProcess> process_;
   std::vector<MemoryRegion> memory_regions_;
+  std::shared_ptr<const MemorySnapshot> snapshot_;
 };
 
 }  // namespace maia

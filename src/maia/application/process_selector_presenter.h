@@ -3,7 +3,6 @@
 #pragma once
 
 #include "maia/application/process_model.h"
-#include "maia/core/signals.h"
 #include "maia/gui/widgets/process_selector_view.h"
 
 namespace maia {
@@ -26,8 +25,6 @@ class ProcessSelectorPresenter {
   std::vector<ProcessInfo> process_list_;
   std::string selected_process_name_ = "N/A";
   Pid selected_pid_ = 0;
-
-  SinkStorage sinks_;
 };
 
 }  // namespace maia

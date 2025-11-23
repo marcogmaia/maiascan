@@ -26,7 +26,7 @@ int main() {
   int health = 100;
   int mana = 100;
   uint8_t gold{};
-  int16_t miles = 5;
+  int16_t kilometers = 5;
   float rate = 0.1f;
   double science = 0.1;
   std::string message = "hello world";
@@ -36,7 +36,7 @@ int main() {
     Show("health", health);
     Show("mana", mana);
     Show("gold", gold);
-    Show("miles", miles);
+    Show("kilometers", kilometers);
     Show("rate", rate);
     Show("science", science);
     Show("message", message);
@@ -47,7 +47,7 @@ int main() {
     --health;
     mana -= 2;
     ++gold;
-    miles += 10;
+    kilometers += 10;
     rate += .2f;
     science += .003f;
     message += "!";

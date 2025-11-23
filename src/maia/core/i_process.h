@@ -6,19 +6,30 @@
 #include <vector>
 
 #include "maia/core/memory_common.h"
+#include "maia/mmem/mmem.h"
 
 namespace maia {
+
+using MemoryRegion = mmem::SegmentDescriptor;
 
 class IProcess {
  public:
   virtual ~IProcess() = default;
 
-  /// \brief Reads a block of memory into the provided buffer.
-  /// \param address The base address to read from.
-  /// \param buffer A span representing the caller-allocated buffer.
-  /// \return true if the read was successful, false otherwise.
-  virtual bool ReadMemory(uintptr_t address,
-                          std::span<std::byte> buffer) const = 0;
+  /// \brief Reads memory from one or more virtual addresses in a batch
+  /// operation.
+  ///
+  /// \param addresses Span of virtual addresses to read from.
+  /// \param bytes_per_address Number of bytes to read from each address.
+  /// \param out_buffer Output span to write the data into. Must be at least
+  ///                   addresses.size() * bytes_per_address bytes.
+  /// \return true if all reads were successful, false otherwise.
+  /// \note This enables platform-optimized batch operations
+  ///       (e.g., process_vm_readv on Linux). For single address reads,
+  ///       pass a span containing one address.
+  virtual bool ReadMemory(std::span<const MemoryAddress> addresses,
+                          size_t bytes_per_address,
+                          std::span<std::byte> out_buffer) = 0;
 
   /// \brief Writes a block of memory to the process.
   /// \param address The base address to write to.
