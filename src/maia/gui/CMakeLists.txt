@@ -10,10 +10,12 @@ target_sources(
       FILES
         imgui_extensions.h
         widgets/process_selector_view.h
+        widgets/results_table.h
         widgets/scanner_view.h
   PRIVATE
     imgui_extensions.cpp
     widgets/process_selector_view.cpp
+    widgets/results_table.cpp
     widgets/scanner_view.cpp
 )
 

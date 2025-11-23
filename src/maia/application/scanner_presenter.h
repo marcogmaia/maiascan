@@ -19,6 +19,8 @@ class ScannerPresenter {
   }
 
  private:
+  void OnAutoUpdateChanged(bool is_checked);
+
   ScanResultModel& scan_result_model_;
   ProcessModel& process_model_;
   ScannerWidget& scanner_widget_;

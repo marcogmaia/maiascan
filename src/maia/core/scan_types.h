@@ -3,6 +3,7 @@
 #pragma once
 
 #include <concepts>
+#include <vector>
 
 namespace maia {
 
@@ -127,6 +128,13 @@ enum class ScanValueType {
   kUInt64,
   kFloat,
   kDouble
+};
+
+struct ScanStorage {
+  std::vector<uintptr_t> addresses;
+  std::vector<std::byte> curr_raw;
+  std::vector<std::byte> prev_raw;
+  size_t stride;
 };
 
 }  // namespace maia

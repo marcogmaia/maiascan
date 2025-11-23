@@ -156,14 +156,13 @@ TEST_F(ScanResultModelTest, FirstScanExactValueFindsMatches) {
 
   model_.FirstScan();
 
-  const auto& entries = model_.entries();
-  ASSERT_EQ(entries.addresses.size(), 2);
-  EXPECT_EQ(entries.addresses[0], 0x100000 + 100);
-  EXPECT_EQ(entries.addresses[1], 0x100000 + 500);
+  const auto& storage = model_.entries();
+  ASSERT_EQ(storage.addresses.size(), 2);
+  EXPECT_EQ(storage.addresses[0], 0x100000 + 100);
+  EXPECT_EQ(storage.addresses[1], 0x100000 + 500);
 
-  EXPECT_EQ(entries.stride, 4);
-  uint32_t val1 =
-      *reinterpret_cast<const uint32_t*>(entries.raw_values_buffer.data());
+  EXPECT_EQ(storage.stride, 4);
+  uint32_t val1 = *reinterpret_cast<const uint32_t*>(storage.curr_raw.data());
   EXPECT_EQ(val1, 42);
 }
 
@@ -177,8 +176,7 @@ TEST_F(ScanResultModelTest, FirstScanUnknownValueSnapshotsMemory) {
   // 1KB / 4 bytes = ~256 potential alignments
   EXPECT_GT(entries.addresses.size(), 250);
 
-  uint32_t val0 =
-      *reinterpret_cast<const uint32_t*>(entries.raw_values_buffer.data());
+  uint32_t val0 = *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
   EXPECT_EQ(val0, 10);
 }
 
@@ -278,7 +276,31 @@ TEST_F(ScanResultModelTest, ClearResetsStorage) {
   model_.Clear();
 
   EXPECT_TRUE(model_.entries().addresses.empty());
-  EXPECT_TRUE(model_.entries().raw_values_buffer.empty());
+  EXPECT_TRUE(model_.entries().curr_raw.empty());
+}
+
+TEST_F(ScanResultModelTest, NextScanPopulatesPreviousValues) {
+  process_->WriteValue<uint32_t>(100, 10);
+
+  model_.SetScanComparison(ScanComparison::kUnknown);
+  model_.FirstScan();
+
+  process_->WriteValue<uint32_t>(100, 20);
+  model_.SetScanComparison(ScanComparison::kChanged);
+  model_.NextScan();
+
+  const auto& entries = model_.entries();
+  ASSERT_FALSE(entries.addresses.empty());
+
+  ASSERT_EQ(entries.prev_raw.size(), entries.curr_raw.size())
+      << "Previous raw buffer should be same size as current raw buffer";
+
+  uint32_t prev_val =
+      *reinterpret_cast<const uint32_t*>(entries.prev_raw.data());
+  uint32_t curr_val =
+      *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
+  EXPECT_EQ(prev_val, 10);
+  EXPECT_EQ(curr_val, 20);
 }
 
 }  // namespace

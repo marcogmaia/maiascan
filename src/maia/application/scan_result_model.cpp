@@ -14,6 +14,8 @@ namespace maia {
 
 namespace {
 
+// We check flags to stop crashes when reading protected memory like guard
+// pages.
 constexpr bool IsReadable(mmem::Protection prot) noexcept {
   const auto prot_val = static_cast<uint32_t>(prot);
   const auto read_val = static_cast<uint32_t>(mmem::Protection::kRead);
@@ -24,7 +26,8 @@ bool CanScan(IProcess* process) {
   return process && process->IsProcessValid();
 }
 
-// Safely loads a value from a byte span.
+// Copying to a local array fixes crashes on systems that hate unaligned memory
+// reads before casting.
 template <typename T>
   requires std::is_trivially_copyable_v<T>
 constexpr T LoadValue(std::span<const std::byte> bytes) {
@@ -34,6 +37,8 @@ constexpr T LoadValue(std::span<const std::byte> bytes) {
   return std::bit_cast<T>(buffer);
 }
 
+// Byte comparison is faster than decoding types and catches all changes
+// including padding or NaN data.
 constexpr bool IsValueChanged(std::span<const std::byte> current,
                               std::span<const std::byte> previous) {
   if (current.size() != previous.size()) {
@@ -71,6 +76,8 @@ template <typename F>
 concept CScanPredicate = CheckScanType<F, uint8_t> &&
                          CheckScanType<F, uint64_t> && CheckScanType<F, double>;
 
+// This helper stops us from writing the same switch statement inside every loop
+// by connecting runtime enums to compile-time templates.
 // clang-format off
 template <CScanPredicate Func>
 constexpr auto DispatchScanType(ScanValueType type, Func&& func) {
@@ -109,18 +116,16 @@ constexpr size_t GetDataTypeSize(ScanValueType type) {
 
 void ClearStorage(ScanStorage& storage) {
   storage.addresses.clear();
-  storage.raw_values_buffer.clear();
+  storage.curr_raw.clear();
+  storage.prev_raw.clear();
   storage.stride = 0;
 }
 
 }  // namespace
 
-ScanResultModel::ScanResultModel() {
-  // TODO: replace this with a signal to set the auto-start.
-  // StartAutoUpdate();
-}
-
 void ScanResultModel::FirstScan() {
+  // Holding the lock stops background threads from breaking the vectors while
+  // we rebuild them.
   std::scoped_lock lock(mutex_);
   LogInfo("First scan...");
 
@@ -129,12 +134,11 @@ void ScanResultModel::FirstScan() {
     return;
   }
 
-  // Archive current results to previous (optional, but good for undo logic
-  // later)
-  prev_entries_ = std::move(curr_entries_);
-  ClearStorage(curr_entries_);
+  // Saving the old state lets us compare against the start of the scan later
+  // if needed.
+  scan_storage_.prev_raw = std::move(scan_storage_.curr_raw);
+  ClearStorage(scan_storage_);
 
-  // Initialize comparison logic
   if (scan_comparison_ != ScanComparison::kExactValue) {
     scan_comparison_ = ScanComparison::kUnknown;
   }
@@ -156,14 +160,17 @@ void ScanResultModel::FirstScan() {
     return;
   }
 
-  // Temporary local storage for building results
+  // We build results locally to avoid locking issues. The split address/data
+  // layout helps the CPU cache work better during updates.
+  //
   ScanStorage storage;
   storage.stride = scan_stride;
 
-  // Reservation heuristics (adjust based on available RAM/preferences)
+  // Scans can create millions of results so we reserve memory now to stop
+  // slow reallocations later.
   constexpr size_t kEstimatedEntries = 100000;
   storage.addresses.reserve(kEstimatedEntries);
-  storage.raw_values_buffer.reserve(kEstimatedEntries * scan_stride);
+  storage.curr_raw.reserve(kEstimatedEntries * scan_stride);
 
   auto regions = active_process_->GetMemoryRegions();
 
@@ -172,6 +179,8 @@ void ScanResultModel::FirstScan() {
       continue;
     }
 
+    // Reading the whole block at once is much faster than making thousands
+    // of slow system calls.
     std::vector<std::byte> region_buffer(region.size);
     if (!active_process_->ReadMemory(
             {&region.base, 1}, region.size, region_buffer)) {
@@ -187,6 +196,8 @@ void ScanResultModel::FirstScan() {
       const auto val_end = target_scan_value_.end();
 
       while (true) {
+        // Standard library search uses vectorization which is faster than
+        // manual loops.
         it = std::search(it, end, val_begin, val_end);
         if (it == end) {
           break;
@@ -196,9 +207,10 @@ void ScanResultModel::FirstScan() {
             region.base + std::distance(region_buffer.begin(), it);
 
         storage.addresses.push_back(found_address);
-        storage.raw_values_buffer.insert(
-            storage.raw_values_buffer.end(), val_begin, val_end);
+        storage.curr_raw.insert(storage.curr_raw.end(), val_begin, val_end);
 
+        // We move by one byte to find values that might not sit on standard
+        // boundaries.
         std::advance(it, 1);
       }
     }
@@ -206,29 +218,28 @@ void ScanResultModel::FirstScan() {
     else {
       const size_t limit = region_buffer.size() - scan_stride;
 
+      // We stick to the data size steps here. Saving every single byte would
+      // fill up RAM instantly.
       for (size_t offset = 0; offset <= limit; offset += scan_stride) {
         auto data_start = region_buffer.begin() + offset;
 
         storage.addresses.push_back(region.base + offset);
-        storage.raw_values_buffer.insert(storage.raw_values_buffer.end(),
-                                         data_start,
-                                         data_start + scan_stride);
+        storage.curr_raw.insert(
+            storage.curr_raw.end(), data_start, data_start + scan_stride);
       }
     }
   }
 
-  // Commit results.
-  curr_entries_ = std::move(storage);
-  signals_.memory_changed.publish(curr_entries_);
+  scan_storage_ = std::move(storage);
+  signals_.memory_changed.publish(scan_storage_);
 
-  LogInfo("Found {} addresses.", curr_entries_.addresses.size());
+  LogInfo("Found {} addresses.", scan_storage_.addresses.size());
 }
 
 void ScanResultModel::NextScan() {
   std::scoped_lock lock(mutex_);
 
-  // Validate State
-  if (curr_entries_.addresses.empty()) {
+  if (scan_storage_.addresses.empty()) {
     return;
   }
 
@@ -237,35 +248,36 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // Move Current -> Previous (Snapshot)
-  // This makes curr_entries_ empty and ready to accept filtered results.
-  prev_entries_ = std::move(curr_entries_);
+  // Moving current values to previous gives us a baseline to see what changed.
+  scan_storage_.prev_raw = std::move(scan_storage_.curr_raw);
 
-  const size_t count = prev_entries_.addresses.size();
-  const size_t stride = prev_entries_.stride;
+  const size_t count = scan_storage_.addresses.size();
+  const size_t stride = scan_storage_.stride;
 
   if (count == 0 || stride == 0) {
     return;
   }
 
-  // Read Current Memory (Batch)
-  // We read the live values of all addresses found in the previous scan.
+  // Reading all addresses in one go stops the app from freezing due to too
+  // many system calls.
   std::vector<std::byte> current_memory_buffer(count * stride);
   if (!active_process_->ReadMemory(
-          prev_entries_.addresses, stride, current_memory_buffer)) {
+          scan_storage_.addresses, stride, current_memory_buffer)) {
     LogWarning("Failed to read memory batch during next scan.");
-    // Restore previous entries on failure so we don't lose data
-    curr_entries_ = std::move(prev_entries_);
+    // Put data back if reading fails so we do not lose our state.
+    scan_storage_.curr_raw = std::move(scan_storage_.prev_raw);
     return;
   }
 
-  // Prepare Filtered Storage
+  // Building a new vector is faster than removing items from the middle of
+  // an existing one.
   ScanStorage filtered_storage;
   filtered_storage.stride = stride;
-  filtered_storage.addresses.reserve(count);
-  filtered_storage.raw_values_buffer.reserve(count * stride);
+  filtered_storage.addresses.reserve(count / 2);
+  filtered_storage.curr_raw.reserve((count / 2) * stride);
+  filtered_storage.prev_raw.reserve((count / 2) * stride);
 
-  // Comparison Logic
+  // Define logic here to keep the loop clean.
   const auto check_condition = [&](std::span<const std::byte> curr,
                                    std::span<const std::byte> prev) -> bool {
     switch (scan_comparison_) {
@@ -292,48 +304,59 @@ void ScanResultModel::NextScan() {
     }
   };
 
-  // Filter Loop (Structure of Arrays)
+  // Using pointers is faster here than iterators for simple math.
   const std::byte* curr_ptr = current_memory_buffer.data();
-  const std::byte* prev_ptr = prev_entries_.raw_values_buffer.data();
+  const std::byte* prev_ptr = scan_storage_.prev_raw.data();
+
+  if (scan_storage_.prev_raw.size() != count * stride) {
+    LogWarning("Mismatch in previous raw data size. Aborting NextScan.");
+    scan_storage_.curr_raw = std::move(scan_storage_.prev_raw);
+    return;
+  }
 
   for (size_t i = 0; i < count; ++i) {
     std::span<const std::byte> val_curr(curr_ptr, stride);
     std::span<const std::byte> val_prev(prev_ptr, stride);
 
     if (check_condition(val_curr, val_prev)) {
-      // Match Found: Keep Address + NEW Value
-      filtered_storage.addresses.push_back(prev_entries_.addresses[i]);
-      filtered_storage.raw_values_buffer.insert(
-          filtered_storage.raw_values_buffer.end(),
-          val_curr.begin(),
-          val_curr.end());
+      filtered_storage.addresses.push_back(scan_storage_.addresses[i]);
+      // Keep both values so the UI can show what changed.
+      filtered_storage.curr_raw.insert(
+          filtered_storage.curr_raw.end(), val_curr.begin(), val_curr.end());
+      filtered_storage.prev_raw.insert(
+          filtered_storage.prev_raw.end(), val_prev.begin(), val_prev.end());
     }
 
     curr_ptr += stride;
     prev_ptr += stride;
   }
 
-  // Commit Results
-  curr_entries_ = std::move(filtered_storage);
-  signals_.memory_changed.publish(curr_entries_);
+  scan_storage_ = std::move(filtered_storage);
+  signals_.memory_changed.publish(scan_storage_);
+
+  LogInfo("Next scan complete. {} addresses remaining.",
+          scan_storage_.addresses.size());
 }
 
 void ScanResultModel::UpdateCurrentValues() {
   std::scoped_lock lock(mutex_);
 
-  if (curr_entries_.addresses.empty() || !CanScan(active_process_)) {
+  if (scan_storage_.addresses.empty() || !CanScan(active_process_)) {
     return;
   }
 
-  // Bulk read directly into the existing raw_values_buffer.
-  // Since curr_entries_ uses SoA, raw_values_buffer is already a flat vector
-  // exactly the size needed (addresses.size() * stride).
-  bool success = active_process_->ReadMemory(curr_entries_.addresses,
-                                             curr_entries_.stride,
-                                             curr_entries_.raw_values_buffer);
+  // We resize now to avoid issues if the list size changed but the buffer
+  // did not catch up yet.
+  size_t required_size = scan_storage_.addresses.size() * scan_storage_.stride;
+  if (scan_storage_.curr_raw.size() != required_size) {
+    scan_storage_.curr_raw.resize(required_size);
+  }
+
+  bool success = active_process_->ReadMemory(
+      scan_storage_.addresses, scan_storage_.stride, scan_storage_.curr_raw);
 
   if (success) {
-    signals_.memory_changed.publish(curr_entries_);
+    signals_.memory_changed.publish(scan_storage_);
   }
 }
 
@@ -349,8 +372,8 @@ void ScanResultModel::SetActiveProcess(IProcess* process) {
 
 void ScanResultModel::Clear() {
   std::scoped_lock lock(mutex_);
-  ClearStorage(curr_entries_);
-  ClearStorage(prev_entries_);
+  ClearStorage(scan_storage_);
+  signals_.memory_changed.publish(scan_storage_);
 }
 
 void ScanResultModel::StartAutoUpdate() {
@@ -360,7 +383,15 @@ void ScanResultModel::StartAutoUpdate() {
 
   task_ = std::jthread([this](std::stop_token stop_token) {
     while (!stop_token.stop_requested()) {
-      if (curr_entries_.addresses.size() < 10000) {
+      // We limit updates to 10k items because refreshing millions freezes the
+      // UI.
+      size_t count = 0;
+      {
+        std::scoped_lock lock(mutex_);
+        count = scan_storage_.addresses.size();
+      }
+
+      if (count > 0 && count < 10000) {
         UpdateCurrentValues();
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
