@@ -13,7 +13,6 @@
 namespace maia {
 namespace {
 
-// --- Helper: Fake Process Implementation ---
 class FakeProcess : public IProcess {
  public:
   explicit FakeProcess(size_t memory_size = 4096) {
@@ -119,8 +118,6 @@ class FakeProcess : public IProcess {
   bool is_valid_ = true;
 };
 
-// --- Test Fixture ---
-
 class ScanResultModelTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -143,8 +140,6 @@ class ScanResultModelTest : public ::testing::Test {
   ScanResultModel model_;
   std::unique_ptr<FakeProcess> process_;
 };
-
-// --- Tests ---
 
 TEST_F(ScanResultModelTest, FirstScanExactValueFindsMatches) {
   process_->WriteValue<uint32_t>(100, 42);
@@ -187,9 +182,7 @@ TEST_F(ScanResultModelTest, NextScanIncreasedValueFiltersResults) {
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
 
-  // Mutate Memory
   process_->WriteValue<uint32_t>(100, 15);  // Increased
-  // 200 remains 50
 
   model_.SetScanComparison(ScanComparison::kIncreased);
   model_.NextScan();
@@ -222,7 +215,6 @@ TEST_F(ScanResultModelTest, NextScanExactValueFiltersResults) {
 
   ASSERT_EQ(model_.entries().addresses.size(), 2);
 
-  // Mutate
   process_->WriteValue<uint32_t>(20, 101);
 
   model_.NextScan();

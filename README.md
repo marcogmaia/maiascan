@@ -41,5 +41,5 @@ values in real-time.
 
 ## Disclaimer
 
-Reading the memory of running processes can cause them to crash or behave
+Messing with the memory of running processes can cause them to crash or behave
 unexpectedly. Use this tool responsibly.
