@@ -7,10 +7,14 @@
 #include <span>
 #include <vector>
 
+#include "maia/assert.h"
 #include "maia/logging.h"
 #include "maia/mmem/mmem.h"
 
 namespace maia {
+
+// TODO: Fix me, there's a bug when we go from unchanged to changed. I think it
+// has to do with the autoupdate somehow, needs investigation.
 
 namespace {
 
@@ -345,12 +349,11 @@ void ScanResultModel::UpdateCurrentValues() {
     return;
   }
 
-  // We resize now to avoid issues if the list size changed but the buffer
-  // did not catch up yet.
-  size_t required_size = scan_storage_.addresses.size() * scan_storage_.stride;
-  if (scan_storage_.curr_raw.size() != required_size) {
-    scan_storage_.curr_raw.resize(required_size);
-  }
+  // // We assert now to avoid issues if the list size changed but the buffer
+  // did not catch up yet. If for any reason this happens, this should be fixed.
+  const size_t required_size =
+      scan_storage_.addresses.size() * scan_storage_.stride;
+  Assert(scan_storage_.curr_raw.size() == required_size);
 
   bool success = active_process_->ReadMemory(
       scan_storage_.addresses, scan_storage_.stride, scan_storage_.curr_raw);
