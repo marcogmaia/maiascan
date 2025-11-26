@@ -13,9 +13,6 @@
 
 namespace maia {
 
-// TODO: Fix me, there's a bug when we go from unchanged to changed. I think it
-// has to do with the autoupdate somehow, needs investigation.
-
 namespace {
 
 // We check flags to stop crashes when reading protected memory like guard
@@ -166,7 +163,6 @@ void ScanResultModel::FirstScan() {
 
   // We build results locally to avoid locking issues. The split address/data
   // layout helps the CPU cache work better during updates.
-  //
   ScanStorage storage;
   storage.stride = scan_stride;
 
@@ -234,6 +230,10 @@ void ScanResultModel::FirstScan() {
     }
   }
 
+  // We initialize previous values with the current scan results to create a
+  // valid baseline for the next comparison step.
+  storage.prev_raw = storage.curr_raw;
+
   scan_storage_ = std::move(storage);
   signals_.memory_changed.publish(scan_storage_);
 
@@ -252,8 +252,10 @@ void ScanResultModel::NextScan() {
     return;
   }
 
-  // Moving current values to previous gives us a baseline to see what changed.
-  scan_storage_.prev_raw = std::move(scan_storage_.curr_raw);
+  // We deliberately do NOT move curr_raw to prev_raw here.
+  // prev_raw contains the clean snapshot from the LAST scan, while curr_raw
+  // might have been modified by the auto-update thread. We compare
+  // Live (Freshly Read) vs Snapshot (Clean) to avoid logic errors.
 
   const size_t count = scan_storage_.addresses.size();
   const size_t stride = scan_storage_.stride;
@@ -268,8 +270,6 @@ void ScanResultModel::NextScan() {
   if (!active_process_->ReadMemory(
           scan_storage_.addresses, stride, current_memory_buffer)) {
     LogWarning("Failed to read memory batch during next scan.");
-    // Put data back if reading fails so we do not lose our state.
-    scan_storage_.curr_raw = std::move(scan_storage_.prev_raw);
     return;
   }
 
@@ -314,7 +314,6 @@ void ScanResultModel::NextScan() {
 
   if (scan_storage_.prev_raw.size() != count * stride) {
     LogWarning("Mismatch in previous raw data size. Aborting NextScan.");
-    scan_storage_.curr_raw = std::move(scan_storage_.prev_raw);
     return;
   }
 
@@ -324,11 +323,16 @@ void ScanResultModel::NextScan() {
 
     if (check_condition(val_curr, val_prev)) {
       filtered_storage.addresses.push_back(scan_storage_.addresses[i]);
-      // Keep both values so the UI can show what changed.
+
+      // Keep new value for UI display.
       filtered_storage.curr_raw.insert(
           filtered_storage.curr_raw.end(), val_curr.begin(), val_curr.end());
+
+      // We update the previous buffer with the NEW value. This advances the
+      // baseline, the next scan compares against the current state rather than
+      // a stale history.
       filtered_storage.prev_raw.insert(
-          filtered_storage.prev_raw.end(), val_prev.begin(), val_prev.end());
+          filtered_storage.prev_raw.end(), val_curr.begin(), val_curr.end());
     }
 
     curr_ptr += stride;
@@ -349,7 +353,7 @@ void ScanResultModel::UpdateCurrentValues() {
     return;
   }
 
-  // // We assert now to avoid issues if the list size changed but the buffer
+  // We assert now to avoid issues if the list size changed but the buffer
   // did not catch up yet. If for any reason this happens, this should be fixed.
   const size_t required_size =
       scan_storage_.addresses.size() * scan_storage_.stride;
