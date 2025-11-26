@@ -44,6 +44,8 @@ class ScanResultModel {
   void StartAutoUpdate();
   void StopAutoUpdate();
 
+  void UpdateCurrentValues();
+
  private:
   struct Signals {
     /// \brief Emitted when the scan results change.
@@ -58,7 +60,6 @@ class ScanResultModel {
 
   // clang-format on
 
-  void UpdateCurrentValues();
   void AutoUpdateLoop(std::stop_token stop_token);
 
   Signals signals_;
@@ -69,6 +70,8 @@ class ScanResultModel {
   std::vector<std::byte> target_scan_value_;
 
   // Current list of matches.
+  // Every time a successful scan is made (First or Next), it also updates the
+  // "prev" with the most recent scan result.
   ScanStorage scan_storage_;
 
   mutable std::mutex mutex_;

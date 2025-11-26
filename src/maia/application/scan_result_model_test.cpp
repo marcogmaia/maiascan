@@ -8,6 +8,7 @@
 #include <cstring>
 #include <vector>
 
+#include "maia/assert.h"
 #include "maia/core/i_process.h"
 
 namespace maia {
@@ -15,16 +16,14 @@ namespace {
 
 class FakeProcess : public IProcess {
  public:
-  explicit FakeProcess(size_t memory_size = 4096) {
+  explicit FakeProcess(size_t memory_size = 0x1000) {
     memory_.resize(memory_size, std::byte{0});
     base_address_ = 0x100000;
   }
 
   template <typename T>
   void WriteValue(size_t offset, T value) {
-    if (offset + sizeof(T) > memory_.size()) {
-      return;
-    }
+    Assert((offset + sizeof(T)) <= memory_.size());
     std::memcpy(&memory_[offset], &value, sizeof(T));
   }
 
@@ -291,8 +290,58 @@ TEST_F(ScanResultModelTest, NextScanPopulatesPreviousValues) {
       *reinterpret_cast<const uint32_t*>(entries.prev_raw.data());
   uint32_t curr_val =
       *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
-  EXPECT_EQ(prev_val, 10);
+  EXPECT_EQ(prev_val, 20);
   EXPECT_EQ(curr_val, 20);
+}
+
+TEST_F(ScanResultModelTest, NextScanPreservesSnapshotAgainstAutoUpdate) {
+  // Setup Initial State (Value = 10)
+  // We use a specific address to ensure deterministic behavior.
+  constexpr uintptr_t kAddressOffset = 0x10;
+  process_->WriteValue<uint32_t>(kAddressOffset, 10);
+
+  model_.SetScanComparison(ScanComparison::kUnknown);
+  model_.FirstScan();
+
+  // Sanity check: verify we found the initial value.
+  ASSERT_FALSE(model_.entries().addresses.empty());
+
+  // Change the value in RAM (Value = 20).
+  process_->WriteValue<uint32_t>(kAddressOffset, 20);
+
+  // TRIGGER THE BUG SCENARIO (Simulate Auto-Update)
+  // We force the model to update its internal 'curr_raw' view to 20 *before*
+  // the Next Scan occurs. This simulates the background thread waking up
+  // and reading the new memory state while the user is looking at the UI.
+  //
+  // NOTE: This assumes UpdateCurrentValues is accessible (public or friend).
+  // If private, use model_.StartAutoUpdate() and sleep_for(600ms).
+  model_.UpdateCurrentValues();
+
+  // Perform Next Scan (Looking for "Changed" values).
+  model_.SetScanComparison(ScanComparison::kChanged);
+  model_.NextScan();
+
+  // Assertions
+  // The entry should remain because 20 (Live) != 10 (Snapshot).
+  // If this fails, it means NextScan used the 'dirty' auto-updated value
+  // as the baseline instead of the 'clean' FirstScan value.
+  EXPECT_FALSE(model_.entries().addresses.empty())
+      << "Entry incorrectly removed! NextScan likely compared against the "
+         "auto-updated value instead of the snapshot.";
+
+  if (!model_.entries().addresses.empty()) {
+    // Verify the model updated its values correctly after the successful scan
+    const auto& entries = model_.entries();
+    uint32_t current_val =
+        *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
+    uint32_t prev_val =
+        *reinterpret_cast<const uint32_t*>(entries.prev_raw.data());
+
+    EXPECT_EQ(current_val, 20) << "Current value should reflect RAM";
+    EXPECT_EQ(prev_val, 20) << "Previous value should be updated to the new "
+                               "baseline AFTER the scan succeeds";
+  }
 }
 
 }  // namespace

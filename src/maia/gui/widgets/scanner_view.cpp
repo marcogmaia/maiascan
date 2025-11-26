@@ -49,7 +49,7 @@ std::vector<std::byte> ToByteVector(T value) {
 }
 
 template <typename T>
-std::vector<std::byte> GetBytes(const std::string& str, int base) {
+std::vector<std::byte> NumberStrToBytes(const std::string& str, int base) {
   return ParseValue<T>(str, base)
       .transform(ToByteVector<T>)
       .value_or(std::vector<std::byte>{});
@@ -61,16 +61,16 @@ std::vector<std::byte> ParseStringByType(const std::string& str,
                                          ScanValueType type,
                                          int base) {
   switch (type) {
-    case ScanValueType::kInt8:   return GetBytes<int8_t>(str, base);
-    case ScanValueType::kUInt8:  return GetBytes<uint8_t>(str, base);
-    case ScanValueType::kInt16:  return GetBytes<int16_t>(str, base);
-    case ScanValueType::kUInt16: return GetBytes<uint16_t>(str, base);
-    case ScanValueType::kInt32:  return GetBytes<int32_t>(str, base);
-    case ScanValueType::kUInt32: return GetBytes<uint32_t>(str, base);
-    case ScanValueType::kInt64:  return GetBytes<int64_t>(str, base);
-    case ScanValueType::kUInt64: return GetBytes<uint64_t>(str, base);
-    case ScanValueType::kFloat:  return GetBytes<float>(str, base);
-    case ScanValueType::kDouble: return GetBytes<double>(str, base);
+    case ScanValueType::kInt8:   return NumberStrToBytes<int8_t>(str, base);
+    case ScanValueType::kUInt8:  return NumberStrToBytes<uint8_t>(str, base);
+    case ScanValueType::kInt16:  return NumberStrToBytes<int16_t>(str, base);
+    case ScanValueType::kUInt16: return NumberStrToBytes<uint16_t>(str, base);
+    case ScanValueType::kInt32:  return NumberStrToBytes<int32_t>(str, base);
+    case ScanValueType::kUInt32: return NumberStrToBytes<uint32_t>(str, base);
+    case ScanValueType::kInt64:  return NumberStrToBytes<int64_t>(str, base);
+    case ScanValueType::kUInt64: return NumberStrToBytes<uint64_t>(str, base);
+    case ScanValueType::kFloat:  return NumberStrToBytes<float>(str, base);
+    case ScanValueType::kDouble: return NumberStrToBytes<double>(str, base);
     default: return {};
   }
 }

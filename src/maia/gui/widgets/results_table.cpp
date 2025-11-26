@@ -16,9 +16,7 @@ namespace maia {
 namespace {
 
 template <typename T>
-void DrawFormattedValue(std::span<const std::byte> data,
-                        bool is_hex,
-                        int hex_width) {
+void DrawFormattedValue(std::span<const std::byte> data, bool is_hex) {
   if (data.size() < sizeof(T)) {
     ImGui::TextUnformatted("Invalid");
     return;
@@ -30,7 +28,8 @@ void DrawFormattedValue(std::span<const std::byte> data,
     ImGui::TextUnformatted(std::format("{:.6f}", val).c_str());
   } else {
     if (is_hex) {
-      ImGui::TextUnformatted(std::format("0x{:0{}x}", val, hex_width).c_str());
+      constexpr size_t kHexWidth = 2 * sizeof(T);
+      ImGui::TextUnformatted(std::format("0x{:0{}x}", val, kHexWidth).c_str());
     } else {
       ImGui::TextUnformatted(std::format("{}", val).c_str());
     }
@@ -47,16 +46,16 @@ void DrawEntryByType(std::span<const std::byte> data,
   }
 
   switch (type) {
-    case ScanValueType::kInt8:   DrawFormattedValue<int8_t>(data, is_hex, 2); break;
-    case ScanValueType::kUInt8:  DrawFormattedValue<uint8_t>(data, is_hex, 2); break;
-    case ScanValueType::kInt16:  DrawFormattedValue<int16_t>(data, is_hex, 4); break;
-    case ScanValueType::kUInt16: DrawFormattedValue<uint16_t>(data, is_hex, 4); break;
-    case ScanValueType::kInt32:  DrawFormattedValue<int32_t>(data, is_hex, 8); break;
-    case ScanValueType::kUInt32: DrawFormattedValue<uint32_t>(data, is_hex, 8); break;
-    case ScanValueType::kInt64:  DrawFormattedValue<int64_t>(data, is_hex, 16); break;
-    case ScanValueType::kUInt64: DrawFormattedValue<uint64_t>(data, is_hex, 16); break;
-    case ScanValueType::kFloat:  DrawFormattedValue<float>(data, false, 0); break;
-    case ScanValueType::kDouble: DrawFormattedValue<double>(data, false, 0); break;
+    case ScanValueType::kInt8:   DrawFormattedValue<int8_t>(data, is_hex); break;
+    case ScanValueType::kUInt8:  DrawFormattedValue<uint8_t>(data, is_hex); break;
+    case ScanValueType::kInt16:  DrawFormattedValue<int16_t>(data, is_hex); break;
+    case ScanValueType::kUInt16: DrawFormattedValue<uint16_t>(data, is_hex); break;
+    case ScanValueType::kInt32:  DrawFormattedValue<int32_t>(data, is_hex); break;
+    case ScanValueType::kUInt32: DrawFormattedValue<uint32_t>(data, is_hex); break;
+    case ScanValueType::kInt64:  DrawFormattedValue<int64_t>(data, is_hex); break;
+    case ScanValueType::kUInt64: DrawFormattedValue<uint64_t>(data, is_hex); break;
+    case ScanValueType::kFloat:  DrawFormattedValue<float>(data, false); break;
+    case ScanValueType::kDouble: DrawFormattedValue<double>(data, false); break;
   }
 }
 
