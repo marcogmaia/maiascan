@@ -30,3 +30,5 @@ target_link_libraries(
     application
     GTest::gtest_main
 )
+
+gtest_discover_tests(application_test)

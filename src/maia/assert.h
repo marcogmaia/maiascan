@@ -7,13 +7,11 @@
 
 namespace maia {
 
-[[noreturn]] void Assert(
-    bool assertion,
-    std::string_view message,
-    std::source_location sloc = std::source_location::current());
+void Assert(bool assertion,
+            std::string_view message,
+            std::source_location sloc = std::source_location::current());
 
-[[noreturn]] void Assert(
-    bool assertion,
-    std::source_location sloc = std::source_location::current());
+void Assert(bool assertion,
+            std::source_location sloc = std::source_location::current());
 
 }  // namespace maia

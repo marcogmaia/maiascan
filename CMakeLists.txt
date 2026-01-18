@@ -17,10 +17,11 @@ set(
 )
 cmake_policy(SET CMP0141 NEW)
 
-find_package(GTest REQUIRED)
+find_package(GTest CONFIG REQUIRED)
 
 find_package(CLI11 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(MFC REQUIRED)
