@@ -2,6 +2,10 @@
 
 cmake_minimum_required(VERSION 4.0)
 
+message(STATUS "VCPKG_ROOT: $ENV{VCPKG_ROOT}")
+message(STATUS "CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
+message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+
 project(
   maiascan
   VERSION 0.0.1

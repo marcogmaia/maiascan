@@ -4,10 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include <array>
 #include <vector>
 
-using namespace maia::core;
+namespace maia::core {
 
 class SimdScannerTest : public ::testing::Test {
  protected:
@@ -198,3 +197,5 @@ TEST_F(SimdScannerTest, ScanMemCmpRespectsStride) {
   EXPECT_EQ(found_offsets_[0], 4);
   EXPECT_EQ(found_offsets_[1], 16);
 }
+
+}  // namespace maia::core

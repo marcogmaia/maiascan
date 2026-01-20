@@ -44,18 +44,32 @@ std::expected<GLFWwindow*, int> InitGlfw() {
 }
 
 void TerminateGlfw(GLFWwindow* window) {
-  glfwDestroyWindow(window);
+  if (window) {
+    glfwDestroyWindow(window);
+  }
   glfwTerminate();
+}
+
+void ImGuiProcessViewports() {
+  ImGuiIO& io = ImGui::GetIO();
+  if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+    GLFWwindow* backup_current_context = glfwGetCurrentContext();
+    ImGui::UpdatePlatformWindows();
+    ImGui::RenderPlatformWindowsDefault();
+    glfwMakeContextCurrent(backup_current_context);
+  }
 }
 
 }  // namespace
 
-void* ImGuiInit() {
+GuiSystem::GuiSystem() {
   auto res = InitGlfw();
   if (!res) {
-    return nullptr;
+    return;
   }
-  GLFWwindow* window = *res;
+  window_handle_ = *res;
+  GLFWwindow* window = static_cast<GLFWwindow*>(window_handle_);
+
   // Setup Dear ImGui context
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -84,13 +98,13 @@ void* ImGuiInit() {
   }
 
   // Decide GL+GLSL versions
-#if defined(IMGUI_IMPL_OPENGL_ES2)
+#ifdef IMGUI_IMPL_OPENGL_ES2
   // GL ES 2.0 + GLSL 100
   const char* glsl_version = "#version 100";
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
   glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-#elif defined(__APPLE__)
+#elifdef __APPLE__
   // GL 3.2 + GLSL 150
   const char* glsl_version = "#version 150";
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -109,61 +123,61 @@ void* ImGuiInit() {
   // Setup Platform/Renderer backends
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
-
-  // Load Fonts
-  // - If no fonts are loaded, dear imgui will use the default font. You can
-  // also load multiple fonts and use ImGui::PushFont()/PopFont() to select
-  // them.
-  // - AddFontFromFileTTF() will return the ImFont* so you can store it if you
-  // need to select the font among multiple.
-  // - If the file cannot be loaded, the function will return NULL. Please
-  // handle those errors in your application (e.g. use an assertion, or display
-  // an error and quit).
-  // - The fonts will be rasterized at a given size (w/ oversampling) and stored
-  // into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which
-  // ImGui_ImplXXXX_NewFrame below will call.
-  // - Read 'docs/FONTS.md' for more instructions and details.
-  // - Remember that in C/C++ if you want to include a backslash \ in a string
-  // literal you need to write a double backslash \\ !
-  // io.Fonts->AddFontDefault();
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
-  // ImFont* font =
-  // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f,
-  // NULL, io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != NULL);
-  return window;
 }
 
-void ImGuiTerminate(void* window_handle) {
-  ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
-  ImGui::DestroyContext();
-  TerminateGlfw(static_cast<GLFWwindow*>(window_handle));
-}
-
-void ImGuiProcessViewports() {
-  ImGuiIO& io = ImGui::GetIO();
-  if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-    GLFWwindow* backup_current_context = glfwGetCurrentContext();
-    ImGui::UpdatePlatformWindows();
-    ImGui::RenderPlatformWindowsDefault();
-    glfwMakeContextCurrent(backup_current_context);
+GuiSystem::~GuiSystem() {
+  if (IsValid()) {
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    TerminateGlfw(static_cast<GLFWwindow*>(window_handle_));
   }
 }
 
-void ImGuiBeginFrame() {
-  // Start the Dear ImGui frame
-  ImGui_ImplOpenGL3_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
-  ImGui::NewFrame();
+void GuiSystem::BeginFrame() {
+  if (IsValid()) {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+  }
 }
 
-void ImGuiEndFrame() {
-  ImGui::Render();
-  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-  maia::ImGuiProcessViewports();
+void GuiSystem::EndFrame() {
+  if (IsValid()) {
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    ImGuiProcessViewports();
+  }
+}
+
+bool GuiSystem::WindowShouldClose() const {
+  if (!IsValid()) {
+    return true;
+  }
+  return glfwWindowShouldClose(static_cast<GLFWwindow*>(window_handle_));
+}
+
+void GuiSystem::PollEvents() {
+  glfwPollEvents();
+}
+
+void GuiSystem::SwapBuffers() {
+  if (IsValid()) {
+    glfwSwapBuffers(static_cast<GLFWwindow*>(window_handle_));
+  }
+}
+
+void GuiSystem::ClearWindow(float r, float g, float b, float a) {
+  if (!IsValid()) {
+    return;
+  }
+  GLFWwindow* window = static_cast<GLFWwindow*>(window_handle_);
+  int display_w;
+  int display_h;
+  glfwGetFramebufferSize(window, &display_w, &display_h);
+  glViewport(0, 0, display_w, display_h);
+  glClearColor(r, g, b, a);
+  glClear(GL_COLOR_BUFFER_BIT);
 }
 
 }  // namespace maia

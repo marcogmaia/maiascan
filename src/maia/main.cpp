@@ -2,32 +2,23 @@
 
 // #include <numeric>
 
-#include <GLFW/glfw3.h>
 #include <fmt/core.h>
-#include <glad/glad.h>
+#include <imgui.h>
 #include <entt/signal/dispatcher.hpp>
 
 #include "application/scanner_presenter.h"
+#include "maia/application/cheat_table_model.h"
+#include "maia/application/cheat_table_presenter.h"
 #include "maia/application/process_selector_presenter.h"
 #include "maia/application/scan_result_model.h"
 #include "maia/gui/imgui_extensions.h"
+#include "maia/gui/layout.h"
+#include "maia/gui/widgets/cheat_table_view.h"
 #include "maia/logging.h"
 
 namespace maia {
 
 namespace {
-
-void ClearBackground(GLFWwindow* window, ImVec4& clear_color) {
-  int display_w;
-  int display_h;
-  glfwGetFramebufferSize(window, &display_w, &display_h);
-  glViewport(0, 0, display_w, display_h);
-  glClearColor(clear_color.x * clear_color.w,
-               clear_color.y * clear_color.w,
-               clear_color.z * clear_color.w,
-               clear_color.w);
-  glClear(GL_COLOR_BUFFER_BIT);
-}
 
 void CreateDockSpace() {
   ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -55,6 +46,9 @@ void CreateDockSpace() {
 
   // Create the dockspace.
   ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+
+  // Apply default layout if needed
+  gui::MakeDefaultLayout(dockspace_id);
   ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
   ImGui::End();
 }
@@ -66,8 +60,8 @@ void CreateDockSpace() {
 int main() {
   maia::LogInstallFormat();
 
-  auto* window = static_cast<GLFWwindow*>(maia::ImGuiInit());
-  if (!window) {
+  maia::GuiSystem gui_system{};
+  if (!gui_system.IsValid()) {
     maia::LogError("Failed to initialize the windowing subsystem.");
     return EXIT_FAILURE;
   }
@@ -80,28 +74,35 @@ int main() {
                                                   proc_selector_view};
 
   maia::ScanResultModel scan_result_model{};
+  maia::CheatTableModel cheat_table_model{};
+
   maia::ScannerWidget scanner_widget{};
   maia::ScannerPresenter scanner{
-      scan_result_model, process_model, scanner_widget};
+      scan_result_model, process_model, cheat_table_model, scanner_widget};
 
-  while (!glfwWindowShouldClose(window)) {
-    glfwPollEvents();
+  maia::CheatTableView cheat_table_view{};
+  maia::CheatTablePresenter cheat_table{cheat_table_model, cheat_table_view};
 
-    maia::ImGuiBeginFrame();
+  while (!gui_system.WindowShouldClose()) {
+    gui_system.PollEvents();
+
+    gui_system.BeginFrame();
 
     maia::CreateDockSpace();
 
     process_selector.Render();
     scanner.Render();
+    cheat_table.Render();
 
-    maia::ClearBackground(window, clear_color);
-    maia::ImGuiEndFrame();
-    glfwSwapBuffers(window);
+    gui_system.ClearWindow(clear_color.x * clear_color.w,
+                           clear_color.y * clear_color.w,
+                           clear_color.z * clear_color.w,
+                           clear_color.w);
+    gui_system.EndFrame();
+    gui_system.SwapBuffers();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
-
-  maia::ImGuiTerminate(window);
 
   return 0;
 }

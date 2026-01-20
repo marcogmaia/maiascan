@@ -29,6 +29,7 @@ class ScannerWidget {
     entt::sigh<void(std::vector<std::byte>)> target_value_selected;
     entt::sigh<void(ScanComparison)> scan_comparison_selected;
     entt::sigh<void(bool)> auto_update_changed;
+    entt::sigh<void(int, ScanValueType)> entry_double_clicked;
 
     // TODO: Define a new structure or method to pass selection data
     // entt::sigh<void(ScanStorage)> entry_selected;
@@ -44,6 +45,7 @@ class ScannerWidget {
     auto TargetValueSelected() {return entt::sink(view.signals_.target_value_selected);}
     auto ScanComparisonSelected() {return entt::sink(view.signals_.scan_comparison_selected);}
     auto AutoUpdateChanged() {return entt::sink(view.signals_.auto_update_changed);}
+    auto EntryDoubleClicked() {return entt::sink(view.signals_.entry_double_clicked);}
   };
 
   // clang-format on

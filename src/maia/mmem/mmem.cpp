@@ -778,7 +778,7 @@ bool FreeMemory(uintptr_t address, size_t size) {
 
 bool FreeMemory(const ProcessDescriptor& process,
                 uintptr_t address,
-                size_t size) {
+                size_t /*size*/) {
   ProcessHandle h_process =
       OpenProcessHandle(process.pid, PROCESS_VM_OPERATION);
   if (!h_process) {
