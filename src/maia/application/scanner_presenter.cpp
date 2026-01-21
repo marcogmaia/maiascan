@@ -42,12 +42,16 @@ void Connect(Storage& storage, Sink&& sink, SlotTag<Candidate>) {
 
 ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
                                    ProcessModel& process_model,
+                                   CheatTableModel& cheat_table_model,
                                    ScannerWidget& scanner_widget)
     : scan_result_model_(scan_result_model),
       process_model_(process_model),
+      cheat_table_model_(cheat_table_model),
       scanner_widget_(scanner_widget) {
   // clang-format off
 
+  // Connect ProcessModel to CheatTableModel 
+  connections_.emplace_back(process_model_.sinks().ActiveProcessChanged().connect<&CheatTableModel::SetActiveProcess>(cheat_table_model_));
   connections_.emplace_back(process_model_.sinks().ActiveProcessChanged().connect<&ScanResultModel::SetActiveProcess>(scan_result_model_));
   connections_.emplace_back(scanner_widget_.sinks().NewScanPressed().connect<&ScanResultModel::FirstScan>(scan_result_model_));
   connections_.emplace_back(scanner_widget_.sinks().NextScanPressed().connect<&ScanResultModel::NextScan>(scan_result_model_));
@@ -57,6 +61,7 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
   // connections_.emplace_back(scanner_widget_.sinks().AutoUpdateChanged().connect<&ScannerPresenter::OnAutoUpdateChanged>(*this));
   // I don't know if I'll keep this signature here, I'm just exploring ideas on how to mimic Qt's connection for signal/slow.
   Connect(connections_, scanner_widget_.sinks().AutoUpdateChanged(), this, Slot<&ScannerPresenter::OnAutoUpdateChanged>);
+  Connect(connections_, scanner_widget_.sinks().EntryDoubleClicked(), this, Slot<&ScannerPresenter::OnEntryDoubleClicked>);
 
   // clang-format on
 
@@ -80,6 +85,17 @@ void ScannerPresenter::OnAutoUpdateChanged(bool is_checked) {
     scan_result_model_.StartAutoUpdate();
   } else {
     scan_result_model_.StopAutoUpdate();
+  }
+}
+
+void ScannerPresenter::OnEntryDoubleClicked(int index, ScanValueType type) {
+  // Get the address from the model
+  const auto& results = scan_result_model_.entries();
+  if (index >= 0 && static_cast<size_t>(index) < results.addresses.size()) {
+    MemoryAddress address = results.addresses[index];
+    // TODO: Get more meaningful description?
+    std::string description = "No description";
+    cheat_table_model_.AddEntry(address, type, description);
   }
 }
 

@@ -8,15 +8,12 @@ target_sources(
   core
   PUBLIC
     FILE_SET HEADERS
-      # BASE_DIRS maia/core
       BASE_DIRS "${MAIA_BASE_DIR}"
-      FILES
-        # i_memory_accessor.h
-        # maia/core/
-        memory_common.h
-        process.h
+      FILES cpu_info.h memory_common.h process.h simd_scanner.h
   PRIVATE
+    cpu_info.cpp
     process.cpp
+    simd_scanner.cpp
 )
 
 target_link_libraries(
@@ -27,12 +24,12 @@ target_link_libraries(
     mmem
 )
 
-# add_executable(core_test scan_result_test.cpp)
-# target_link_libraries(
-#   core_test
-#   PRIVATE
-#     core
-#     GTest::gmock_main
-# )
+add_executable(simd_scanner_test simd_scanner_test.cpp)
+target_link_libraries(
+  simd_scanner_test
+  PRIVATE
+    core
+    GTest::gmock_main
+)
 
-# gtest_discover_tests(core_test DISCOVERY_TIMEOUT 60)
+gtest_discover_tests(simd_scanner_test DISCOVERY_TIMEOUT 60)

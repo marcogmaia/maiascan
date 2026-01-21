@@ -3,6 +3,8 @@
 #pragma once
 
 #include <concepts>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace maia {
@@ -129,6 +131,26 @@ enum class ScanValueType {
   kFloat,
   kDouble
 };
+
+constexpr size_t GetSizeForType(ScanValueType type) {
+  switch (type) {
+    case ScanValueType::kInt8:
+    case ScanValueType::kUInt8:
+      return 1;
+    case ScanValueType::kInt16:
+    case ScanValueType::kUInt16:
+      return 2;
+    case ScanValueType::kInt32:
+    case ScanValueType::kUInt32:
+    case ScanValueType::kFloat:
+      return 4;
+    case ScanValueType::kInt64:
+    case ScanValueType::kUInt64:
+    case ScanValueType::kDouble:
+      return 8;
+  }
+  return 0;
+}
 
 struct ScanStorage {
   std::vector<uintptr_t> addresses;

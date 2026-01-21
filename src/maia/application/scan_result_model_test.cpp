@@ -42,7 +42,7 @@ class FakeProcess : public IProcess {
       return false;
     }
 
-    // Case 1: Single continuous read (First Scan optimization)
+    // Single continuous read (First Scan optimization)
     if (addresses.size() == 1) {
       uintptr_t addr = addresses[0];
       if (addr < base_address_) {
@@ -57,7 +57,7 @@ class FakeProcess : public IProcess {
       return true;
     }
 
-    // Case 2: Scatter/Gather Read (Next Scan)
+    // Scatter/Gather Read (Next Scan)
     std::byte* out_ptr = out_buffer.data();
     for (const auto& addr : addresses) {
       if (addr < base_address_) {
@@ -342,6 +342,57 @@ TEST_F(ScanResultModelTest, NextScanPreservesSnapshotAgainstAutoUpdate) {
     EXPECT_EQ(prev_val, 20) << "Previous value should be updated to the new "
                                "baseline AFTER the scan succeeds";
   }
+}
+
+TEST_F(ScanResultModelTest,
+       BugReproductionChangedFirstScanThenChangedNextScan) {
+  // Setup Initial State (Value = 10)
+  process_->WriteValue<uint32_t>(100, 10);
+
+  // User selects "Changed" for the First Scan. This is technically "invalid"
+  // for a first scan, but the UI might allow it, or the model should handle it
+  // gracefully by treating it as Unknown for the *first* pass but remembering
+  // "Changed" for the *next* pass.
+  model_.SetScanComparison(ScanComparison::kChanged);
+
+  // Execute First Scan
+  model_.FirstScan();
+
+  // Verify First Scan behaved like "Unknown" (snapshot everything)
+  ASSERT_FALSE(model_.entries().addresses.empty());
+
+  // Change Value in RAM (Value = 20)
+  process_->WriteValue<uint32_t>(100, 20);
+
+  // Execute Next Scan (User expects "Changed" logic to persist). Crucially, we
+  // do NOT call SetScanComparison again, simulating the user just clicking
+  // "Next Scan".
+  model_.NextScan();
+
+  // Verify Result. Should find the address because 20 != 10. If bug exists,
+  // this will be empty because model stuck in kUnknown.
+  EXPECT_FALSE(model_.entries().addresses.empty());
+}
+
+TEST_F(ScanResultModelTest, NextScanIncreasedByFindsMatch) {
+  process_->WriteValue<uint32_t>(100, 10);
+  model_.SetScanComparison(ScanComparison::kUnknown);
+  model_.FirstScan();
+
+  // Increase by 3 (10 -> 13)
+  process_->WriteValue<uint32_t>(100, 13);
+
+  model_.SetScanComparison(ScanComparison::kIncreasedBy);
+  model_.SetTargetScanValue(ToBytes<uint32_t>(3));
+  model_.NextScan();
+
+  const auto& entries = model_.entries();
+  ASSERT_FALSE(entries.addresses.empty());
+  EXPECT_EQ(entries.addresses[0], 0x100000 + 100);
+
+  // Verify value
+  uint32_t val = *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
+  EXPECT_EQ(val, 13);
 }
 
 }  // namespace

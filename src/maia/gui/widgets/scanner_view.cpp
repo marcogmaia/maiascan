@@ -3,79 +3,18 @@
 #include "maia/gui/widgets/scanner_view.h"
 
 #include <array>
-#include <charconv>
 #include <cstring>
-#include <optional>
-#include <string_view>
 #include <vector>
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
+#include "maia/core/value_parser.h"
 #include "maia/gui/widgets/results_table.h"
 
 namespace maia {
 
 namespace {
-
-template <typename T>
-std::optional<T> ParseValue(std::string_view sview, int base = 10) {
-  if (base == 16 && sview.starts_with("0x")) {
-    sview = sview.substr(2);
-  }
-  const char* first = sview.data();
-  const char* last = first + sview.size();
-
-  T value;
-  std::from_chars_result result;
-
-  if constexpr (std::is_floating_point_v<T>) {
-    result = std::from_chars(first, last, value);
-  } else {
-    result = std::from_chars(first, last, value, base);
-  }
-
-  if (result.ec != std::errc() || result.ptr != last) {
-    return std::nullopt;
-  }
-  return value;
-}
-
-template <typename T>
-std::vector<std::byte> ToByteVector(T value) {
-  std::vector<std::byte> bytes(sizeof(T));
-  std::memcpy(bytes.data(), &value, sizeof(T));
-  return bytes;
-}
-
-template <typename T>
-std::vector<std::byte> NumberStrToBytes(const std::string& str, int base) {
-  return ParseValue<T>(str, base)
-      .transform(ToByteVector<T>)
-      .value_or(std::vector<std::byte>{});
-}
-
-// clang-format off
-
-std::vector<std::byte> ParseStringByType(const std::string& str,
-                                         ScanValueType type,
-                                         int base) {
-  switch (type) {
-    case ScanValueType::kInt8:   return NumberStrToBytes<int8_t>(str, base);
-    case ScanValueType::kUInt8:  return NumberStrToBytes<uint8_t>(str, base);
-    case ScanValueType::kInt16:  return NumberStrToBytes<int16_t>(str, base);
-    case ScanValueType::kUInt16: return NumberStrToBytes<uint16_t>(str, base);
-    case ScanValueType::kInt32:  return NumberStrToBytes<int32_t>(str, base);
-    case ScanValueType::kUInt32: return NumberStrToBytes<uint32_t>(str, base);
-    case ScanValueType::kInt64:  return NumberStrToBytes<int64_t>(str, base);
-    case ScanValueType::kUInt64: return NumberStrToBytes<uint64_t>(str, base);
-    case ScanValueType::kFloat:  return NumberStrToBytes<float>(str, base);
-    case ScanValueType::kDouble: return NumberStrToBytes<double>(str, base);
-    default: return {};
-  }
-}
-
-// clang-format on
 
 constexpr std::array<ScanValueType, 10> kScanValueTypeByIndex = {
     ScanValueType::kInt8,
@@ -236,7 +175,14 @@ void ScannerWidget::Render(const ScanStorage& entries) {
   if (ImGui::BeginChild("Table")) {
     ResultsTable table_renderer;
     const auto type = kScanValueTypeByIndex.at(current_type_index_);
-    table_renderer.Render(entries, type, is_hex_input_, selected_index_);
+    bool double_clicked = false;
+    table_renderer.Render(
+        entries, type, is_hex_input_, selected_index_, double_clicked);
+
+    if (double_clicked) {
+      signals_.entry_double_clicked.publish(selected_index_, type);
+    }
+
     ImGui::EndChild();
   }
   ImGui::End();

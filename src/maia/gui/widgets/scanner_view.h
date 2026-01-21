@@ -22,18 +22,31 @@ class ScannerWidget {
  private:
   class Signals {
    public:
+    /// \brief Emitted when the user clicks the "First Scan" button.
     entt::sigh<void()> new_scan_pressed;
+
+    /// \brief Emitted when the user clicks the "Next Scan" button.
     entt::sigh<void()> next_scan_pressed;
-    // entt::sigh<void(std::vector<std::byte> value_to_scan)>
-    // scan_button_pressed;
+
+    /// \brief Emitted when the user changes the target scan value in the input
+    /// field.
+    /// \param value The parsed byte representation of the new target value.
     entt::sigh<void(std::vector<std::byte>)> target_value_selected;
+
+    /// \brief Emitted when the user selects a different comparison type (e.g.,
+    /// Exact Value, Changed).
+    /// \param comparison The selected comparison mode.
     entt::sigh<void(ScanComparison)> scan_comparison_selected;
+
+    /// \brief Emitted when the user toggles the "Auto Update" checkbox.
+    /// \param enabled True if auto-update is enabled, false otherwise.
     entt::sigh<void(bool)> auto_update_changed;
 
-    // TODO: Define a new structure or method to pass selection data
-    // entt::sigh<void(ScanStorage)> entry_selected;
-    // entt::sigh<void(std::vector<MemoryAddress>, std::vector<std::byte>)>
-    //     set_scan_value;
+    /// \brief Emitted when an entry in the results table is double-clicked.
+    /// \param index The index of the clicked entry within the current scan
+    /// storage.
+    /// \param type The value type of the clicked entry.
+    entt::sigh<void(int, ScanValueType)> entry_double_clicked;
   };
 
   // clang-format off
@@ -44,6 +57,7 @@ class ScannerWidget {
     auto TargetValueSelected() {return entt::sink(view.signals_.target_value_selected);}
     auto ScanComparisonSelected() {return entt::sink(view.signals_.scan_comparison_selected);}
     auto AutoUpdateChanged() {return entt::sink(view.signals_.auto_update_changed);}
+    auto EntryDoubleClicked() {return entt::sink(view.signals_.entry_double_clicked);}
   };
 
   // clang-format on

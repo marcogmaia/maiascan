@@ -9,11 +9,15 @@ target_sources(
       BASE_DIRS "${MAIA_BASE_DIR}"
       FILES
         imgui_extensions.h
+        layout.h
+        widgets/cheat_table_view.h
         widgets/process_selector_view.h
         widgets/results_table.h
         widgets/scanner_view.h
   PRIVATE
     imgui_extensions.cpp
+    layout.cpp
+    widgets/cheat_table_view.cpp
     widgets/process_selector_view.cpp
     widgets/results_table.cpp
     widgets/scanner_view.cpp

@@ -66,10 +66,13 @@ void DrawEntryByType(std::span<const std::byte> data,
 void ResultsTable::Render(const ScanStorage& data,
                           ScanValueType value_type,
                           bool is_hex,
-                          int& selected_idx) {
+                          int& selected_idx,
+                          bool& double_clicked) {
   // Here we use the clipper because the list may contain millions of results.
   ImGuiListClipper clipper;
   clipper.Begin(static_cast<int>(data.addresses.size()));
+
+  double_clicked = false;
 
   constexpr int kNumCols = 3;
   if (ImGui::BeginTable("ScanResults",
@@ -103,8 +106,12 @@ void ResultsTable::Render(const ScanStorage& data,
 
         if (ImGui::Selectable(addr_label.c_str(),
                               selected_idx == i,
-                              ImGuiSelectableFlags_SpanAllColumns)) {
+                              ImGuiSelectableFlags_SpanAllColumns |
+                                  ImGuiSelectableFlags_AllowDoubleClick)) {
           selected_idx = i;
+          if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            double_clicked = true;
+          }
         }
 
         // Previous Value.
