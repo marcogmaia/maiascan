@@ -2,7 +2,9 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -15,13 +17,18 @@
 
 namespace maia {
 
+struct CheatTableEntryData {
+  mutable std::mutex mutex;  // Protects value, frozen_value, is_frozen
+  std::vector<std::byte> value;
+  std::vector<std::byte> frozen_value;
+  bool is_frozen{false};
+};
+
 struct CheatTableEntry {
   MemoryAddress address;
   ScanValueType type;
   std::string description;
-  std::vector<std::byte> value;
-  bool is_frozen{false};
-  std::vector<std::byte> frozen_value;
+  std::shared_ptr<CheatTableEntryData> data;
 };
 
 class CheatTableModel {
@@ -33,9 +40,7 @@ class CheatTableModel {
     return Sinks{*this};
   }
 
-  const std::vector<CheatTableEntry>& entries() const {
-    return entries_;
-  }
+  std::shared_ptr<const std::vector<CheatTableEntry>> entries() const;
 
   void AddEntry(MemoryAddress address,
                 ScanValueType type,
@@ -66,7 +71,7 @@ class CheatTableModel {
   void WriteMemory(size_t index, const std::vector<std::byte>& data);
 
   Signals signals_;
-  std::vector<CheatTableEntry> entries_;
+  std::atomic<std::shared_ptr<const std::vector<CheatTableEntry>>> entries_;
   IProcess* active_process_{nullptr};
   mutable std::mutex mutex_;
   std::jthread update_task_;

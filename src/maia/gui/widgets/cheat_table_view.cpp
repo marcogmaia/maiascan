@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <imgui_stdlib.h>  // for InputText with std::string
 #include <format>
+#include <mutex>
 
 namespace maia {
 
@@ -85,9 +86,19 @@ void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
         ImGui::PushID(static_cast<int>(i));
         ImGui::TableNextRow();
 
+        // Snapshot of entry data for thread-safe UI rendering
+        std::string val_str;
+        bool is_frozen = false;
+
+        {
+          std::scoped_lock entry_lock(entry.data->mutex);
+          val_str = GetValueString(entry.type, entry.data->value);
+          is_frozen = entry.data->is_frozen;
+        }
+
         // 1. Frozen Checkbox
         ImGui::TableSetColumnIndex(0);
-        bool frozen = entry.is_frozen;
+        bool frozen = is_frozen;
         if (ImGui::Checkbox("##frozen", &frozen)) {
           signals_.freeze_toggled.publish(i);
         }
@@ -116,14 +127,6 @@ void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
 
         // 5. Value (Editable)
         ImGui::TableSetColumnIndex(4);
-        std::string val_str = GetValueString(entry.type, entry.value);
-        // Store the editing state if needed, but for now let's just use a
-        // temporary buffer logic ImGui isn't great at "click to edit" without
-        // extra state. We'll use InputText. If user types, it updates. Issue:
-        // If it updates automatically in background, InputText might get
-        // overwritten while typing. Fix: Only update display if not focused? Or
-        // rely on Enter?
-
         ImGui::SetNextItemWidth(-FLT_MIN);
         // Unique ID based on index
         if (ImGui::InputText(

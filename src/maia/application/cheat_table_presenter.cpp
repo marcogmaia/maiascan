@@ -36,7 +36,8 @@ CheatTablePresenter::CheatTablePresenter(CheatTableModel& model,
 }
 
 void CheatTablePresenter::Render() {
-  view_.Render(model_.entries());
+  auto snapshot = model_.entries();
+  view_.Render(*snapshot);
 }
 
 }  // namespace maia

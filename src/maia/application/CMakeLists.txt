@@ -27,12 +27,17 @@ target_sources(
 target_link_libraries(application PUBLIC core)
 
 add_executable(application_test)
-target_sources(application_test PRIVATE scan_result_model_test.cpp)
+target_sources(
+  application_test
+  PRIVATE
+    scan_result_model_test.cpp
+    cheat_table_model_test.cpp
+)
 target_link_libraries(
   application_test
   PRIVATE
     application
-    GTest::gtest_main
+    GTest::gmock_main
 )
 
 gtest_discover_tests(application_test)
