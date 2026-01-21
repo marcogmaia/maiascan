@@ -34,6 +34,7 @@ struct CheatTableEntry {
 class CheatTableModel {
  public:
   CheatTableModel();
+
   ~CheatTableModel();
 
   auto sinks() {

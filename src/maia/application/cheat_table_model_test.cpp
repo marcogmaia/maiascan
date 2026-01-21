@@ -12,9 +12,6 @@
 #include "maia/core/i_process.h"
 
 namespace maia {
-namespace {
-
-using namespace std::chrono_literals;
 
 class MockProcess : public IProcess {
  public:
@@ -47,6 +44,16 @@ class CheatTableModelTest : public ::testing::Test {
  protected:
   testing::NiceMock<MockProcess> mock_process_;
   CheatTableModel model_;
+
+  void CallWriteMemory(size_t index, const std::vector<std::byte>& data) {
+    // We use "1" here because our entry is kInt32.
+    // kInt32 will parse "1" into {0x01, 0x00, 0x00, 0x00}.
+    // The test mock expects data of size 4 if we use ReadMemory size... wait.
+    // The test uses CallWriteMemory(0, data).
+    // The logic inside CallWriteMemory originally called private WriteMemory
+    // directly. Now we call SetValue("1").
+    model_.SetValue(index, "1");
+  }
 };
 
 TEST_F(CheatTableModelTest, RaceConditionLostUpdateIsPrevented) {
@@ -101,8 +108,9 @@ TEST_F(CheatTableModelTest, RaceConditionLostUpdateIsPrevented) {
   // 4. Wait for the background thread to be "inside" the update loop
   {
     std::unique_lock lock(mutex);
-    ASSERT_TRUE(cv_read_start.wait_for(lock, 2s, [&] { return read_started; }))
-        << "Timed out waiting for UpdateValues to start reading";
+    ASSERT_TRUE(cv_read_start.wait_for(lock, std::chrono::seconds(2), [&] {
+      return read_started;
+    })) << "Timed out waiting for UpdateValues to start reading";
   }
 
   // At this point, the scanner has captured the snapshot of size 1.
@@ -138,5 +146,96 @@ TEST_F(CheatTableModelTest, RaceConditionLostUpdateIsPrevented) {
   }
 }
 
-}  // namespace
+// This test deterministically triggers the race condition where active_process_
+// is set to null (by UpdateValues) while WriteMemory is using it.
+TEST_F(CheatTableModelTest, WriteMemoryCrashesIfProcessDiesConcurrently) {
+  // Synchronization primitives
+  std::mutex sync_mutex;
+  std::condition_variable cv_paused;
+  std::condition_variable cv_resume;
+  bool is_paused = false;
+  bool should_resume = false;
+
+  // 1. Configure Mock for the race
+  std::thread::id victim_thread_id;
+  std::thread::id main_thread_id = std::this_thread::get_id();
+  std::atomic<bool> victim_started{false};
+
+  // We use WillRepeatedly with a stateful lambda to handle the different
+  // threads
+  EXPECT_CALL(mock_process_, IsProcessValid())
+      .WillRepeatedly(testing::Invoke([&]() {
+        auto current_id = std::this_thread::get_id();
+
+        // Background thread (or others): just say it's valid
+        if (current_id != victim_thread_id && current_id != main_thread_id) {
+          return true;
+        }
+
+        // Victim Thread: Pause here to simulate the race window
+        if (current_id == victim_thread_id) {
+          std::unique_lock lock(sync_mutex);
+          is_paused = true;
+          cv_paused.notify_one();
+
+          cv_resume.wait(lock, [&] { return should_resume; });
+          return true;
+        }
+
+        // Main Thread (Attacker): Return false to trigger active_process_ =
+        // nullptr
+        if (current_id == main_thread_id) {
+          return false;
+        }
+
+        return true;
+      }));
+
+  EXPECT_CALL(mock_process_, ReadMemory(testing::_, testing::_, testing::_))
+      .WillRepeatedly(testing::Return(true));
+
+  // Setup
+  model_.SetActiveProcess(&mock_process_);
+  model_.AddEntry(0x1234, ScanValueType::kInt32, "Test Entry");
+
+  // Start the Victim Thread
+  std::thread victim_thread([&]() {
+    while (!victim_started) {
+      std::this_thread::yield();
+    }
+    std::vector<std::byte> data{std::byte{0x1}};
+    CallWriteMemory(0, data);
+  });
+
+  victim_thread_id = victim_thread.get_id();
+  victim_started = true;
+
+  // Wait for Victim to pause inside IsProcessValid
+  {
+    std::unique_lock lock(sync_mutex);
+    // Use wait_for to detect deadlock
+    if (!cv_paused.wait_for(
+            lock, std::chrono::seconds(5), [&] { return is_paused; })) {
+      victim_thread.detach();  // Detach to allow test to fail gracefully
+      FAIL() << "Deadlock: Victim thread never reached IsProcessValid";
+    }
+  }
+
+  // Trigger the Attacker (UpdateValues)
+  // This will call IsProcessValid (returning false), and then set
+  // active_process_ = nullptr
+  model_.UpdateValues();
+
+  // Resume the Victim
+  // It will now exit IsProcessValid and try to dereference active_process_
+  {
+    std::unique_lock lock(sync_mutex);
+    should_resume = true;
+    cv_resume.notify_one();
+  }
+
+  // Wait for crash (or join if it somehow survives)
+  victim_thread.join();
+}
+
 }  // namespace maia

@@ -99,9 +99,8 @@ void CheatTableModel::SetValue(size_t index, const std::string& value_str) {
       return;
     }
 
-    if (active_process_) {
-      active_process_->WriteMemory(entry.address, data);
-    }
+    // Write to process (if valid)
+    WriteMemory(index, data);
 
     // Update local version
     std::scoped_lock entry_lock(entry.data->mutex);
@@ -119,10 +118,11 @@ void CheatTableModel::SetActiveProcess(IProcess* process) {
 
 void CheatTableModel::WriteMemory(size_t index,
                                   const std::vector<std::byte>& data) {
-  if (active_process_ && active_process_->IsProcessValid()) {
+  // Capture pointer to avoid race with UpdateValues nulling it
+  if (IProcess* proc = active_process_; proc->IsProcessValid()) {
     auto snapshot = entries_.load();
     if (index < snapshot->size()) {
-      active_process_->WriteMemory((*snapshot)[index].address, data);
+      proc->WriteMemory((*snapshot)[index].address, data);
     }
   }
 }
