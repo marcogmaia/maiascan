@@ -101,7 +101,16 @@ void CheatTableModel::WriteMemory(size_t index,
 
 void CheatTableModel::UpdateValues() {
   std::scoped_lock lock(mutex_);
-  if (!active_process_ || !active_process_->IsProcessValid()) {
+  if (!active_process_) {
+    return;
+  }
+
+  if (!active_process_->IsProcessValid()) {
+    active_process_ = nullptr;
+    for (auto& entry : entries_) {
+      std::fill(entry.value.begin(), entry.value.end(), std::byte{0});
+    }
+    signals_.table_changed.publish();
     return;
   }
 

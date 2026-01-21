@@ -27,54 +27,38 @@ std::string FormatValue(const std::vector<std::byte>& data) {
 
 std::string GetValueString(ScanValueType type,
                            const std::vector<std::byte>& data) {
+  // clang-format off
   switch (type) {
-    case ScanValueType::kInt8:
-      return FormatValue<int8_t>(data);
-    case ScanValueType::kUInt8:
-      return FormatValue<uint8_t>(data);
-    case ScanValueType::kInt16:
-      return FormatValue<int16_t>(data);
-    case ScanValueType::kUInt16:
-      return FormatValue<uint16_t>(data);
-    case ScanValueType::kInt32:
-      return FormatValue<int32_t>(data);
-    case ScanValueType::kUInt32:
-      return FormatValue<uint32_t>(data);
-    case ScanValueType::kInt64:
-      return FormatValue<int64_t>(data);
-    case ScanValueType::kUInt64:
-      return FormatValue<uint64_t>(data);
-    case ScanValueType::kFloat:
-      return FormatValue<float>(data);
-    case ScanValueType::kDouble:
-      return FormatValue<double>(data);
+    case ScanValueType::kInt8: return FormatValue<int8_t>(data);
+    case ScanValueType::kUInt8: return FormatValue<uint8_t>(data);
+    case ScanValueType::kInt16: return FormatValue<int16_t>(data);
+    case ScanValueType::kUInt16: return FormatValue<uint16_t>(data);
+    case ScanValueType::kInt32: return FormatValue<int32_t>(data);
+    case ScanValueType::kUInt32: return FormatValue<uint32_t>(data);
+    case ScanValueType::kInt64: return FormatValue<int64_t>(data);
+    case ScanValueType::kUInt64: return FormatValue<uint64_t>(data);
+    case ScanValueType::kFloat: return FormatValue<float>(data);
+    case ScanValueType::kDouble: return FormatValue<double>(data);
   }
+  // clang-format on
   return "?";
 }
 
 const char* GetTypeString(ScanValueType type) {
+  // clang-format off
   switch (type) {
-    case ScanValueType::kInt8:
-      return "Byte";
-    case ScanValueType::kUInt8:
-      return "2 Bytes";  // Wait, naming
+    case ScanValueType::kInt8: 
+    case ScanValueType::kUInt8:  return "1 Byte";
     case ScanValueType::kInt16:
-      return "2 Bytes";
-    case ScanValueType::kUInt16:
-      return "2 Bytes";
+    case ScanValueType::kUInt16: return "2 Bytes";
     case ScanValueType::kInt32:
-      return "4 Bytes";
-    case ScanValueType::kUInt32:
-      return "4 Bytes";
+    case ScanValueType::kUInt32: return "4 Bytes";
     case ScanValueType::kInt64:
-      return "8 Bytes";
-    case ScanValueType::kUInt64:
-      return "8 Bytes";
-    case ScanValueType::kFloat:
-      return "Float";
-    case ScanValueType::kDouble:
-      return "Double";
+    case ScanValueType::kUInt64: return "8 Bytes";
+    case ScanValueType::kFloat:  return "Float";
+    case ScanValueType::kDouble: return "Double";
   }
+  // clang-format on
   return "Unknown";
 }
 

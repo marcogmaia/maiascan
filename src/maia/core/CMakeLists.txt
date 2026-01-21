@@ -8,17 +8,12 @@ target_sources(
   core
   PUBLIC
     FILE_SET HEADERS
-      # BASE_DIRS maia/core
       BASE_DIRS "${MAIA_BASE_DIR}"
-      FILES
-        # i_memory_accessor.h
-        # maia/core/
-        cpu_info.h
-        memory_common.h
-        process.h
-        simd_scanner.h
+      FILES cpu_info.h memory_common.h process.h simd_scanner.h
   PRIVATE
+    cpu_info.cpp
     process.cpp
+    simd_scanner.cpp
 )
 
 target_link_libraries(

@@ -13,7 +13,7 @@ class SimdScannerTest : public ::testing::Test {
   std::vector<size_t> found_offsets_;
 
   void OnMatch(size_t offset) {
-    found_offsets_.push_back(offset);
+    found_offsets_.emplace_back(offset);
   }
 
   void Clear() {
@@ -196,6 +196,99 @@ TEST_F(SimdScannerTest, ScanMemCmpRespectsStride) {
   ASSERT_EQ(found_offsets_.size(), 2);
   EXPECT_EQ(found_offsets_[0], 4);
   EXPECT_EQ(found_offsets_[1], 16);
+}
+
+TEST_F(SimdScannerTest, ScanMemCmpLargeStride) {
+  // Stride 8 (Int64/Double)
+  std::vector<std::byte> buf1(64, std::byte{0});
+  std::vector<std::byte> buf2(64, std::byte{0});
+
+  buf1[8] = std::byte{1};
+  buf2[8] = std::byte{2};
+
+  ScanMemCmp(buf1, buf2, false, 8, [this](size_t o) { OnMatch(o); });
+  ASSERT_EQ(found_offsets_.size(), 1);
+  EXPECT_EQ(found_offsets_[0], 8);
+
+  // Stride 16
+  Clear();
+  buf1[33] = std::byte{1};
+  buf2[34] = std::byte{2};
+  ScanMemCmp(buf1, buf2, false, 16, [this](size_t o) { OnMatch(o); });
+  ASSERT_EQ(found_offsets_.size(), 2);
+  EXPECT_EQ(found_offsets_[0], 0);
+  EXPECT_EQ(found_offsets_[1], 32);
+}
+
+TEST_F(SimdScannerTest, TailLogicBoundaries) {
+  for (size_t size : {31, 32, 33}) {
+    Clear();
+    std::vector<std::byte> buffer(size, std::byte{0});
+    buffer[size - 1] = std::byte{0xFF};
+    std::vector<std::byte> pattern = {std::byte{0xFF}};
+
+    ScanBuffer(buffer, pattern, [this](size_t o) { OnMatch(o); });
+    ASSERT_EQ(found_offsets_.size(), 1) << "Failed for size " << size;
+    EXPECT_EQ(found_offsets_[0], size - 1);
+  }
+}
+
+TEST_F(SimdScannerTest, ScanMemCompareGreaterInt32) {
+  std::vector<std::byte> buf1(64, std::byte{0});
+  std::vector<std::byte> buf2(64, std::byte{0});
+
+  // 100 > 50 at offset 4
+  int32_t val1 = 100;
+  int32_t val2 = 50;
+  std::memcpy(buf1.data() + 4, &val1, 4);
+  std::memcpy(buf2.data() + 4, &val2, 4);
+
+  // 50 < 100 at offset 12 (should not match)
+  val1 = 50;
+  val2 = 100;
+  std::memcpy(buf1.data() + 12, &val1, 4);
+  std::memcpy(buf2.data() + 12, &val2, 4);
+
+  // 200 > 100 at offset 40
+  val1 = 200;
+  val2 = 100;
+  std::memcpy(buf1.data() + 40, &val1, 4);
+  std::memcpy(buf2.data() + 40, &val2, 4);
+
+  ScanMemCompareGreater<int32_t>(buf1, buf2, [this](size_t o) { OnMatch(o); });
+
+  ASSERT_EQ(found_offsets_.size(), 2);
+  EXPECT_EQ(found_offsets_[0], 4);
+  EXPECT_EQ(found_offsets_[1], 40);
+}
+
+TEST_F(SimdScannerTest, ScanMemCompareGreaterFloat) {
+  std::vector<std::byte> buf1(64, std::byte{0});
+  std::vector<std::byte> buf2(64, std::byte{0});
+
+  float val1 = 100.5f;
+  float val2 = 100.4f;
+  std::memcpy(buf1.data() + 8, &val1, 4);
+  std::memcpy(buf2.data() + 8, &val2, 4);
+
+  ScanMemCompareGreater<float>(buf1, buf2, [this](size_t o) { OnMatch(o); });
+  ASSERT_EQ(found_offsets_.size(), 1);
+  EXPECT_EQ(found_offsets_[0], 8);
+}
+
+TEST_F(SimdScannerTest, ScanMemCompareGreaterScalarFallback) {
+  // Test with double (8 bytes), which should use scalar fallback
+  std::vector<std::byte> buf1(64, std::byte{0});
+  std::vector<std::byte> buf2(64, std::byte{0});
+
+  double val1 = 500.0;
+  double val2 = 250.0;
+  std::memcpy(buf1.data() + 16, &val1, 8);
+  std::memcpy(buf2.data() + 16, &val2, 8);
+
+  ScanMemCompareGreater<double>(buf1, buf2, [this](size_t o) { OnMatch(o); });
+  ASSERT_EQ(found_offsets_.size(), 1);
+  EXPECT_EQ(found_offsets_[0], 16);
 }
 
 }  // namespace maia::core
