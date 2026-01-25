@@ -25,11 +25,13 @@ class MockProcess : public IProcess {
               ReadMemory,
               (std::span<const MemoryAddress> addresses,
                size_t bytes_per_address,
-               std::span<std::byte> out_buffer),
+               std::span<std::byte> out_buffer,
+               std::vector<uint8_t>* success_mask),
               (override));
 
   MOCK_METHOD(bool,
               WriteMemory,
+
               (uintptr_t address, std::span<const std::byte> buffer),
               (override));
 
@@ -37,6 +39,14 @@ class MockProcess : public IProcess {
               GetMemoryRegions,
               (),
               (const, override));
+
+  MOCK_METHOD(std::vector<mmem::ModuleDescriptor>,
+              GetModules,
+              (),
+              (const, override));
+
+  MOCK_METHOD(bool, Suspend, (), (override));
+  MOCK_METHOD(bool, Resume, (), (override));
 };
 
 // Test fixture for verifying concurrency fixes
@@ -69,11 +79,13 @@ TEST_F(CheatTableModelTest, RaceConditionLostUpdateIsPrevented) {
   EXPECT_CALL(mock_process_, IsProcessValid())
       .WillRepeatedly(testing::Return(true));
 
-  EXPECT_CALL(mock_process_, ReadMemory(testing::_, testing::_, testing::_))
+  EXPECT_CALL(mock_process_,
+              ReadMemory(testing::_, testing::_, testing::_, testing::_))
       .WillRepeatedly(
           testing::Invoke([&](std::span<const MemoryAddress> addresses,
                               size_t bytes_per_address,
-                              std::span<std::byte> out_buffer) {
+                              std::span<std::byte> out_buffer,
+                              std::vector<uint8_t>* success_mask) {
             if (!should_block) {
               return true;
             }
@@ -191,7 +203,8 @@ TEST_F(CheatTableModelTest, WriteMemoryCrashesIfProcessDiesConcurrently) {
         return true;
       }));
 
-  EXPECT_CALL(mock_process_, ReadMemory(testing::_, testing::_, testing::_))
+  EXPECT_CALL(mock_process_,
+              ReadMemory(testing::_, testing::_, testing::_, testing::_))
       .WillRepeatedly(testing::Return(true));
 
   // Setup

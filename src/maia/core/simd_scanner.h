@@ -15,25 +15,25 @@ namespace maia::core {
 namespace internal {
 
 // Standard library search fallback for scalar execution.
+// When alignment > 1, only reports matches at aligned offsets.
 template <typename Callback>
 void ScanBufferScalar(std::span<const std::byte> buffer,
                       std::span<const std::byte> pattern,
+                      size_t alignment,
                       Callback&& callback) {
-  auto it = buffer.begin();
-  const auto end = buffer.end();
-  const auto pat_begin = pattern.begin();
-  const auto pat_end = pattern.end();
+  if (pattern.empty() || buffer.size() < pattern.size()) {
+    return;
+  }
 
-  while (true) {
-    it = std::search(it, end, pat_begin, pat_end);
-    if (it == end) {
-      break;
+  const size_t pattern_size = pattern.size();
+  const size_t limit = buffer.size() - pattern_size;
+
+  // Iterate by alignment stride for efficiency.
+  for (size_t offset = 0; offset <= limit; offset += alignment) {
+    if (std::memcmp(buffer.data() + offset, pattern.data(), pattern_size) ==
+        0) {
+      callback(offset);
     }
-
-    size_t offset = std::distance(buffer.begin(), it);
-    callback(offset);
-
-    std::advance(it, 1);
   }
 }
 
@@ -72,6 +72,7 @@ void ScanMemCompareGreaterScalar(std::span<const std::byte> buf1,
 // Non-template AVX2 implementations in simd_scanner.cpp
 void ScanBufferAvx2_Impl(std::span<const std::byte> buffer,
                          std::span<const std::byte> pattern,
+                         size_t alignment,
                          std::function<void(size_t)> callback);
 
 void ScanMemCmpAvx2_Impl(std::span<const std::byte> buf1,
@@ -91,18 +92,30 @@ void ScanMemCompareGreaterAvx2_Float_Impl(std::span<const std::byte> buf1,
 }  // namespace internal
 
 /// \brief Scans a memory buffer for a pattern, utilizing SIMD if available.
+/// \param alignment Only report matches at offsets divisible by this value.
+///                  Use sizeof(T) to align scans to data type boundaries.
 template <typename Callback>
 void ScanBuffer(std::span<const std::byte> buffer,
                 std::span<const std::byte> pattern,
+                size_t alignment,
                 Callback&& callback) {
   static const bool kHasAvx2 = HasAvx2();
   if (kHasAvx2) {
     internal::ScanBufferAvx2_Impl(
-        buffer, pattern, std::forward<Callback>(callback));
+        buffer, pattern, alignment, std::forward<Callback>(callback));
   } else {
     internal::ScanBufferScalar(
-        buffer, pattern, std::forward<Callback>(callback));
+        buffer, pattern, alignment, std::forward<Callback>(callback));
   }
+}
+
+/// \brief Scans a memory buffer for a pattern (unaligned, byte-level).
+/// \deprecated Prefer the aligned overload for type-safe scanning.
+template <typename Callback>
+void ScanBuffer(std::span<const std::byte> buffer,
+                std::span<const std::byte> pattern,
+                Callback&& callback) {
+  ScanBuffer(buffer, pattern, 1, std::forward<Callback>(callback));
 }
 
 /// \brief Scans two buffers for equality/inequality.

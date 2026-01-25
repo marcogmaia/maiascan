@@ -57,10 +57,13 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
   connections_.emplace_back(scanner_widget_.sinks().NextScanPressed().connect<&ScanResultModel::NextScan>(scan_result_model_));
   connections_.emplace_back(scanner_widget_.sinks().ScanComparisonSelected().connect<&ScanResultModel::SetScanComparison>(scan_result_model_));
   connections_.emplace_back(scanner_widget_.sinks().TargetValueSelected().connect<&ScanResultModel::SetTargetScanValue>(scan_result_model_));
+  connections_.emplace_back(scanner_widget_.sinks().CancelScanPressed().connect<&ScanResultModel::CancelScan>(scan_result_model_));
 
   // connections_.emplace_back(scanner_widget_.sinks().AutoUpdateChanged().connect<&ScannerPresenter::OnAutoUpdateChanged>(*this));
   // I don't know if I'll keep this signature here, I'm just exploring ideas on how to mimic Qt's connection for signal/slow.
   Connect(connections_, scanner_widget_.sinks().AutoUpdateChanged(), this, Slot<&ScannerPresenter::OnAutoUpdateChanged>);
+  Connect(connections_, scanner_widget_.sinks().PauseWhileScanningChanged(), this, Slot<&ScannerPresenter::OnPauseWhileScanningChanged>);
+  Connect(connections_, scanner_widget_.sinks().FastScanChanged(), this, Slot<&ScannerPresenter::OnFastScanChanged>);
   Connect(connections_, scanner_widget_.sinks().EntryDoubleClicked(), this, Slot<&ScannerPresenter::OnEntryDoubleClicked>);
 
   // clang-format on
@@ -86,6 +89,14 @@ void ScannerPresenter::OnAutoUpdateChanged(bool is_checked) {
   } else {
     scan_result_model_.StopAutoUpdate();
   }
+}
+
+void ScannerPresenter::OnPauseWhileScanningChanged(bool is_checked) {
+  scan_result_model_.SetPauseWhileScanning(is_checked);
+}
+
+void ScannerPresenter::OnFastScanChanged(bool is_checked) {
+  scan_result_model_.SetFastScan(is_checked);
 }
 
 void ScannerPresenter::OnEntryDoubleClicked(int index, ScanValueType type) {

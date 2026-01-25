@@ -2,13 +2,16 @@
 
 #include "maia/gui/widgets/results_table.h"
 
+#include <algorithm>
 #include <format>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
 #include <imgui.h>
 
+#include "maia/core/address_formatter.h"
 #include "maia/core/scan_types.h"
 
 namespace maia {
@@ -16,7 +19,9 @@ namespace maia {
 namespace {
 
 template <typename T>
-void DrawFormattedValue(std::span<const std::byte> data, bool is_hex) {
+void DrawFormattedValue(std::span<const std::byte> data,
+                        bool is_hex,
+                        std::optional<ImVec4> color = std::nullopt) {
   if (data.size() < sizeof(T)) {
     ImGui::TextUnformatted("Invalid");
     return;
@@ -24,38 +29,46 @@ void DrawFormattedValue(std::span<const std::byte> data, bool is_hex) {
   T val;
   std::memcpy(&val, data.data(), sizeof(T));
 
+  std::string text;
   if constexpr (std::is_floating_point_v<T>) {
-    ImGui::TextUnformatted(std::format("{:.6f}", val).c_str());
+    text = std::format("{:.6f}", val);
   } else {
     if (is_hex) {
       constexpr size_t kHexWidth = 2 * sizeof(T);
-      ImGui::TextUnformatted(std::format("0x{:0{}x}", val, kHexWidth).c_str());
+      text = std::format("0x{:0{}x}", val, kHexWidth);
     } else {
-      ImGui::TextUnformatted(std::format("{}", val).c_str());
+      text = std::format("{}", val);
     }
+  }
+
+  if (color) {
+    ImGui::TextColored(*color, "%s", text.c_str());
+  } else {
+    ImGui::TextUnformatted(text.c_str());
   }
 }
 
 // clang-format off
 void DrawEntryByType(std::span<const std::byte> data,
                     ScanValueType type,
-                    bool is_hex) {
+                    bool is_hex,
+                    std::optional<ImVec4> color = std::nullopt) {
   if (data.empty()) {
     ImGui::TextUnformatted("N/A");
     return;
   }
 
   switch (type) {
-    case ScanValueType::kInt8:   DrawFormattedValue<int8_t>(data, is_hex); break;
-    case ScanValueType::kUInt8:  DrawFormattedValue<uint8_t>(data, is_hex); break;
-    case ScanValueType::kInt16:  DrawFormattedValue<int16_t>(data, is_hex); break;
-    case ScanValueType::kUInt16: DrawFormattedValue<uint16_t>(data, is_hex); break;
-    case ScanValueType::kInt32:  DrawFormattedValue<int32_t>(data, is_hex); break;
-    case ScanValueType::kUInt32: DrawFormattedValue<uint32_t>(data, is_hex); break;
-    case ScanValueType::kInt64:  DrawFormattedValue<int64_t>(data, is_hex); break;
-    case ScanValueType::kUInt64: DrawFormattedValue<uint64_t>(data, is_hex); break;
-    case ScanValueType::kFloat:  DrawFormattedValue<float>(data, false); break;
-    case ScanValueType::kDouble: DrawFormattedValue<double>(data, false); break;
+    case ScanValueType::kInt8:   DrawFormattedValue<int8_t>(data, is_hex, color); break;
+    case ScanValueType::kUInt8:  DrawFormattedValue<uint8_t>(data, is_hex, color); break;
+    case ScanValueType::kInt16:  DrawFormattedValue<int16_t>(data, is_hex, color); break;
+    case ScanValueType::kUInt16: DrawFormattedValue<uint16_t>(data, is_hex, color); break;
+    case ScanValueType::kInt32:  DrawFormattedValue<int32_t>(data, is_hex, color); break;
+    case ScanValueType::kUInt32: DrawFormattedValue<uint32_t>(data, is_hex, color); break;
+    case ScanValueType::kInt64:  DrawFormattedValue<int64_t>(data, is_hex, color); break;
+    case ScanValueType::kUInt64: DrawFormattedValue<uint64_t>(data, is_hex, color); break;
+    case ScanValueType::kFloat:  DrawFormattedValue<float>(data, false, color); break;
+    case ScanValueType::kDouble: DrawFormattedValue<double>(data, false, color); break;
   }
 }
 
@@ -64,6 +77,7 @@ void DrawEntryByType(std::span<const std::byte> data,
 }  // namespace
 
 void ResultsTable::Render(const ScanStorage& data,
+                          const AddressFormatter& formatter,
                           ScanValueType value_type,
                           bool is_hex,
                           int& selected_idx,
@@ -102,9 +116,13 @@ void ResultsTable::Render(const ScanStorage& data,
 
         // Address.
         ImGui::TableSetColumnIndex(0);
-        std::string addr_label = std::format("0x{:X}", data.addresses[i]);
+        auto formatted_addr = formatter.Format(data.addresses[i]);
 
-        if (ImGui::Selectable(addr_label.c_str(),
+        if (formatted_addr.is_relative) {
+          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+        }
+
+        if (ImGui::Selectable(formatted_addr.text.c_str(),
                               selected_idx == i,
                               ImGuiSelectableFlags_SpanAllColumns |
                                   ImGuiSelectableFlags_AllowDoubleClick)) {
@@ -114,10 +132,16 @@ void ResultsTable::Render(const ScanStorage& data,
           }
         }
 
+        if (formatted_addr.is_relative) {
+          ImGui::PopStyleColor();
+        }
+
         // Previous Value.
         ImGui::TableSetColumnIndex(1);
+        std::span<const std::byte> prev_span;
         if (prev_ptr) {
-          std::span<const std::byte> prev_span(prev_ptr + offset, data.stride);
+          prev_span =
+              std::span<const std::byte>(prev_ptr + offset, data.stride);
           DrawEntryByType(prev_span, value_type, is_hex);
         } else {
           ImGui::TextDisabled("-");
@@ -126,8 +150,14 @@ void ResultsTable::Render(const ScanStorage& data,
         // Current Value.
         ImGui::TableSetColumnIndex(2);
         if (offset + data.stride <= data.curr_raw.size()) {
-          std::span<const std::byte> val_span(curr_ptr + offset, data.stride);
-          DrawEntryByType(val_span, value_type, is_hex);
+          std::span<const std::byte> curr_span(curr_ptr + offset, data.stride);
+
+          std::optional<ImVec4> val_color;
+          if (!prev_span.empty() && !std::ranges::equal(curr_span, prev_span)) {
+            val_color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);  // Red
+          }
+
+          DrawEntryByType(curr_span, value_type, is_hex, val_color);
         }
       }
     }

@@ -5,7 +5,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstring>
+#include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include "maia/assert.h"
@@ -27,13 +30,18 @@ class FakeProcess : public IProcess {
     std::memcpy(&memory_[offset], &value, sizeof(T));
   }
 
+  void MarkAddressInvalid(uintptr_t addr) {
+    invalid_addresses_.insert(addr);
+  }
+
   std::vector<std::byte>& GetRawMemory() {
     return memory_;
   }
 
   bool ReadMemory(std::span<const MemoryAddress> addresses,
                   size_t bytes_per_address,
-                  std::span<std::byte> out_buffer) override {
+                  std::span<std::byte> out_buffer,
+                  std::vector<uint8_t>* success_mask = nullptr) override {
     if (!is_valid_) {
       return false;
     }
@@ -42,15 +50,34 @@ class FakeProcess : public IProcess {
       return false;
     }
 
+    bool all_success = true;
+
     // Single continuous read (First Scan optimization)
     if (addresses.size() == 1) {
       uintptr_t addr = addresses[0];
+      if (success_mask && !success_mask->empty()) {
+        (*success_mask)[0] = 1;
+      }
+
+      if (invalid_addresses_.contains(addr)) {
+        if (success_mask && !success_mask->empty()) {
+          (*success_mask)[0] = 0;
+        }
+        return false;
+      }
+
       if (addr < base_address_) {
+        if (success_mask && !success_mask->empty()) {
+          (*success_mask)[0] = 0;
+        }
         return false;
       }
       size_t offset = addr - base_address_;
 
       if (offset + bytes_per_address > memory_.size()) {
+        if (success_mask && !success_mask->empty()) {
+          (*success_mask)[0] = 0;
+        }
         return false;
       }
       std::memcpy(out_buffer.data(), &memory_[offset], bytes_per_address);
@@ -59,21 +86,41 @@ class FakeProcess : public IProcess {
 
     // Scatter/Gather Read (Next Scan)
     std::byte* out_ptr = out_buffer.data();
-    for (const auto& addr : addresses) {
-      if (addr < base_address_) {
+    for (size_t i = 0; i < addresses.size(); ++i) {
+      const auto addr = addresses[i];
+      bool success = true;
+
+      if (invalid_addresses_.contains(addr)) {
+        success = false;
+        std::memset(out_ptr, 0, bytes_per_address);
+      } else if (addr < base_address_) {
+        success = false;
         std::memset(out_ptr, 0, bytes_per_address);
       } else {
         size_t offset = addr - base_address_;
         if (offset + bytes_per_address > memory_.size()) {
+          success = false;
           std::memset(out_ptr, 0, bytes_per_address);
         } else {
           std::memcpy(out_ptr, &memory_[offset], bytes_per_address);
         }
       }
+
+      if (success_mask && i < success_mask->size()) {
+        (*success_mask)[i] = success ? 1 : 0;
+      }
+      if (!success) {
+        all_success = false;
+      }
+
       out_ptr += bytes_per_address;
     }
 
-    return true;
+    if (success_mask) {
+      return true;
+    }
+
+    return all_success;
   }
 
   bool WriteMemory(uintptr_t, std::span<const std::byte>) override {
@@ -89,6 +136,10 @@ class FakeProcess : public IProcess {
     region.size = memory_.size();
     region.protection = mmem::Protection::kReadWrite;
     return {region};
+  }
+
+  std::vector<mmem::ModuleDescriptor> GetModules() const override {
+    return {};
   }
 
   uint32_t GetProcessId() const override {
@@ -107,6 +158,14 @@ class FakeProcess : public IProcess {
     return base_address_;
   }
 
+  bool Suspend() override {
+    return true;
+  }
+
+  bool Resume() override {
+    return true;
+  }
+
   void SetValid(bool valid) {
     is_valid_ = valid;
   }
@@ -115,6 +174,7 @@ class FakeProcess : public IProcess {
   std::vector<std::byte> memory_;
   uintptr_t base_address_;
   bool is_valid_ = true;
+  std::unordered_set<uintptr_t> invalid_addresses_;
 };
 
 class ScanResultModelTest : public ::testing::Test {
@@ -136,6 +196,14 @@ class ScanResultModelTest : public ::testing::Test {
     return b;
   }
 
+  /// Waits for the async scan to complete and applies the result.
+  void WaitForScan() {
+    while (!model_.HasPendingResult()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    model_.ApplyPendingResult();
+  }
+
   ScanResultModel model_;
   std::unique_ptr<FakeProcess> process_;
 };
@@ -149,6 +217,7 @@ TEST_F(ScanResultModelTest, FirstScanExactValueFindsMatches) {
   model_.SetTargetScanValue(ToBytes<uint32_t>(42));
 
   model_.FirstScan();
+  WaitForScan();
 
   const auto& storage = model_.entries();
   ASSERT_EQ(storage.addresses.size(), 2);
@@ -165,6 +234,7 @@ TEST_F(ScanResultModelTest, FirstScanUnknownValueSnapshotsMemory) {
   model_.SetScanComparison(ScanComparison::kUnknown);
 
   model_.FirstScan();
+  WaitForScan();
 
   const auto& entries = model_.entries();
   // 1KB / 4 bytes = ~256 potential alignments
@@ -180,6 +250,7 @@ TEST_F(ScanResultModelTest, NextScanIncreasedValueFiltersResults) {
 
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   process_->WriteValue<uint32_t>(100, 15);  // Increased
 
@@ -205,22 +276,24 @@ TEST_F(ScanResultModelTest, NextScanIncreasedValueFiltersResults) {
 }
 
 TEST_F(ScanResultModelTest, NextScanExactValueFiltersResults) {
-  process_->WriteValue<uint32_t>(10, 100);
-  process_->WriteValue<uint32_t>(20, 100);
+  // Use aligned offsets (divisible by 4 for uint32_t)
+  process_->WriteValue<uint32_t>(16, 100);
+  process_->WriteValue<uint32_t>(32, 100);
 
   model_.SetScanComparison(ScanComparison::kExactValue);
   model_.SetTargetScanValue(ToBytes<uint32_t>(100));
   model_.FirstScan();
+  WaitForScan();
 
   ASSERT_EQ(model_.entries().addresses.size(), 2);
 
-  process_->WriteValue<uint32_t>(20, 101);
+  process_->WriteValue<uint32_t>(32, 101);
 
   model_.NextScan();
 
   const auto& entries = model_.entries();
   ASSERT_EQ(entries.addresses.size(), 1);
-  EXPECT_EQ(entries.addresses[0], 0x100000 + 10);
+  EXPECT_EQ(entries.addresses[0], 0x100000 + 16);
 }
 
 TEST_F(ScanResultModelTest, SignalEmittedOnScan) {
@@ -240,12 +313,13 @@ TEST_F(ScanResultModelTest, SignalEmittedOnScan) {
       model_.sinks().MemoryChanged().connect<&TestListener::OnMemoryChanged>(
           listener);
 
-  process_->WriteValue<uint32_t>(10, 999);
+  process_->WriteValue<uint32_t>(16, 999);  // Aligned offset
 
   model_.SetScanComparison(ScanComparison::kExactValue);
   model_.SetTargetScanValue(ToBytes<uint32_t>(999));
 
   model_.FirstScan();
+  WaitForScan();
 
   EXPECT_TRUE(listener.signal_received);
   EXPECT_EQ(listener.received_count, 1);
@@ -255,6 +329,9 @@ TEST_F(ScanResultModelTest, InvalidProcessDoesNothing) {
   process_->SetValid(false);
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  // Wait a bit for the early exit path
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  // No pending result for invalid process
   EXPECT_TRUE(model_.entries().addresses.empty());
 }
 
@@ -262,6 +339,7 @@ TEST_F(ScanResultModelTest, ClearResetsStorage) {
   process_->WriteValue<uint32_t>(0, 123);
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
   ASSERT_FALSE(model_.entries().addresses.empty());
 
   model_.Clear();
@@ -275,6 +353,7 @@ TEST_F(ScanResultModelTest, NextScanPopulatesPreviousValues) {
 
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   process_->WriteValue<uint32_t>(100, 20);
   model_.SetScanComparison(ScanComparison::kChanged);
@@ -302,6 +381,7 @@ TEST_F(ScanResultModelTest, NextScanPreservesSnapshotAgainstAutoUpdate) {
 
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   // Sanity check: verify we found the initial value.
   ASSERT_FALSE(model_.entries().addresses.empty());
@@ -357,6 +437,7 @@ TEST_F(ScanResultModelTest,
 
   // Execute First Scan
   model_.FirstScan();
+  WaitForScan();
 
   // Verify First Scan behaved like "Unknown" (snapshot everything)
   ASSERT_FALSE(model_.entries().addresses.empty());
@@ -378,6 +459,7 @@ TEST_F(ScanResultModelTest, NextScanIncreasedByFindsMatch) {
   process_->WriteValue<uint32_t>(100, 10);
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   // Increase by 3 (10 -> 13)
   process_->WriteValue<uint32_t>(100, 13);
@@ -395,5 +477,35 @@ TEST_F(ScanResultModelTest, NextScanIncreasedByFindsMatch) {
   EXPECT_EQ(val, 13);
 }
 
+TEST_F(ScanResultModelTest, NextScanGracefullyHandlesInvalidMemory) {
+  // 1. Setup: First Scan finds 2 values
+  process_->WriteValue<uint32_t>(100, 42);
+  process_->WriteValue<uint32_t>(200, 42);
+
+  model_.SetScanComparison(ScanComparison::kExactValue);
+  model_.SetTargetScanValue(ToBytes<uint32_t>(42));
+  model_.FirstScan();
+  WaitForScan();
+
+  ASSERT_EQ(model_.entries().addresses.size(), 2);
+
+  // 2. Scenario: One address becomes invalid (e.g. unmapped page)
+  process_->MarkAddressInvalid(0x100000 + 100);
+
+  // 3. Action: Next Scan (Unchanged)
+  model_.SetScanComparison(ScanComparison::kUnchanged);
+  model_.NextScan();
+
+  // 4. Expectation:
+  // - Address 100 is REMOVED (because it's invalid)
+  // - Address 200 is KEPT (because it's valid and unchanged)
+  // The scan should NOT abort.
+
+  const auto& entries = model_.entries();
+  ASSERT_EQ(entries.addresses.size(), 1);
+  EXPECT_EQ(entries.addresses[0], 0x100000 + 200);
+}
+
 }  // namespace
+
 }  // namespace maia
