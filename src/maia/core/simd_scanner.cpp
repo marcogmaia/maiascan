@@ -24,15 +24,61 @@
 
 namespace maia::core::internal {
 
+namespace {
+
+// Precomputed bitmasks for common alignments.
+// For alignment N, only bits at positions 0, N, 2N, ... are set.
+// E.g., alignment 4 -> 0x11111111 (bits 0, 4, 8, 12, 16, 20, 24, 28).
+constexpr unsigned int ComputeAlignmentMask(size_t alignment) {
+  if (alignment == 1) {
+    return 0xFFFFFFFFu;
+  }
+  if (alignment == 2) {
+    return 0x55555555u;  // 0101...
+  }
+  if (alignment == 4) {
+    return 0x11111111u;  // 00010001...
+  }
+  if (alignment == 8) {
+    return 0x01010101u;  // 00000001...
+  }
+  if (alignment == 16) {
+    return 0x00010001u;
+  }
+  if (alignment == 32) {
+    return 0x00000001u;
+  }
+  // Fallback for unusual alignments: compute dynamically.
+  unsigned int mask = 0;
+  for (size_t i = 0; i < 32; i += alignment) {
+    mask |= (1u << i);
+  }
+  return mask;
+}
+
+}  // namespace
+
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
     defined(_M_IX86)
 
 MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
     std::span<const std::byte> buffer,
     std::span<const std::byte> pattern,
+    size_t alignment,
     std::function<void(size_t)> callback) {
   if (buffer.size() < 32 || pattern.empty()) {
-    ScanBufferScalar(buffer, pattern, std::move(callback));
+    // Fall back to scalar for small buffers.
+    if (pattern.empty() || buffer.size() < pattern.size()) {
+      return;
+    }
+    const size_t pattern_size = pattern.size();
+    const size_t limit = buffer.size() - pattern_size;
+    for (size_t offset = 0; offset <= limit; offset += alignment) {
+      if (std::memcmp(buffer.data() + offset, pattern.data(), pattern_size) ==
+          0) {
+        callback(offset);
+      }
+    }
     return;
   }
 
@@ -44,12 +90,23 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
   const char* buf_ptr = reinterpret_cast<const char*>(buffer.data());
   const char* pat_ptr = reinterpret_cast<const char*>(pattern.data());
 
+  // Precompute alignment mask for this scan.
+  const unsigned int alignment_mask = ComputeAlignmentMask(alignment);
+
   size_t i = 0;
   for (; i <= buffer_size - 32; i += 32) {
     __m256i v_data =
         _mm256_loadu_si256(reinterpret_cast<const __m256i*>(buf_ptr + i));
     __m256i v_cmp = _mm256_cmpeq_epi8(v_data, v_first);
     unsigned int mask = static_cast<unsigned int>(_mm256_movemask_epi8(v_cmp));
+
+    // Apply alignment filter: only keep bits at aligned offsets.
+    // We need to account for the base offset 'i' modulo alignment.
+    // If i is aligned (which it always is for power-of-2 alignments <= 32),
+    // then the mask is simply AND'd with the precomputed alignment mask.
+    // For non-power-of-2 or i not aligned, we'd need to rotate the mask.
+    // Since i increments by 32 (always aligned), we can use the static mask.
+    mask &= alignment_mask;
 
     while (mask != 0) {
       int bit_index = std::countr_zero(mask);
@@ -70,10 +127,14 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
     }
   }
 
-  if (i < buffer_size) {
-    std::span<const std::byte> tail = buffer.subspan(i);
-    ScanBufferScalar(
-        tail, pattern, [&](size_t offset) { callback(i + offset); });
+  // Handle tail bytes with scalar loop.
+  if (i < buffer_size && i + pattern_size <= buffer_size) {
+    const size_t limit = buffer_size - pattern_size;
+    for (size_t offset = i; offset <= limit; offset += alignment) {
+      if (std::memcmp(buf_ptr + offset, pat_ptr, pattern_size) == 0) {
+        callback(offset);
+      }
+    }
   }
 }
 

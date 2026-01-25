@@ -76,14 +76,16 @@ constexpr std::array<ScanComparison, 13> kScanComparisonByIndex = {
 
 }  // namespace
 
-void ScannerWidget::Render(const ScanStorage& entries) {
+void ScannerWidget::Render(const ScanStorage& entries,
+                           float progress,
+                           bool is_scanning) {
   if (!ImGui::Begin("Scanner")) {
     ImGui::End();
     return;
   }
 
   // Render Search Configuration (Type, Comparison, Input).
-  const auto render_search_options = [this]() {
+  const auto render_search_options = [this, is_scanning]() {
     if (!ImGui::BeginTable("InputTable", 2)) {
       return;
     }
@@ -100,6 +102,8 @@ void ScannerWidget::Render(const ScanStorage& entries) {
       widget_fn();
       ImGui::PopItemWidth();
     };
+
+    ImGui::BeginDisabled(is_scanning);
 
     draw_row("Type:", [this]() {
       ImGui::Combo("##ValueType",
@@ -138,14 +142,22 @@ void ScannerWidget::Render(const ScanStorage& entries) {
         signals_.pause_while_scanning_changed.publish(
             pause_while_scanning_enabled_);
       }
+      ImGui::SameLine();
+      if (ImGui::Checkbox("Fast Scan", &fast_scan_enabled_)) {
+        signals_.fast_scan_changed.publish(fast_scan_enabled_);
+      }
     });
+
+    ImGui::EndDisabled();
 
     ImGui::EndTable();
   };
 
   // Render Action Buttons.
-  const auto render_actions = [this]() {
+  const auto render_actions = [this, is_scanning]() {
     ImGui::Separator();
+
+    ImGui::BeginDisabled(is_scanning);
     if (ImGui::Button("First Scan")) {
       signals_.new_scan_pressed.publish();
     }
@@ -153,12 +165,31 @@ void ScannerWidget::Render(const ScanStorage& entries) {
     if (ImGui::Button("Next Scan")) {
       signals_.next_scan_pressed.publish();
     }
+    ImGui::EndDisabled();
+
+    if (is_scanning) {
+      ImGui::SameLine();
+      if (ImGui::Button("Cancel")) {
+        signals_.cancel_scan_pressed.publish();
+      }
+    }
+
     ImGui::Separator();
+  };
+
+  // Render Progress Bar when scanning.
+  const auto render_progress = [progress, is_scanning]() {
+    if (!is_scanning) {
+      return;
+    }
+    ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0), "Scanning...");
+    ImGui::Spacing();
   };
 
   // Execution Flow.
   render_search_options();
   render_actions();
+  render_progress();
 
   // Render the number of results found.
   const size_t total_count = entries.addresses.size();

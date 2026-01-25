@@ -42,7 +42,7 @@ class Process : public IProcess {
   bool ReadMemory(std::span<const MemoryAddress> addresses,
                   size_t bytes_per_address,
                   std::span<std::byte> out_buffer,
-                  std::vector<uint8_t>* success_mask = nullptr) override;
+                  std::vector<uint8_t>* success_mask) override;
 
   /// \brief Writes a block of memory to the process.
 

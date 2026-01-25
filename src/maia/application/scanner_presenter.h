@@ -17,12 +17,20 @@ class ScannerPresenter {
                    ScannerWidget& scanner_widget);
 
   void Render() {
-    scanner_widget_.Render(scan_result_model_.entries());
+    // Apply async scan results on the main thread when ready.
+    if (scan_result_model_.HasPendingResult()) {
+      scan_result_model_.ApplyPendingResult();
+    }
+
+    scanner_widget_.Render(scan_result_model_.entries(),
+                           scan_result_model_.GetProgress(),
+                           scan_result_model_.IsScanning());
   }
 
  private:
   void OnAutoUpdateChanged(bool is_checked);
   void OnPauseWhileScanningChanged(bool is_checked);
+  void OnFastScanChanged(bool is_checked);
   void OnEntryDoubleClicked(int index, ScanValueType type);
 
   ScanResultModel& scan_result_model_;

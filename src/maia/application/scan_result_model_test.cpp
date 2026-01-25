@@ -5,7 +5,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstring>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -190,6 +192,14 @@ class ScanResultModelTest : public ::testing::Test {
     return b;
   }
 
+  /// Waits for the async scan to complete and applies the result.
+  void WaitForScan() {
+    while (!model_.HasPendingResult()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    model_.ApplyPendingResult();
+  }
+
   ScanResultModel model_;
   std::unique_ptr<FakeProcess> process_;
 };
@@ -203,6 +213,7 @@ TEST_F(ScanResultModelTest, FirstScanExactValueFindsMatches) {
   model_.SetTargetScanValue(ToBytes<uint32_t>(42));
 
   model_.FirstScan();
+  WaitForScan();
 
   const auto& storage = model_.entries();
   ASSERT_EQ(storage.addresses.size(), 2);
@@ -219,6 +230,7 @@ TEST_F(ScanResultModelTest, FirstScanUnknownValueSnapshotsMemory) {
   model_.SetScanComparison(ScanComparison::kUnknown);
 
   model_.FirstScan();
+  WaitForScan();
 
   const auto& entries = model_.entries();
   // 1KB / 4 bytes = ~256 potential alignments
@@ -234,6 +246,7 @@ TEST_F(ScanResultModelTest, NextScanIncreasedValueFiltersResults) {
 
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   process_->WriteValue<uint32_t>(100, 15);  // Increased
 
@@ -259,22 +272,24 @@ TEST_F(ScanResultModelTest, NextScanIncreasedValueFiltersResults) {
 }
 
 TEST_F(ScanResultModelTest, NextScanExactValueFiltersResults) {
-  process_->WriteValue<uint32_t>(10, 100);
-  process_->WriteValue<uint32_t>(20, 100);
+  // Use aligned offsets (divisible by 4 for uint32_t)
+  process_->WriteValue<uint32_t>(16, 100);
+  process_->WriteValue<uint32_t>(32, 100);
 
   model_.SetScanComparison(ScanComparison::kExactValue);
   model_.SetTargetScanValue(ToBytes<uint32_t>(100));
   model_.FirstScan();
+  WaitForScan();
 
   ASSERT_EQ(model_.entries().addresses.size(), 2);
 
-  process_->WriteValue<uint32_t>(20, 101);
+  process_->WriteValue<uint32_t>(32, 101);
 
   model_.NextScan();
 
   const auto& entries = model_.entries();
   ASSERT_EQ(entries.addresses.size(), 1);
-  EXPECT_EQ(entries.addresses[0], 0x100000 + 10);
+  EXPECT_EQ(entries.addresses[0], 0x100000 + 16);
 }
 
 TEST_F(ScanResultModelTest, SignalEmittedOnScan) {
@@ -294,12 +309,13 @@ TEST_F(ScanResultModelTest, SignalEmittedOnScan) {
       model_.sinks().MemoryChanged().connect<&TestListener::OnMemoryChanged>(
           listener);
 
-  process_->WriteValue<uint32_t>(10, 999);
+  process_->WriteValue<uint32_t>(16, 999);  // Aligned offset
 
   model_.SetScanComparison(ScanComparison::kExactValue);
   model_.SetTargetScanValue(ToBytes<uint32_t>(999));
 
   model_.FirstScan();
+  WaitForScan();
 
   EXPECT_TRUE(listener.signal_received);
   EXPECT_EQ(listener.received_count, 1);
@@ -309,6 +325,9 @@ TEST_F(ScanResultModelTest, InvalidProcessDoesNothing) {
   process_->SetValid(false);
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  // Wait a bit for the early exit path
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  // No pending result for invalid process
   EXPECT_TRUE(model_.entries().addresses.empty());
 }
 
@@ -316,6 +335,7 @@ TEST_F(ScanResultModelTest, ClearResetsStorage) {
   process_->WriteValue<uint32_t>(0, 123);
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
   ASSERT_FALSE(model_.entries().addresses.empty());
 
   model_.Clear();
@@ -329,6 +349,7 @@ TEST_F(ScanResultModelTest, NextScanPopulatesPreviousValues) {
 
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   process_->WriteValue<uint32_t>(100, 20);
   model_.SetScanComparison(ScanComparison::kChanged);
@@ -356,6 +377,7 @@ TEST_F(ScanResultModelTest, NextScanPreservesSnapshotAgainstAutoUpdate) {
 
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   // Sanity check: verify we found the initial value.
   ASSERT_FALSE(model_.entries().addresses.empty());
@@ -411,6 +433,7 @@ TEST_F(ScanResultModelTest,
 
   // Execute First Scan
   model_.FirstScan();
+  WaitForScan();
 
   // Verify First Scan behaved like "Unknown" (snapshot everything)
   ASSERT_FALSE(model_.entries().addresses.empty());
@@ -432,6 +455,7 @@ TEST_F(ScanResultModelTest, NextScanIncreasedByFindsMatch) {
   process_->WriteValue<uint32_t>(100, 10);
   model_.SetScanComparison(ScanComparison::kUnknown);
   model_.FirstScan();
+  WaitForScan();
 
   // Increase by 3 (10 -> 13)
   process_->WriteValue<uint32_t>(100, 13);
@@ -457,6 +481,7 @@ TEST_F(ScanResultModelTest, NextScanGracefullyHandlesInvalidMemory) {
   model_.SetScanComparison(ScanComparison::kExactValue);
   model_.SetTargetScanValue(ToBytes<uint32_t>(42));
   model_.FirstScan();
+  WaitForScan();
 
   ASSERT_EQ(model_.entries().addresses.size(), 2);
 
