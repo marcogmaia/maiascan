@@ -65,11 +65,12 @@ We strictly follow **Test-Driven Development (TDD)**. Do not write implementatio
 ### General Principles
 
 - **Safety First:** As a memory scanner, we deal with volatile external state. Validate all process handles, memory addresses, and buffer sizes.
-- **Flat Structure:** Avoid deep nesting. Use **guard clauses** (`if (!condition) return;`) to keep the "happy path" at the root indentation level.
-- **Modern C++:** Use C++20 features where they improve clarity and safety.
+- **Flat Structure (Critical):** Avoid deep nesting. **STRICTLY** use **guard clauses** (`if (!condition) { return; }`) to keep the "happy path" at the root indentation level. Functions with more than 2 levels of nesting should be refactored.
+- **Modern C++:** Use C++26 features where they improve clarity and safety.
   - Prefer `std::span<std::byte>` for memory buffers over `void*` and size.
   - Use `std::optional<T>` for functions that can fail to return a value.
   - Use `concepts` to constrain template parameters.
+  - Prefer `emplace_back` over `push_back` when applicable.
 
 ### Naming Conventions
 
@@ -127,8 +128,9 @@ The project uses `vcpkg` in manifest mode. Key dependencies include:
 ## 6. Environment Requirements
 
 - **Primary Platform:** Windows 10/11.
-- **Compiler:** MSVC (Visual Studio 2022+) with C++20 support.
-- **Build Tools:** Python 3.x, CMake 3.20+, Ninja.
+- **Compiler:** MSVC (Visual Studio 2022+) with **C++26** support (bleeding edge).
+- **Standards:** C++26 / C23.
+- **Build Tools:** Python 3.x, CMake 4.0+, Ninja.
 
 ---
 

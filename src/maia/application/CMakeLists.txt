@@ -31,6 +31,7 @@ target_sources(
   application_test
   PRIVATE
     scan_result_model_test.cpp
+    scan_result_model_chunked_test.cpp
     cheat_table_model_test.cpp
 )
 target_link_libraries(

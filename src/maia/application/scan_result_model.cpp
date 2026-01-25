@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <array>
+#include <future>
 #include <span>
+#include <thread>
 #include <vector>
 
 #include "maia/assert.h"
@@ -16,6 +18,16 @@
 namespace maia {
 
 namespace {
+
+// Chunk size for parallel scanning (32MB).
+constexpr size_t kChunkSize = 32 * 1024 * 1024;
+
+// Represents a single chunk of memory to scan.
+struct ScanTask {
+  uintptr_t base_address;  // Virtual address in the target process
+  size_t scan_size;        // Logical chunk size (what we report matches within)
+  size_t read_size;  // Actual bytes to read (includes overlap for patterns)
+};
 
 // We check flags to stop crashes when reading protected memory like guard
 // pages.
@@ -163,7 +175,7 @@ void PerformNextScanScalar(const std::vector<std::byte>& current_memory_buffer,
     std::span<const std::byte> val_prev(prev_ptr, stride);
 
     if (check_condition(val_curr, val_prev, i)) {
-      filtered_storage.addresses.push_back(scan_storage.addresses[i]);
+      filtered_storage.addresses.emplace_back(scan_storage.addresses[i]);
 
       filtered_storage.curr_raw.insert(
           filtered_storage.curr_raw.end(), val_curr.begin(), val_curr.end());
@@ -236,47 +248,119 @@ void ScanResultModel::FirstScan() {
 
   auto regions = active_process_->GetMemoryRegions();
 
+  // Calculate overlap needed for patterns crossing chunk boundaries.
+  const size_t overlap_size = scan_stride > 1 ? scan_stride - 1 : 0;
+  const size_t overlap = is_exact_scan ? overlap_size : 0;
+
+  // Build task list by chunking regions into 32MB pieces.
+  std::vector<ScanTask> tasks;
   for (const auto& region : regions) {
     if (!IsReadable(region.protection)) {
       continue;
     }
 
-    // Reading the whole block at once is much faster than making thousands
-    // of slow system calls.
-    std::vector<std::byte> region_buffer(region.size);
-    if (!active_process_->ReadMemory(
-            {&region.base, 1}, region.size, region_buffer)) {
-      continue;
+    const uintptr_t region_end = region.base + region.size;
+    uintptr_t current_addr = region.base;
+
+    while (current_addr < region_end) {
+      size_t chunk_scan_size = std::min(kChunkSize, region_end - current_addr);
+      size_t chunk_read_size = chunk_scan_size + overlap;
+
+      // Clamp read size to region boundary.
+      if (current_addr + chunk_read_size > region_end) {
+        chunk_read_size = region_end - current_addr;
+      }
+
+      tasks.emplace_back(ScanTask{.base_address = current_addr,
+                                  .scan_size = chunk_scan_size,
+                                  .read_size = chunk_read_size});
+      current_addr += chunk_scan_size;
     }
+  }
 
-    auto it = region_buffer.begin();
-    const auto end = region_buffer.end();
+  // Distribute tasks across worker threads.
+  const size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
+  std::vector<std::vector<ScanTask>> thread_batches(num_threads);
 
-    // --- STRATEGY A: Exact Value (Search) ---
-    if (is_exact_scan) {
-      core::ScanBuffer(region_buffer, target_scan_value_, [&](size_t offset) {
-        uintptr_t found_address = region.base + offset;
+  for (size_t i = 0; i < tasks.size(); ++i) {
+    thread_batches[i % num_threads].emplace_back(tasks[i]);
+  }
 
-        storage.addresses.push_back(found_address);
-        storage.curr_raw.insert(storage.curr_raw.end(),
-                                target_scan_value_.begin(),
-                                target_scan_value_.end());
-      });
-    }
-    // --- STRATEGY B: Unknown Initial Value (Snapshot) ---
-    else {
-      const size_t limit = region_buffer.size() - scan_stride;
+  // Capture values for worker lambda.
+  const auto target_value = target_scan_value_;
+  IProcess* process = active_process_;
 
-      // We stick to the data size steps here. Saving every single byte would
-      // fill up RAM instantly.
+  // Worker function: processes a batch of tasks and returns local results.
+  auto worker = [process, is_exact_scan, scan_stride, &target_value](
+                    const std::vector<ScanTask>& batch) -> ScanStorage {
+    ScanStorage local_storage;
+    local_storage.stride = scan_stride;
+    local_storage.addresses.reserve(10000);
+    local_storage.curr_raw.reserve(10000 * scan_stride);
+
+    std::vector<std::byte> buffer;
+
+    for (const auto& task : batch) {
+      buffer.resize(task.read_size);
+
+      MemoryAddress addr = task.base_address;
+      if (!process->ReadMemory({&addr, 1}, task.read_size, buffer)) {
+        continue;
+      }
+
+      // --- STRATEGY A: Exact Value (Search) ---
+      if (is_exact_scan) {
+        core::ScanBuffer(buffer, target_value, [&](size_t offset) {
+          // Ignore matches starting in overlap region (next chunk handles
+          // them).
+          if (offset >= task.scan_size) {
+            return;
+          }
+
+          uintptr_t found_address = task.base_address + offset;
+          local_storage.addresses.emplace_back(found_address);
+          local_storage.curr_raw.insert(local_storage.curr_raw.end(),
+                                        target_value.begin(),
+                                        target_value.end());
+        });
+        continue;
+      }
+
+      // --- STRATEGY B: Unknown Initial Value (Snapshot) ---
+      if (buffer.size() < scan_stride) {
+        continue;
+      }
+
+      const size_t limit =
+          std::min(buffer.size() - scan_stride, task.scan_size);
       for (size_t offset = 0; offset <= limit; offset += scan_stride) {
-        auto data_start = region_buffer.begin() + offset;
-
-        storage.addresses.push_back(region.base + offset);
-        storage.curr_raw.insert(
-            storage.curr_raw.end(), data_start, data_start + scan_stride);
+        auto data_start = buffer.begin() + offset;
+        local_storage.addresses.emplace_back(task.base_address + offset);
+        local_storage.curr_raw.insert(
+            local_storage.curr_raw.end(), data_start, data_start + scan_stride);
       }
     }
+
+    return local_storage;
+  };
+
+  // Launch parallel workers.
+  std::vector<std::future<ScanStorage>> futures;
+  for (const auto& batch : thread_batches) {
+    if (batch.empty()) {
+      continue;
+    }
+    futures.emplace_back(std::async(std::launch::async, worker, batch));
+  }
+
+  // Merge results from all workers.
+  for (auto& future : futures) {
+    ScanStorage result = future.get();
+    storage.addresses.insert(storage.addresses.end(),
+                             result.addresses.begin(),
+                             result.addresses.end());
+    storage.curr_raw.insert(
+        storage.curr_raw.end(), result.curr_raw.begin(), result.curr_raw.end());
   }
 
   // We initialize previous values with the current scan results to create a
@@ -403,7 +487,8 @@ void ScanResultModel::NextScan() {
             return;
           }
 
-          filtered_storage.addresses.push_back(scan_storage_.addresses[index]);
+          filtered_storage.addresses.emplace_back(
+              scan_storage_.addresses[index]);
           const auto val_start = current_memory_buffer.begin() + offset;
           filtered_storage.curr_raw.insert(
               filtered_storage.curr_raw.end(), val_start, val_start + stride);
@@ -427,7 +512,8 @@ void ScanResultModel::NextScan() {
             return;
           }
 
-          filtered_storage.addresses.push_back(scan_storage_.addresses[index]);
+          filtered_storage.addresses.emplace_back(
+              scan_storage_.addresses[index]);
 
           const auto val_start = current_memory_buffer.begin() + offset;
 
@@ -454,7 +540,7 @@ void ScanResultModel::NextScan() {
         return;
       }
 
-      filtered_storage.addresses.push_back(scan_storage_.addresses[index]);
+      filtered_storage.addresses.emplace_back(scan_storage_.addresses[index]);
       const auto val_start = current_memory_buffer.begin() + offset;
       filtered_storage.curr_raw.insert(
           filtered_storage.curr_raw.end(), val_start, val_start + stride);
