@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "maia/assert.h"
+#include "maia/core/scoped_process_suspend.h"
 #include "maia/core/simd_scanner.h"
 #include "maia/logging.h"
 #include "maia/mmem/mmem.h"
@@ -147,92 +148,6 @@ void ClearStorage(ScanStorage& storage) {
   storage.stride = 0;
 }
 
-void PerformNextScanExactSimd(
-    const std::vector<std::byte>& current_memory_buffer,
-    const ScanStorage& scan_storage,
-    const std::vector<std::byte>& target_scan_value,
-    size_t count,
-    size_t stride,
-    ScanStorage& filtered_storage) {
-  core::ScanBuffer(
-      current_memory_buffer, target_scan_value, [&](size_t offset) {
-        if (offset % stride != 0 || (offset / stride) >= count) {
-          return;
-        }
-        const size_t index = offset / stride;
-
-        filtered_storage.addresses.push_back(scan_storage.addresses[index]);
-        const auto val_start = current_memory_buffer.begin() + offset;
-        filtered_storage.curr_raw.insert(
-            filtered_storage.curr_raw.end(), val_start, val_start + stride);
-        filtered_storage.prev_raw.insert(
-            filtered_storage.prev_raw.end(), val_start, val_start + stride);
-      });
-}
-
-void PerformNextScanEqualitySimd(
-    const std::vector<std::byte>& current_memory_buffer,
-    const ScanStorage& scan_storage,
-    bool find_equal,
-    size_t count,
-    size_t stride,
-    ScanStorage& filtered_storage) {
-  core::ScanMemCmp(
-      current_memory_buffer,
-      scan_storage.prev_raw,
-      find_equal,
-      stride,
-      [&](size_t offset) {
-        const size_t index = offset / stride;
-        if (index >= count) {
-          return;
-        }
-
-        filtered_storage.addresses.push_back(scan_storage.addresses[index]);
-
-        const auto val_start = current_memory_buffer.begin() + offset;
-
-        filtered_storage.curr_raw.insert(
-            filtered_storage.curr_raw.end(), val_start, val_start + stride);
-
-        // Update baseline
-        filtered_storage.prev_raw.insert(
-            filtered_storage.prev_raw.end(), val_start, val_start + stride);
-      });
-}
-
-template <typename T>
-void PerformNextScanCompareSimd(
-    const std::vector<std::byte>& current_memory_buffer,
-    const ScanStorage& scan_storage,
-    bool greater,  // true for Increased, false for Decreased
-    size_t count,
-    size_t stride,
-    ScanStorage& filtered_storage) {
-  auto callback = [&](size_t offset) {
-    const size_t index = offset / stride;
-    if (index >= count) {
-      return;
-    }
-
-    filtered_storage.addresses.push_back(scan_storage.addresses[index]);
-    const auto val_start = current_memory_buffer.begin() + offset;
-    filtered_storage.curr_raw.insert(
-        filtered_storage.curr_raw.end(), val_start, val_start + stride);
-    filtered_storage.prev_raw.insert(
-        filtered_storage.prev_raw.end(), val_start, val_start + stride);
-  };
-
-  if (greater) {
-    core::ScanMemCompareGreater<T>(
-        current_memory_buffer, scan_storage.prev_raw, callback);
-  } else {
-    // Decreased: curr < prev  ==  prev > curr
-    core::ScanMemCompareGreater<T>(
-        scan_storage.prev_raw, current_memory_buffer, callback);
-  }
-}
-
 template <typename CheckFunc>
 void PerformNextScanScalar(const std::vector<std::byte>& current_memory_buffer,
                            const ScanStorage& scan_storage,
@@ -247,7 +162,7 @@ void PerformNextScanScalar(const std::vector<std::byte>& current_memory_buffer,
     std::span<const std::byte> val_curr(curr_ptr, stride);
     std::span<const std::byte> val_prev(prev_ptr, stride);
 
-    if (check_condition(val_curr, val_prev)) {
+    if (check_condition(val_curr, val_prev, i)) {
       filtered_storage.addresses.push_back(scan_storage.addresses[i]);
 
       filtered_storage.curr_raw.insert(
@@ -269,6 +184,11 @@ void ScanResultModel::FirstScan() {
   // we rebuild them.
   std::scoped_lock lock(mutex_);
   LogInfo("First scan...");
+
+  std::optional<ScopedProcessSuspend> suspend;
+  if (pause_while_scanning_enabled_) {
+    suspend.emplace(active_process_);
+  }
 
   if (!CanScan(active_process_)) {
     LogWarning("Process is invalid for first scan.");
@@ -372,6 +292,11 @@ void ScanResultModel::FirstScan() {
 void ScanResultModel::NextScan() {
   std::scoped_lock lock(mutex_);
 
+  std::optional<ScopedProcessSuspend> suspend;
+  if (pause_while_scanning_enabled_) {
+    suspend.emplace(active_process_);
+  }
+
   if (scan_storage_.addresses.empty()) {
     return;
   }
@@ -396,14 +321,19 @@ void ScanResultModel::NextScan() {
   // Reading all addresses in one go stops the app from freezing due to too
   // many system calls.
   std::vector<std::byte> current_memory_buffer(count * stride);
-  if (!active_process_->ReadMemory(
-          scan_storage_.addresses, stride, current_memory_buffer)) {
+  std::vector<uint8_t> success_mask(count, 0);
+
+  if (!active_process_->ReadMemory(scan_storage_.addresses,
+                                   stride,
+                                   current_memory_buffer,
+                                   &success_mask)) {
     LogWarning("Failed to read memory batch during next scan.");
     return;
   }
 
   // Building a new vector is faster than removing items from the middle of
   // an existing one.
+
   ScanStorage filtered_storage;
   filtered_storage.stride = stride;
   filtered_storage.addresses.reserve(count / 2);
@@ -412,9 +342,16 @@ void ScanResultModel::NextScan() {
 
   // Define logic here to keep the loop clean.
   const auto check_condition = [&](std::span<const std::byte> curr,
-                                   std::span<const std::byte> prev) -> bool {
+                                   std::span<const std::byte> prev,
+                                   size_t index) -> bool {
+    // If we failed to read this address, we simply discard it.
+    if (index < success_mask.size() && success_mask[index] == 0) {
+      return false;
+    }
+
     switch (scan_comparison_) {
       case ScanComparison::kChanged:
+
         return IsValueChanged(curr, prev);
       case ScanComparison::kUnchanged:
         return !IsValueChanged(curr, prev);
@@ -456,21 +393,51 @@ void ScanResultModel::NextScan() {
 
   // --- Optimization: Use SIMD for NextScan ---
   if (scan_comparison_ == ScanComparison::kExactValue) {
-    PerformNextScanExactSimd(current_memory_buffer,
-                             scan_storage_,
-                             target_scan_value_,
-                             count,
-                             stride,
-                             filtered_storage);
+    core::ScanBuffer(
+        current_memory_buffer, target_scan_value_, [&](size_t offset) {
+          if (offset % stride != 0 || (offset / stride) >= count) {
+            return;
+          }
+          const size_t index = offset / stride;
+          if (index < success_mask.size() && success_mask[index] == 0) {
+            return;
+          }
+
+          filtered_storage.addresses.push_back(scan_storage_.addresses[index]);
+          const auto val_start = current_memory_buffer.begin() + offset;
+          filtered_storage.curr_raw.insert(
+              filtered_storage.curr_raw.end(), val_start, val_start + stride);
+          filtered_storage.prev_raw.insert(
+              filtered_storage.prev_raw.end(), val_start, val_start + stride);
+        });
   } else if (scan_comparison_ == ScanComparison::kChanged ||
              scan_comparison_ == ScanComparison::kUnchanged) {
     const bool find_equal = (scan_comparison_ == ScanComparison::kUnchanged);
-    PerformNextScanEqualitySimd(current_memory_buffer,
-                                scan_storage_,
-                                find_equal,
-                                count,
-                                stride,
-                                filtered_storage);
+    core::ScanMemCmp(
+        current_memory_buffer,
+        scan_storage_.prev_raw,
+        find_equal,
+        stride,
+        [&](size_t offset) {
+          const size_t index = offset / stride;
+          if (index >= count) {
+            return;
+          }
+          if (index < success_mask.size() && success_mask[index] == 0) {
+            return;
+          }
+
+          filtered_storage.addresses.push_back(scan_storage_.addresses[index]);
+
+          const auto val_start = current_memory_buffer.begin() + offset;
+
+          filtered_storage.curr_raw.insert(
+              filtered_storage.curr_raw.end(), val_start, val_start + stride);
+
+          // Update baseline
+          filtered_storage.prev_raw.insert(
+              filtered_storage.prev_raw.end(), val_start, val_start + stride);
+        });
   } else if ((scan_comparison_ == ScanComparison::kIncreased ||
               scan_comparison_ == ScanComparison::kDecreased) &&
              (scan_value_type_ == ScanValueType::kInt32 ||
@@ -478,20 +445,39 @@ void ScanResultModel::NextScan() {
     // --- Optimization: Use SIMD for Increased/Decreased (Int32/Float only) ---
     const bool greater = (scan_comparison_ == ScanComparison::kIncreased);
 
+    auto callback = [&](size_t offset) {
+      const size_t index = offset / stride;
+      if (index >= count) {
+        return;
+      }
+      if (index < success_mask.size() && success_mask[index] == 0) {
+        return;
+      }
+
+      filtered_storage.addresses.push_back(scan_storage_.addresses[index]);
+      const auto val_start = current_memory_buffer.begin() + offset;
+      filtered_storage.curr_raw.insert(
+          filtered_storage.curr_raw.end(), val_start, val_start + stride);
+      filtered_storage.prev_raw.insert(
+          filtered_storage.prev_raw.end(), val_start, val_start + stride);
+    };
+
     if (scan_value_type_ == ScanValueType::kInt32) {
-      PerformNextScanCompareSimd<int32_t>(current_memory_buffer,
-                                          scan_storage_,
-                                          greater,
-                                          count,
-                                          stride,
-                                          filtered_storage);
+      if (greater) {
+        core::ScanMemCompareGreater<int32_t>(
+            current_memory_buffer, scan_storage_.prev_raw, callback);
+      } else {
+        core::ScanMemCompareGreater<int32_t>(
+            scan_storage_.prev_raw, current_memory_buffer, callback);
+      }
     } else {
-      PerformNextScanCompareSimd<float>(current_memory_buffer,
-                                        scan_storage_,
-                                        greater,
-                                        count,
-                                        stride,
-                                        filtered_storage);
+      if (greater) {
+        core::ScanMemCompareGreater<float>(
+            current_memory_buffer, scan_storage_.prev_raw, callback);
+      } else {
+        core::ScanMemCompareGreater<float>(
+            scan_storage_.prev_raw, current_memory_buffer, callback);
+      }
     }
   } else {
     // --- Standard Scalar Loop for other comparisons ---

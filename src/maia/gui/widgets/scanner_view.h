@@ -42,6 +42,11 @@ class ScannerWidget {
     /// \param enabled True if auto-update is enabled, false otherwise.
     entt::sigh<void(bool)> auto_update_changed;
 
+    /// \brief Emitted when the user toggles the "Pause while scanning"
+    /// checkbox.
+    /// \param enabled True if enabled, false otherwise.
+    entt::sigh<void(bool)> pause_while_scanning_changed;
+
     /// \brief Emitted when an entry in the results table is double-clicked.
     /// \param index The index of the clicked entry within the current scan
     /// storage.
@@ -57,6 +62,7 @@ class ScannerWidget {
     auto TargetValueSelected() {return entt::sink(view.signals_.target_value_selected);}
     auto ScanComparisonSelected() {return entt::sink(view.signals_.scan_comparison_selected);}
     auto AutoUpdateChanged() {return entt::sink(view.signals_.auto_update_changed);}
+    auto PauseWhileScanningChanged() {return entt::sink(view.signals_.pause_while_scanning_changed);}
     auto EntryDoubleClicked() {return entt::sink(view.signals_.entry_double_clicked);}
   };
 
@@ -70,6 +76,7 @@ class ScannerWidget {
   int selected_index_ = 0;
   bool is_hex_input_ = false;
   bool auto_update_enabled_ = false;
+  bool pause_while_scanning_enabled_ = false;
   int current_type_index_ = static_cast<int>(ScanValueType::kInt32);
   int selected_comparison_index_ = static_cast<int>(ScanComparison::kChanged);
 };

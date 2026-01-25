@@ -89,7 +89,8 @@ void ExtractFromBatch(const std::vector<IndexedAddress>& indexed_addresses,
                       const BatchRange& batch,
                       const std::vector<std::byte>& batch_buffer,
                       size_t bytes_per_address,
-                      std::span<std::byte> out_buffer) {
+                      std::span<std::byte> out_buffer,
+                      std::vector<uint8_t>* success_mask) {
   for (size_t i = 0; i < batch.count; ++i) {
     const auto& item = indexed_addresses[batch.start_index + i];
     const size_t offset = item.address - batch.start_addr;
@@ -98,6 +99,10 @@ void ExtractFromBatch(const std::vector<IndexedAddress>& indexed_addresses,
                                    bytes_per_address);
 
     std::copy_n(&batch_buffer[offset], bytes_per_address, dest.begin());
+
+    if (success_mask && item.original_index < success_mask->size()) {
+      (*success_mask)[item.original_index] = 1;
+    }
   }
 }
 
@@ -106,7 +111,8 @@ bool ReadIndividualAddresses(
     const std::vector<IndexedAddress>& indexed_addresses,
     const BatchRange& batch,
     size_t bytes_per_address,
-    std::span<std::byte> out_buffer) {
+    std::span<std::byte> out_buffer,
+    std::vector<uint8_t>* success_mask) {
   bool all_succeeded = true;
 
   for (size_t i = 0; i < batch.count; ++i) {
@@ -115,7 +121,13 @@ bool ReadIndividualAddresses(
                                    bytes_per_address);
 
     const size_t bytes_read = mmem::ReadMemory(descriptor, item.address, dest);
-    if (bytes_read != bytes_per_address) {
+    const bool success = (bytes_read == bytes_per_address);
+
+    if (success_mask && item.original_index < success_mask->size()) {
+      (*success_mask)[item.original_index] = success ? 1 : 0;
+    }
+
+    if (!success) {
       all_succeeded = false;
     }
   }
@@ -146,7 +158,8 @@ std::optional<Process> Process::Create(std::string_view name) {
 
 bool Process::ReadMemory(std::span<const MemoryAddress> addresses,
                          size_t bytes_per_address,
-                         std::span<std::byte> out_buffer) {
+                         std::span<std::byte> out_buffer,
+                         std::vector<uint8_t>* success_mask) {
   if (out_buffer.size() < addresses.size() * bytes_per_address) {
     return false;
   }
@@ -181,16 +194,26 @@ bool Process::ReadMemory(std::span<const MemoryAddress> addresses,
                        batch,
                        batch_buffer,
                        bytes_per_address,
-                       out_buffer);
+                       out_buffer,
+                       success_mask);
     } else {
-      const bool batch_success = ReadIndividualAddresses(
-          descriptor_, indexed_addresses, batch, bytes_per_address, out_buffer);
+      const bool batch_success = ReadIndividualAddresses(descriptor_,
+                                                         indexed_addresses,
+                                                         batch,
+                                                         bytes_per_address,
+                                                         out_buffer,
+                                                         success_mask);
       if (!batch_success) {
         all_succeeded = false;
       }
     }
 
     current_index += batch.count;
+  }
+
+  // If a success mask is provided, we return true even on partial success.
+  if (success_mask) {
+    return true;
   }
 
   return all_succeeded;
@@ -241,6 +264,14 @@ uintptr_t Process::GetBaseAddress() const {
   }
 
   return 0;
+}
+
+bool Process::Suspend() {
+  return mmem::SuspendProcess(descriptor_);
+}
+
+bool Process::Resume() {
+  return mmem::ResumeProcess(descriptor_);
 }
 
 }  // namespace maia

@@ -23,13 +23,17 @@ class IProcess {
   /// \param bytes_per_address Number of bytes to read from each address.
   /// \param out_buffer Output span to write the data into. Must be at least
   ///                   addresses.size() * bytes_per_address bytes.
-  /// \return true if all reads were successful, false otherwise.
+  /// \param success_mask (Optional) A mask to store success/failure per address
+  /// (1 for success, 0 for failure).
+  ///                     If provided, the function returns true even on partial
+  ///                     failure.
+  /// \return true if all reads were successful (or partial success if mask is
+  /// provided), false otherwise.
   /// \note This enables platform-optimized batch operations
-  ///       (e.g., process_vm_readv on Linux). For single address reads,
-  ///       pass a span containing one address.
   virtual bool ReadMemory(std::span<const MemoryAddress> addresses,
                           size_t bytes_per_address,
-                          std::span<std::byte> out_buffer) = 0;
+                          std::span<std::byte> out_buffer,
+                          std::vector<uint8_t>* success_mask = nullptr) = 0;
 
   /// \brief Writes a block of memory to the process.
   /// \param address The base address to write to.
@@ -61,6 +65,14 @@ class IProcess {
   /// memory. This address is often randomized by ASLR.
   /// \return The base address of the main module, or 0 if it cannot be found.
   virtual uintptr_t GetBaseAddress() const = 0;
+
+  /// \brief Suspends all threads in the process.
+  /// \return true if successful, false otherwise.
+  virtual bool Suspend() = 0;
+
+  /// \brief Resumes all threads in the process.
+  /// \return true if successful, false otherwise.
+  virtual bool Resume() = 0;
 };
 
 }  // namespace maia

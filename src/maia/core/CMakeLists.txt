@@ -9,7 +9,12 @@ target_sources(
   PUBLIC
     FILE_SET HEADERS
       BASE_DIRS "${MAIA_BASE_DIR}"
-      FILES cpu_info.h memory_common.h process.h simd_scanner.h
+      FILES
+        cpu_info.h
+        memory_common.h
+        process.h
+        simd_scanner.h
+        scoped_process_suspend.h
   PRIVATE
     cpu_info.cpp
     process.cpp

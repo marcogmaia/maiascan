@@ -41,6 +41,33 @@ PfnNtReadVirtualMemory GetNtReadVirtualMemory() {
   return func;
 }
 
+using PfnNtSuspendProcess = NTSTATUS(NTAPI*)(HANDLE ProcessHandle);
+using PfnNtResumeProcess = NTSTATUS(NTAPI*)(HANDLE ProcessHandle);
+
+PfnNtSuspendProcess GetNtSuspendProcess() {
+  static PfnNtSuspendProcess func = []() -> PfnNtSuspendProcess {
+    HMODULE h_ntdll = ::GetModuleHandleW(L"ntdll.dll");
+    if (!h_ntdll) {
+      return nullptr;
+    }
+    return reinterpret_cast<PfnNtSuspendProcess>(
+        ::GetProcAddress(h_ntdll, "NtSuspendProcess"));
+  }();
+  return func;
+}
+
+PfnNtResumeProcess GetNtResumeProcess() {
+  static PfnNtResumeProcess func = []() -> PfnNtResumeProcess {
+    HMODULE h_ntdll = ::GetModuleHandleW(L"ntdll.dll");
+    if (!h_ntdll) {
+      return nullptr;
+    }
+    return reinterpret_cast<PfnNtResumeProcess>(
+        ::GetProcAddress(h_ntdll, "NtResumeProcess"));
+  }();
+  return func;
+}
+
 /// \brief High-performance memory read using undocumented NT API.
 /// \param h_process A valid handle to the target process (PROCESS_VM_READ).
 /// \param source The address to read from.
@@ -962,6 +989,40 @@ std::optional<uintptr_t> ScanSignature(const ProcessDescriptor& process,
   }
 
   return ScanPattern(process, pattern, mask, address, scan_size);
+}
+
+// Process Control API
+
+bool SuspendProcess(const ProcessDescriptor& process) {
+  static const auto kNtSuspend = internal::GetNtSuspendProcess();
+  if (!kNtSuspend) {
+    return false;
+  }
+
+  ProcessHandle h_process =
+      OpenProcessHandle(process.pid, PROCESS_SUSPEND_RESUME);
+  if (!h_process) {
+    return false;
+  }
+
+  NTSTATUS status = kNtSuspend(h_process.get());
+  return status >= 0;
+}
+
+bool ResumeProcess(const ProcessDescriptor& process) {
+  static const auto kNtResume = internal::GetNtResumeProcess();
+  if (!kNtResume) {
+    return false;
+  }
+
+  ProcessHandle h_process =
+      OpenProcessHandle(process.pid, PROCESS_SUSPEND_RESUME);
+  if (!h_process) {
+    return false;
+  }
+
+  NTSTATUS status = kNtResume(h_process.get());
+  return status >= 0;
 }
 
 // Architecture detection

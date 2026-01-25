@@ -129,9 +129,14 @@ void ScannerWidget::Render(const ScanStorage& entries) {
     draw_row("Options:", [this]() {
       ImGui::Checkbox("Hex Input", &is_hex_input_);
       ImGui::SameLine();
-      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20.0f);
       if (ImGui::Checkbox("Auto Update", &auto_update_enabled_)) {
         signals_.auto_update_changed.publish(auto_update_enabled_);
+      }
+      ImGui::SameLine();
+      if (ImGui::Checkbox("Pause while scanning",
+                          &pause_while_scanning_enabled_)) {
+        signals_.pause_while_scanning_changed.publish(
+            pause_while_scanning_enabled_);
       }
     });
 

@@ -105,6 +105,14 @@ size_t GetProcessBits();
 // Gets the pointer width of the system (32 or 64).
 size_t GetSystemBits();
 
+// Suspends all threads in the target process.
+// Returns true if successful.
+bool SuspendProcess(const ProcessDescriptor& process);
+
+// Resumes all threads in the target process.
+// Returns true if successful.
+bool ResumeProcess(const ProcessDescriptor& process);
+
 // Thread API
 
 // Enumerates threads in the current process.

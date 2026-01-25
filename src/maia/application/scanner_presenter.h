@@ -22,6 +22,7 @@ class ScannerPresenter {
 
  private:
   void OnAutoUpdateChanged(bool is_checked);
+  void OnPauseWhileScanningChanged(bool is_checked);
   void OnEntryDoubleClicked(int index, ScanValueType type);
 
   ScanResultModel& scan_result_model_;

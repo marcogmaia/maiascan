@@ -39,6 +39,10 @@ class ScanResultModel {
     target_scan_value_ = std::move(target_scan_value);
   }
 
+  void SetPauseWhileScanning(bool enabled) {
+    pause_while_scanning_enabled_ = enabled;
+  }
+
   void Clear();
 
   void StartAutoUpdate();
@@ -68,8 +72,10 @@ class ScanResultModel {
   ScanComparison scan_comparison_{ScanComparison::kChanged};
   ScanValueType scan_value_type_{ScanValueType::kUInt32};
   std::vector<std::byte> target_scan_value_;
+  bool pause_while_scanning_enabled_ = false;
 
   // Current list of matches.
+
   // Every time a successful scan is made (First or Next), it also updates the
   // "prev" with the most recent scan result.
   ScanStorage scan_storage_;

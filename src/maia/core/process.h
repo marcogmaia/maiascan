@@ -39,13 +39,13 @@ class Process : public IProcess {
   Process& operator=(Process&&) = default;
 
   /// \brief Reads memory from one or more virtual addresses.
-  /// \note The underlying mmem API only supports single reads, so this
-  ///       is implemented as a loop. It is not an atomic batch operation.
   bool ReadMemory(std::span<const MemoryAddress> addresses,
                   size_t bytes_per_address,
-                  std::span<std::byte> out_buffer) override;
+                  std::span<std::byte> out_buffer,
+                  std::vector<uint8_t>* success_mask = nullptr) override;
 
   /// \brief Writes a block of memory to the process.
+
   bool WriteMemory(uintptr_t address,
                    std::span<const std::byte> buffer) override;
 
@@ -67,6 +67,12 @@ class Process : public IProcess {
 
   /// \brief Gets the base address of the process's main executable module.
   uintptr_t GetBaseAddress() const override;
+
+  /// \brief Suspends all threads in the process.
+  bool Suspend() override;
+
+  /// \brief Resumes all threads in the process.
+  bool Resume() override;
 
  private:
   /// \brief Private constructor for use by the static factory methods.

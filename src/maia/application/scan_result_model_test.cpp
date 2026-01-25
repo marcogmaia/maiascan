@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <unordered_set>
 #include <vector>
 
 #include "maia/assert.h"
@@ -27,13 +28,18 @@ class FakeProcess : public IProcess {
     std::memcpy(&memory_[offset], &value, sizeof(T));
   }
 
+  void MarkAddressInvalid(uintptr_t addr) {
+    invalid_addresses_.insert(addr);
+  }
+
   std::vector<std::byte>& GetRawMemory() {
     return memory_;
   }
 
   bool ReadMemory(std::span<const MemoryAddress> addresses,
                   size_t bytes_per_address,
-                  std::span<std::byte> out_buffer) override {
+                  std::span<std::byte> out_buffer,
+                  std::vector<uint8_t>* success_mask = nullptr) override {
     if (!is_valid_) {
       return false;
     }
@@ -42,15 +48,34 @@ class FakeProcess : public IProcess {
       return false;
     }
 
+    bool all_success = true;
+
     // Single continuous read (First Scan optimization)
     if (addresses.size() == 1) {
       uintptr_t addr = addresses[0];
+      if (success_mask && !success_mask->empty()) {
+        (*success_mask)[0] = 1;
+      }
+
+      if (invalid_addresses_.contains(addr)) {
+        if (success_mask && !success_mask->empty()) {
+          (*success_mask)[0] = 0;
+        }
+        return false;
+      }
+
       if (addr < base_address_) {
+        if (success_mask && !success_mask->empty()) {
+          (*success_mask)[0] = 0;
+        }
         return false;
       }
       size_t offset = addr - base_address_;
 
       if (offset + bytes_per_address > memory_.size()) {
+        if (success_mask && !success_mask->empty()) {
+          (*success_mask)[0] = 0;
+        }
         return false;
       }
       std::memcpy(out_buffer.data(), &memory_[offset], bytes_per_address);
@@ -59,21 +84,41 @@ class FakeProcess : public IProcess {
 
     // Scatter/Gather Read (Next Scan)
     std::byte* out_ptr = out_buffer.data();
-    for (const auto& addr : addresses) {
-      if (addr < base_address_) {
+    for (size_t i = 0; i < addresses.size(); ++i) {
+      const auto addr = addresses[i];
+      bool success = true;
+
+      if (invalid_addresses_.contains(addr)) {
+        success = false;
+        std::memset(out_ptr, 0, bytes_per_address);
+      } else if (addr < base_address_) {
+        success = false;
         std::memset(out_ptr, 0, bytes_per_address);
       } else {
         size_t offset = addr - base_address_;
         if (offset + bytes_per_address > memory_.size()) {
+          success = false;
           std::memset(out_ptr, 0, bytes_per_address);
         } else {
           std::memcpy(out_ptr, &memory_[offset], bytes_per_address);
         }
       }
+
+      if (success_mask && i < success_mask->size()) {
+        (*success_mask)[i] = success ? 1 : 0;
+      }
+      if (!success) {
+        all_success = false;
+      }
+
       out_ptr += bytes_per_address;
     }
 
-    return true;
+    if (success_mask) {
+      return true;
+    }
+
+    return all_success;
   }
 
   bool WriteMemory(uintptr_t, std::span<const std::byte>) override {
@@ -107,6 +152,14 @@ class FakeProcess : public IProcess {
     return base_address_;
   }
 
+  bool Suspend() override {
+    return true;
+  }
+
+  bool Resume() override {
+    return true;
+  }
+
   void SetValid(bool valid) {
     is_valid_ = valid;
   }
@@ -115,6 +168,7 @@ class FakeProcess : public IProcess {
   std::vector<std::byte> memory_;
   uintptr_t base_address_;
   bool is_valid_ = true;
+  std::unordered_set<uintptr_t> invalid_addresses_;
 };
 
 class ScanResultModelTest : public ::testing::Test {
@@ -395,5 +449,34 @@ TEST_F(ScanResultModelTest, NextScanIncreasedByFindsMatch) {
   EXPECT_EQ(val, 13);
 }
 
+TEST_F(ScanResultModelTest, NextScanGracefullyHandlesInvalidMemory) {
+  // 1. Setup: First Scan finds 2 values
+  process_->WriteValue<uint32_t>(100, 42);
+  process_->WriteValue<uint32_t>(200, 42);
+
+  model_.SetScanComparison(ScanComparison::kExactValue);
+  model_.SetTargetScanValue(ToBytes<uint32_t>(42));
+  model_.FirstScan();
+
+  ASSERT_EQ(model_.entries().addresses.size(), 2);
+
+  // 2. Scenario: One address becomes invalid (e.g. unmapped page)
+  process_->MarkAddressInvalid(0x100000 + 100);
+
+  // 3. Action: Next Scan (Unchanged)
+  model_.SetScanComparison(ScanComparison::kUnchanged);
+  model_.NextScan();
+
+  // 4. Expectation:
+  // - Address 100 is REMOVED (because it's invalid)
+  // - Address 200 is KEPT (because it's valid and unchanged)
+  // The scan should NOT abort.
+
+  const auto& entries = model_.entries();
+  ASSERT_EQ(entries.addresses.size(), 1);
+  EXPECT_EQ(entries.addresses[0], 0x100000 + 200);
+}
+
 }  // namespace
+
 }  // namespace maia
