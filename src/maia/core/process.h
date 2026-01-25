@@ -68,6 +68,9 @@ class Process : public IProcess {
   /// \brief Gets the base address of the process's main executable module.
   uintptr_t GetBaseAddress() const override;
 
+  /// \brief Retrieves a list of all loaded modules in the process.
+  std::vector<mmem::ModuleDescriptor> GetModules() const override;
+
   /// \brief Suspends all threads in the process.
   bool Suspend() override;
 

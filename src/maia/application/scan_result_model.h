@@ -75,6 +75,11 @@ class ScanResultModel {
 
   void UpdateCurrentValues();
 
+  std::vector<mmem::ModuleDescriptor> GetModules() const {
+    std::scoped_lock lock(mutex_);
+    return modules_;
+  }
+
  private:
   struct Signals {
     /// \brief Emitted when the scan results change.
@@ -118,6 +123,7 @@ class ScanResultModel {
 
   mutable std::mutex mutex_;
   std::jthread task_;
+  std::vector<mmem::ModuleDescriptor> modules_;
 };
 
 }  // namespace maia

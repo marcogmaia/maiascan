@@ -676,6 +676,7 @@ void ScanResultModel::SetActiveProcess(IProcess* process) {
     return;
   }
   active_process_ = process;
+  modules_ = process->GetModules();
   LogInfo("Active process changed: {}", process->GetProcessName());
 }
 

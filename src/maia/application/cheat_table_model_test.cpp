@@ -40,6 +40,11 @@ class MockProcess : public IProcess {
               (),
               (const, override));
 
+  MOCK_METHOD(std::vector<mmem::ModuleDescriptor>,
+              GetModules,
+              (),
+              (const, override));
+
   MOCK_METHOD(bool, Suspend, (), (override));
   MOCK_METHOD(bool, Resume, (), (override));
 };

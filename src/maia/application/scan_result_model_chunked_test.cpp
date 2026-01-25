@@ -70,6 +70,10 @@ class LargeFakeProcess : public IProcess {
     return {region};
   }
 
+  std::vector<mmem::ModuleDescriptor> GetModules() const override {
+    return {};
+  }
+
   uint32_t GetProcessId() const override {
     return 1;
   }

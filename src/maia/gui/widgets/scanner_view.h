@@ -7,13 +7,17 @@
 #include <string>
 #include <vector>
 
+#include "maia/core/address_formatter.h"
 #include "maia/core/scan_types.h"
 
 namespace maia {
 
 class ScannerWidget {
  public:
-  void Render(const ScanStorage& entries, float progress, bool is_scanning);
+  void Render(const ScanStorage& entries,
+              const AddressFormatter& formatter,
+              float progress,
+              bool is_scanning);
 
   auto sinks() {
     return Sinks{*this};

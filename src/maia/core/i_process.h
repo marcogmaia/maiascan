@@ -66,6 +66,10 @@ class IProcess {
   /// \return The base address of the main module, or 0 if it cannot be found.
   virtual uintptr_t GetBaseAddress() const = 0;
 
+  /// \brief Retrieves a list of all loaded modules in the process.
+  /// \return A std::vector of ModuleDescriptor structs.
+  virtual std::vector<mmem::ModuleDescriptor> GetModules() const = 0;
+
   /// \brief Suspends all threads in the process.
   /// \return true if successful, false otherwise.
   virtual bool Suspend() = 0;

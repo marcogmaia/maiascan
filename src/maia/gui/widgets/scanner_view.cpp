@@ -77,6 +77,7 @@ constexpr std::array<ScanComparison, 13> kScanComparisonByIndex = {
 }  // namespace
 
 void ScannerWidget::Render(const ScanStorage& entries,
+                           const AddressFormatter& formatter,
                            float progress,
                            bool is_scanning) {
   if (!ImGui::Begin("Scanner")) {
@@ -212,8 +213,12 @@ void ScannerWidget::Render(const ScanStorage& entries,
     ResultsTable table_renderer;
     const auto type = kScanValueTypeByIndex.at(current_type_index_);
     bool double_clicked = false;
-    table_renderer.Render(
-        entries, type, is_hex_input_, selected_index_, double_clicked);
+    table_renderer.Render(entries,
+                          formatter,
+                          type,
+                          is_hex_input_,
+                          selected_index_,
+                          double_clicked);
 
     if (double_clicked) {
       signals_.entry_double_clicked.publish(selected_index_, type);

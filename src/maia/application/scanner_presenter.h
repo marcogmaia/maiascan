@@ -23,6 +23,7 @@ class ScannerPresenter {
     }
 
     scanner_widget_.Render(scan_result_model_.entries(),
+                           AddressFormatter(scan_result_model_.GetModules()),
                            scan_result_model_.GetProgress(),
                            scan_result_model_.IsScanning());
   }

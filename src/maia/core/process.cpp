@@ -266,6 +266,19 @@ uintptr_t Process::GetBaseAddress() const {
   return 0;
 }
 
+std::vector<mmem::ModuleDescriptor> Process::GetModules() const {
+  std::vector<mmem::ModuleDescriptor> modules;
+  modules.reserve(32);
+
+  mmem::EnumModules(descriptor_,
+                    [&modules](const mmem::ModuleDescriptor& module) {
+                      modules.emplace_back(module);
+                      return true;  // Continue enumeration
+                    });
+
+  return modules;
+}
+
 bool Process::Suspend() {
   return mmem::SuspendProcess(descriptor_);
 }
