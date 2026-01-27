@@ -3,17 +3,21 @@
 #include "maia/gui/widgets/cheat_table_view.h"
 
 #include <imgui.h>
-#include <imgui_stdlib.h>  // for InputText with std::string
+#include <imgui_stdlib.h>
+#include <cstring>
 #include <format>
 #include <mutex>
+#include <span>
 
 namespace maia {
 
 namespace {
 
+struct Utf8String {};
+
 // Helper to format value for display
 template <typename T>
-std::string FormatValue(const std::vector<std::byte>& data) {
+std::string FormatValue(std::span<const std::byte> data) {
   if (data.size() < sizeof(T)) {
     return "Invalid";
   }
@@ -26,8 +30,22 @@ std::string FormatValue(const std::vector<std::byte>& data) {
   }
 }
 
+template <>
+std::string FormatValue<Utf8String>(std::span<const std::byte> data) {
+  if (data.empty()) {
+    return "";
+  }
+  // Find null terminator within the data.
+  const char* ptr = reinterpret_cast<const char*>(data.data());
+  size_t len = 0;
+  while (len < data.size() && ptr[len] != '\0') {
+    ++len;
+  }
+  return std::string(ptr, len);
+}
+
 std::string GetValueString(ScanValueType type,
-                           const std::vector<std::byte>& data) {
+                           std::span<const std::byte> data) {
   // clang-format off
   switch (type) {
     case ScanValueType::kInt8: return FormatValue<int8_t>(data);
@@ -40,9 +58,10 @@ std::string GetValueString(ScanValueType type,
     case ScanValueType::kUInt64: return FormatValue<uint64_t>(data);
     case ScanValueType::kFloat: return FormatValue<float>(data);
     case ScanValueType::kDouble: return FormatValue<double>(data);
+    case ScanValueType::kString: return FormatValue<Utf8String>(data);
+    default: return "?";
   }
   // clang-format on
-  return "?";
 }
 
 const char* GetTypeString(ScanValueType type) {
@@ -58,6 +77,7 @@ const char* GetTypeString(ScanValueType type) {
     case ScanValueType::kUInt64: return "8 Bytes";
     case ScanValueType::kFloat:  return "Float";
     case ScanValueType::kDouble: return "Double";
+    case ScanValueType::kString: return "String";
   }
   // clang-format on
   return "Unknown";
@@ -91,9 +111,8 @@ void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
         bool is_frozen = false;
 
         {
-          std::scoped_lock entry_lock(entry.data->mutex);
-          val_str = GetValueString(entry.type, entry.data->value);
-          is_frozen = entry.data->is_frozen;
+          val_str = GetValueString(entry.type, entry.data->GetValue());
+          is_frozen = entry.data->IsFrozen();
         }
 
         // 1. Frozen Checkbox

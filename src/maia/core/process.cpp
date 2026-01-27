@@ -91,6 +91,10 @@ void ExtractFromBatch(const std::vector<IndexedAddress>& indexed_addresses,
                       size_t bytes_per_address,
                       std::span<std::byte> out_buffer,
                       std::vector<uint8_t>* success_mask) {
+  if (bytes_per_address == 0) {
+    return;
+  }
+
   for (size_t i = 0; i < batch.count; ++i) {
     const auto& item = indexed_addresses[batch.start_index + i];
     const size_t offset = item.address - batch.start_addr;

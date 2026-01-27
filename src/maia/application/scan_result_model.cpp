@@ -19,9 +19,6 @@ namespace maia {
 
 namespace {
 
-// Chunk size for parallel scanning (32MB).
-constexpr size_t kChunkSize = 32 * 1024 * 1024;
-
 // Represents a single chunk of memory to scan.
 struct ScanTask {
   uintptr_t base_address;  // Virtual address in the target process
@@ -131,6 +128,10 @@ constexpr auto DispatchScanType(ScanValueType type, Func&& func) {
     case ScanValueType::kInt64:  return func.template operator()<int64_t>();
     case ScanValueType::kFloat:  return func.template operator()<float>();
     case ScanValueType::kDouble: return func.template operator()<double>();
+    case ScanValueType::kString:
+    case ScanValueType::kWString:
+    case ScanValueType::kArrayOfBytes:
+      return false; // Not supported for arithmetic comparisons
     default: return false;
   }
 }
@@ -147,6 +148,10 @@ constexpr size_t GetDataTypeSize(ScanValueType type) {
     case ScanValueType::kInt64:  return sizeof(int64_t);
     case ScanValueType::kFloat:  return sizeof(float);
     case ScanValueType::kDouble: return sizeof(double);
+    case ScanValueType::kString:
+    case ScanValueType::kWString:
+    case ScanValueType::kArrayOfBytes:
+      return 1; // Byte alignment by default for variable types
     default: return sizeof(uint32_t);
   }
 }
@@ -191,6 +196,15 @@ void PerformNextScanScalar(const std::vector<std::byte>& current_memory_buffer,
 
 }  // namespace
 
+ScanResultModel::ScanResultModel(std::unique_ptr<core::ITaskRunner> task_runner,
+                                 size_t chunk_size)
+    : task_runner_(std::move(task_runner)),
+      chunk_size_(chunk_size) {
+  if (!task_runner_) {
+    task_runner_ = std::make_unique<core::AsyncTaskRunner>();
+  }
+}
+
 void ScanResultModel::FirstScan() {
   if (is_scanning_.load()) {
     return;
@@ -208,209 +222,250 @@ void ScanResultModel::FirstScan() {
     return;
   }
 
-  LogInfo("Starting async first scan...");
+  LogInfo("Starting first scan...");
   is_scanning_ = true;
   progress_ = 0.0f;
   scan_finished_flag_ = false;
 
+  task_runner_->Run(
+      [this](std::stop_token stop_token) { ExecuteScanWorker(stop_token); });
+}
+
+void ScanResultModel::ExecuteScanWorker(std::stop_token stop_token) {
   // Capture necessary state by value to avoid race conditions.
-  const auto target_value = target_scan_value_;
-  const auto value_type = scan_value_type_;
-  const auto comparison = scan_comparison_;
-  const bool pause_enabled = pause_while_scanning_enabled_;
-  const bool fast_scan = fast_scan_enabled_;
-  IProcess* process = active_process_;
+  // Note: For SyncTaskRunner, this copy is less critical but still good
+  // practice.
+  std::vector<std::byte> target_value;
+  std::vector<std::byte> target_mask;
+  ScanValueType value_type;
+  ScanComparison comparison;
+  bool pause_enabled;
+  bool fast_scan;
+  IProcess* process;
 
-  // Launch background thread.
-  scan_thread_ = std::jthread([this,
-                               process,
-                               target_value,
-                               value_type,
-                               comparison,
-                               pause_enabled,
-                               fast_scan](std::stop_token stop_token) {
-    std::optional<ScopedProcessSuspend> suspend;
-    if (pause_enabled) {
-      suspend.emplace(process);
-    }
+  {
+    std::scoped_lock lock(mutex_);
+    target_value = target_scan_value_;
+    target_mask = target_scan_mask_;
+    value_type = scan_value_type_;
+    comparison = scan_comparison_;
+    pause_enabled = pause_while_scanning_enabled_;
+    fast_scan = fast_scan_enabled_;
+    process = active_process_;
+  }
 
-    ScanComparison effective_comparison = comparison;
-    if (effective_comparison != ScanComparison::kExactValue) {
-      effective_comparison = ScanComparison::kUnknown;
-    }
+  std::optional<ScopedProcessSuspend> suspend;
+  if (pause_enabled) {
+    suspend.emplace(process);
+  }
 
-    const bool is_exact_scan =
-        (effective_comparison == ScanComparison::kExactValue);
-    size_t scan_stride = 0;
+  ScanComparison effective_comparison = comparison;
+  if (effective_comparison != ScanComparison::kExactValue) {
+    effective_comparison = ScanComparison::kUnknown;
+  }
 
-    if (is_exact_scan) {
-      if (target_value.empty()) {
-        is_scanning_ = false;
-        return;
-      }
-      scan_stride = target_value.size();
-    } else {
-      scan_stride = GetDataTypeSize(value_type);
-    }
+  const bool is_exact_scan =
+      (effective_comparison == ScanComparison::kExactValue);
+  size_t scan_stride = 0;
 
-    if (scan_stride == 0) {
+  if (is_exact_scan) {
+    if (target_value.empty()) {
       is_scanning_ = false;
       return;
     }
+    scan_stride = target_value.size();
+  } else {
+    scan_stride = GetDataTypeSize(value_type);
+  }
 
-    // Determine alignment based on user preference.
-    const size_t alignment = fast_scan ? GetDataTypeSize(value_type) : 1;
+  if (scan_stride == 0) {
+    is_scanning_ = false;
+    return;
+  }
 
-    ScanStorage storage;
-    storage.stride = scan_stride;
+  LogInfo("FirstScan start: stride={}, is_exact={}, mask={}",
+          scan_stride,
+          is_exact_scan,
+          !target_mask.empty());
 
-    auto regions = process->GetMemoryRegions();
+  if (is_exact_scan) {
+    std::string pattern_hex;
+    for (auto b : target_value) {
+      pattern_hex += std::format("{:02X} ", static_cast<uint8_t>(b));
+    }
+    LogInfo("Pattern: {}", pattern_hex);
+  }
 
-    const size_t overlap_size = scan_stride > 1 ? scan_stride - 1 : 0;
-    const size_t overlap = is_exact_scan ? overlap_size : 0;
+  // Determine alignment based on user preference.
 
-    std::vector<ScanTask> tasks;
-    for (const auto& region : regions) {
+  const size_t alignment = fast_scan ? GetDataTypeSize(value_type) : 1;
+
+  ScanStorage storage;
+  storage.stride = scan_stride;
+  storage.value_type = value_type;
+
+  auto regions = process->GetMemoryRegions();
+  size_t readable_count = 0;
+  size_t total_size = 0;
+  for (const auto& r : regions) {
+    if (IsReadable(r.protection)) {
+      readable_count++;
+      total_size += r.size;
+    }
+  }
+  LogInfo("Scanning {} readable regions (total {} MB)",
+          readable_count,
+          total_size / (1024 * 1024));
+
+  const size_t overlap_size = scan_stride > 1 ? scan_stride - 1 : 0;
+  const size_t overlap = is_exact_scan ? overlap_size : 0;
+
+  std::vector<ScanTask> tasks;
+  for (const auto& region : regions) {
+    if (stop_token.stop_requested()) {
+      break;
+    }
+    if (!IsReadable(region.protection)) {
+      continue;
+    }
+
+    const uintptr_t region_end = region.base + region.size;
+    uintptr_t current_addr = region.base;
+
+    while (current_addr < region_end) {
+      size_t chunk_scan_size = std::min(chunk_size_, region_end - current_addr);
+      size_t chunk_read_size = chunk_scan_size + overlap;
+      if (current_addr + chunk_read_size > region_end) {
+        chunk_read_size = region_end - current_addr;
+      }
+
+      tasks.emplace_back(ScanTask{.base_address = current_addr,
+                                  .scan_size = chunk_scan_size,
+                                  .read_size = chunk_read_size});
+      current_addr += chunk_scan_size;
+    }
+  }
+
+  const size_t total_tasks = tasks.size();
+  if (total_tasks == 0) {
+    is_scanning_ = false;
+    return;
+  }
+
+  std::atomic<size_t> processed_tasks{0};
+
+  const size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
+  std::vector<std::vector<ScanTask>> thread_batches(num_threads);
+  for (size_t i = 0; i < total_tasks; ++i) {
+    thread_batches[i % num_threads].emplace_back(tasks[i]);
+  }
+
+  auto worker = [process,
+                 is_exact_scan,
+                 scan_stride,
+                 alignment,
+                 &target_value,
+                 &target_mask,
+                 &stop_token,
+                 &processed_tasks,
+                 total_tasks,
+                 this](const std::vector<ScanTask>& batch) -> ScanStorage {
+    ScanStorage local_storage;
+    local_storage.stride = scan_stride;
+    local_storage.addresses.reserve(1024);
+    local_storage.curr_raw.reserve(1024 * scan_stride);
+
+    std::vector<std::byte> buffer;
+
+    for (const auto& task : batch) {
       if (stop_token.stop_requested()) {
-        break;
-      }
-      if (!IsReadable(region.protection)) {
-        continue;
+        return {};
       }
 
-      const uintptr_t region_end = region.base + region.size;
-      uintptr_t current_addr = region.base;
-
-      while (current_addr < region_end) {
-        size_t chunk_scan_size =
-            std::min(kChunkSize, region_end - current_addr);
-        size_t chunk_read_size = chunk_scan_size + overlap;
-        if (current_addr + chunk_read_size > region_end) {
-          chunk_read_size = region_end - current_addr;
-        }
-
-        tasks.emplace_back(ScanTask{.base_address = current_addr,
-                                    .scan_size = chunk_scan_size,
-                                    .read_size = chunk_read_size});
-        current_addr += chunk_scan_size;
-      }
-    }
-
-    const size_t total_tasks = tasks.size();
-    if (total_tasks == 0) {
-      is_scanning_ = false;
-      return;
-    }
-
-    std::atomic<size_t> processed_tasks{0};
-
-    const size_t num_threads =
-        std::max(1u, std::thread::hardware_concurrency());
-    std::vector<std::vector<ScanTask>> thread_batches(num_threads);
-    for (size_t i = 0; i < total_tasks; ++i) {
-      thread_batches[i % num_threads].emplace_back(tasks[i]);
-    }
-
-    auto worker = [process,
-                   is_exact_scan,
-                   scan_stride,
-                   alignment,
-                   &target_value,
-                   &stop_token,
-                   &processed_tasks,
-                   total_tasks,
-                   this](const std::vector<ScanTask>& batch) -> ScanStorage {
-      ScanStorage local_storage;
-      local_storage.stride = scan_stride;
-      local_storage.addresses.reserve(1024);
-      local_storage.curr_raw.reserve(1024 * scan_stride);
-
-      std::vector<std::byte> buffer;
-
-      for (const auto& task : batch) {
-        if (stop_token.stop_requested()) {
-          return {};
-        }
-
-        buffer.resize(task.read_size);
-        MemoryAddress addr = task.base_address;
-        if (!process->ReadMemory({&addr, 1}, task.read_size, buffer)) {
-          processed_tasks++;
-          progress_ = static_cast<float>(processed_tasks) /
-                      static_cast<float>(total_tasks);
-          continue;
-        }
-
-        if (is_exact_scan) {
-          core::ScanBuffer(buffer, target_value, alignment, [&](size_t offset) {
-            if (offset >= task.scan_size) {
-              return;
-            }
-            local_storage.addresses.emplace_back(task.base_address + offset);
-            local_storage.curr_raw.insert(local_storage.curr_raw.end(),
-                                          target_value.begin(),
-                                          target_value.end());
-          });
-        } else {
-          if (buffer.size() >= scan_stride) {
-            const size_t limit =
-                std::min(buffer.size() - scan_stride, task.scan_size);
-            for (size_t offset = 0; offset <= limit; offset += alignment) {
-              auto data_start = buffer.begin() + offset;
-              local_storage.addresses.emplace_back(task.base_address + offset);
-              local_storage.curr_raw.insert(local_storage.curr_raw.end(),
-                                            data_start,
-                                            data_start + scan_stride);
-            }
-          }
-        }
-
+      buffer.resize(task.read_size);
+      MemoryAddress addr = task.base_address;
+      if (!process->ReadMemory({&addr, 1}, task.read_size, buffer)) {
         processed_tasks++;
         progress_ = static_cast<float>(processed_tasks) /
                     static_cast<float>(total_tasks);
+        continue;
       }
-      return local_storage;
-    };
 
-    std::vector<std::future<ScanStorage>> futures;
-    for (const auto& batch : thread_batches) {
-      if (!batch.empty()) {
-        futures.emplace_back(std::async(std::launch::async, worker, batch));
+      if (is_exact_scan) {
+        auto callback = [&](size_t offset) {
+          if (offset >= task.scan_size) {
+            return;
+          }
+          LogDebug("Match found at address 0x{:X}", task.base_address + offset);
+          local_storage.addresses.emplace_back(task.base_address + offset);
+          local_storage.curr_raw.insert(local_storage.curr_raw.end(),
+                                        buffer.begin() + offset,
+                                        buffer.begin() + offset + scan_stride);
+        };
+
+        if (target_mask.empty()) {
+          core::ScanBuffer(buffer, target_value, alignment, callback);
+        } else {
+          core::ScanBufferMasked(buffer, target_value, target_mask, callback);
+        }
+      } else {
+        if (buffer.size() >= scan_stride) {
+          const size_t limit =
+              std::min(buffer.size() - scan_stride, task.scan_size);
+          for (size_t offset = 0; offset <= limit; offset += alignment) {
+            auto data_start = buffer.begin() + offset;
+            local_storage.addresses.emplace_back(task.base_address + offset);
+            local_storage.curr_raw.insert(local_storage.curr_raw.end(),
+                                          data_start,
+                                          data_start + scan_stride);
+          }
+        }
       }
+
+      processed_tasks++;
+      progress_ =
+          static_cast<float>(processed_tasks) / static_cast<float>(total_tasks);
     }
+    return local_storage;
+  };
 
-    // Merge results
-    for (auto& future : futures) {
-      if (stop_token.stop_requested()) {
-        break;
-      }
-      ScanStorage result = future.get();
-      storage.addresses.insert(storage.addresses.end(),
-                               result.addresses.begin(),
-                               result.addresses.end());
-      storage.curr_raw.insert(storage.curr_raw.end(),
-                              result.curr_raw.begin(),
-                              result.curr_raw.end());
+  std::vector<std::future<ScanStorage>> futures;
+  for (const auto& batch : thread_batches) {
+    if (!batch.empty()) {
+      futures.emplace_back(std::async(std::launch::async, worker, batch));
     }
+  }
 
+  // Merge results
+  for (auto& future : futures) {
     if (stop_token.stop_requested()) {
-      is_scanning_ = false;
-      LogInfo("Scan cancelled.");
-      return;
+      break;
     }
+    ScanStorage result = future.get();
+    storage.addresses.insert(storage.addresses.end(),
+                             result.addresses.begin(),
+                             result.addresses.end());
+    storage.curr_raw.insert(
+        storage.curr_raw.end(), result.curr_raw.begin(), result.curr_raw.end());
+  }
 
-    // Store result for main thread
-    {
-      std::scoped_lock lock(pending_mutex_);
-      pending_storage_ = std::move(storage);
-      scan_finished_flag_ = true;
-    }
-  });
+  if (stop_token.stop_requested()) {
+    is_scanning_ = false;
+    LogInfo("Scan cancelled.");
+    return;
+  }
+
+  // Store result for main thread
+  {
+    std::scoped_lock lock(pending_mutex_);
+    pending_storage_ = std::move(storage);
+    scan_finished_flag_ = true;
+  }
 }
 
 void ScanResultModel::CancelScan() {
   if (is_scanning_.load()) {
-    scan_thread_.request_stop();
+    task_runner_->RequestStop();
   }
 }
 
@@ -486,7 +541,9 @@ void ScanResultModel::NextScan() {
 
   ScanStorage filtered_storage;
   filtered_storage.stride = stride;
+  filtered_storage.value_type = scan_storage_.value_type;
   filtered_storage.addresses.reserve(count / 2);
+
   filtered_storage.curr_raw.reserve((count / 2) * stride);
   filtered_storage.prev_raw.reserve((count / 2) * stride);
 
@@ -543,24 +600,37 @@ void ScanResultModel::NextScan() {
 
   // --- Optimization: Use SIMD for NextScan ---
   if (scan_comparison_ == ScanComparison::kExactValue) {
-    core::ScanBuffer(
-        current_memory_buffer, target_scan_value_, stride, [&](size_t offset) {
-          const size_t index = offset / stride;
-          if (index >= count) {
-            return;
-          }
-          if (index < success_mask.size() && success_mask[index] == 0) {
-            return;
-          }
+    auto callback = [&](size_t offset) {
+      if (offset % stride != 0) {
+        return;
+      }
+      const size_t index = offset / stride;
+      if (index >= count) {
+        return;
+      }
+      if (index < success_mask.size() && success_mask[index] == 0) {
+        return;
+      }
 
-          filtered_storage.addresses.emplace_back(
-              scan_storage_.addresses[index]);
-          const auto val_start = current_memory_buffer.begin() + offset;
-          filtered_storage.curr_raw.insert(
-              filtered_storage.curr_raw.end(), val_start, val_start + stride);
-          filtered_storage.prev_raw.insert(
-              filtered_storage.prev_raw.end(), val_start, val_start + stride);
-        });
+      filtered_storage.addresses.emplace_back(scan_storage_.addresses[index]);
+      const auto val_start = current_memory_buffer.begin() + offset;
+      filtered_storage.curr_raw.insert(
+          filtered_storage.curr_raw.end(), val_start, val_start + stride);
+      filtered_storage.prev_raw.insert(
+          filtered_storage.prev_raw.end(), val_start, val_start + stride);
+    };
+
+    if (target_scan_mask_.empty()) {
+      LogInfo("NextScan: ExactValue (Scalar/SIMD) stride={}", stride);
+      core::ScanBuffer(
+          current_memory_buffer, target_scan_value_, stride, callback);
+    } else {
+      LogInfo("NextScan: ExactValue (Masked SIMD) stride={}", stride);
+      core::ScanBufferMasked(current_memory_buffer,
+                             target_scan_value_,
+                             target_scan_mask_,
+                             callback);
+    }
   } else if (scan_comparison_ == ScanComparison::kChanged ||
              scan_comparison_ == ScanComparison::kUnchanged) {
     const bool find_equal = (scan_comparison_ == ScanComparison::kUnchanged);

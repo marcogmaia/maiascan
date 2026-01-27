@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "maia/assert.h"
+#include "maia/logging.h"
 
 // Platform-specific headers for SIMD
 #if defined(_MSC_VER)
@@ -66,13 +67,15 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
     std::span<const std::byte> pattern,
     size_t alignment,
     std::function<void(size_t)> callback) {
-  if (buffer.size() < 32 || pattern.empty()) {
+  const size_t buffer_size = buffer.size();
+  const size_t pattern_size = pattern.size();
+
+  if (buffer_size < 32 || pattern.empty()) {
     // Fall back to scalar for small buffers.
-    if (pattern.empty() || buffer.size() < pattern.size()) {
+    if (pattern.empty() || buffer_size < pattern_size) {
       return;
     }
-    const size_t pattern_size = pattern.size();
-    const size_t limit = buffer.size() - pattern_size;
+    const size_t limit = buffer_size - pattern_size;
     for (size_t offset = 0; offset <= limit; offset += alignment) {
       if (std::memcmp(buffer.data() + offset, pattern.data(), pattern_size) ==
           0) {
@@ -82,10 +85,14 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
     return;
   }
 
-  const size_t buffer_size = buffer.size();
-  const size_t pattern_size = pattern.size();
-  const std::byte first_byte = pattern[0];
+  // Trace matching
+  size_t internal_match_count = 0;
+  const auto logged_callback = [&](size_t offset) {
+    ++internal_match_count;
+    callback(offset);
+  };
 
+  const std::byte first_byte = pattern[0];
   const __m256i v_first = _mm256_set1_epi8(static_cast<char>(first_byte));
   const char* buf_ptr = reinterpret_cast<const char*>(buffer.data());
   const char* pat_ptr = reinterpret_cast<const char*>(pattern.data());
@@ -101,11 +108,6 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
     unsigned int mask = static_cast<unsigned int>(_mm256_movemask_epi8(v_cmp));
 
     // Apply alignment filter: only keep bits at aligned offsets.
-    // We need to account for the base offset 'i' modulo alignment.
-    // If i is aligned (which it always is for power-of-2 alignments <= 32),
-    // then the mask is simply AND'd with the precomputed alignment mask.
-    // For non-power-of-2 or i not aligned, we'd need to rotate the mask.
-    // Since i increments by 32 (always aligned), we can use the static mask.
     mask &= alignment_mask;
 
     while (mask != 0) {
@@ -120,7 +122,7 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
                                     pattern_size - 1) == 0);
         }
         if (full_match) {
-          callback(potential_match_offset);
+          logged_callback(potential_match_offset);
         }
       }
       mask &= ~(1u << bit_index);
@@ -132,9 +134,118 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
     const size_t limit = buffer_size - pattern_size;
     for (size_t offset = i; offset <= limit; offset += alignment) {
       if (std::memcmp(buf_ptr + offset, pat_ptr, pattern_size) == 0) {
-        callback(offset);
+        logged_callback(offset);
       }
     }
+  }
+
+  if (internal_match_count > 0) {
+    LogDebug("AVX2 Match! Found {} occurrences in 32MB chunk",
+             internal_match_count);
+  }
+}
+
+MAIA_TARGET_AVX2 void ScanBufferMaskedAvx2_Impl(
+    std::span<const std::byte> buffer,
+    std::span<const std::byte> pattern,
+    std::span<const std::byte> mask,
+    std::function<void(size_t)> callback) {
+  const size_t buffer_size = buffer.size();
+  const size_t pattern_size = pattern.size();
+
+  if (buffer_size < pattern_size || pattern.empty() || mask.empty()) {
+    return;
+  }
+
+  if (buffer_size < 32 || pattern_size > 32) {
+    maia::core::internal::ScanBufferMaskedScalar(
+        buffer, pattern, mask, std::move(callback));
+    return;
+  }
+
+  size_t internal_match_count = 0;
+  auto logged_callback = [&](size_t offset) {
+    internal_match_count++;
+    callback(offset);
+  };
+
+  alignas(32) std::byte pat_buf[32]{};
+  alignas(32) std::byte mask_buf[32]{};
+  std::memcpy(pat_buf, pattern.data(), pattern_size);
+  std::memcpy(mask_buf, mask.data(), pattern_size);
+
+  const __m256i v_pat =
+      _mm256_load_si256(reinterpret_cast<const __m256i*>(pat_buf));
+  const __m256i v_mask =
+      _mm256_load_si256(reinterpret_cast<const __m256i*>(mask_buf));
+  const __m256i v_pat_masked = _mm256_and_si256(v_pat, v_mask);
+
+  const char* buf_ptr = reinterpret_cast<const char*>(buffer.data());
+  const std::byte* pat_ptr = pattern.data();
+
+  size_t i = 0;
+  if (mask[0] == std::byte{0xFF}) {
+    const __m256i v_first = _mm256_set1_epi8(static_cast<char>(pattern[0]));
+    for (; i <= buffer_size - 32; i += 32) {
+      __m256i v_data =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(buf_ptr + i));
+      __m256i v_cmp = _mm256_cmpeq_epi8(v_data, v_first);
+      unsigned int match_mask =
+          static_cast<unsigned int>(_mm256_movemask_epi8(v_cmp));
+
+      while (match_mask != 0) {
+        int bit_index = std::countr_zero(match_mask);
+        size_t offset = i + bit_index;
+
+        if (offset + pattern_size <= buffer_size) {
+          if (offset + 32 <= buffer_size) {
+            __m256i v_candidate = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i*>(buf_ptr + offset));
+            __m256i v_candidate_masked = _mm256_and_si256(v_candidate, v_mask);
+            __m256i v_final_cmp =
+                _mm256_cmpeq_epi8(v_candidate_masked, v_pat_masked);
+            unsigned int final_mask =
+                static_cast<unsigned int>(_mm256_movemask_epi8(v_final_cmp));
+            unsigned int needed_bits =
+                (pattern_size == 32) ? 0xFFFFFFFFu : ((1u << pattern_size) - 1);
+            if ((final_mask & needed_bits) == needed_bits) {
+              logged_callback(offset);
+            }
+          } else {
+            bool match = true;
+            for (size_t k = 0; k < pattern_size; ++k) {
+              if ((static_cast<std::byte>(buf_ptr[offset + k]) & mask[k]) !=
+                  (pat_ptr[k] & mask[k])) {
+                match = false;
+                break;
+              }
+            }
+            if (match) {
+              logged_callback(offset);
+            }
+          }
+        }
+        match_mask &= ~(1u << bit_index);
+      }
+    }
+  } else {
+    // If the first byte is a wildcard, we can't use the 'v_first' optimization.
+    // We fall back to a slower scalar scan for this case.
+    maia::core::internal::ScanBufferMaskedScalar(
+        buffer, pattern, mask, std::move(callback));
+    return;
+  }
+
+  if (i < buffer_size && i + pattern_size <= buffer_size) {
+    maia::core::internal::ScanBufferMaskedScalar(
+        buffer.subspan(i), pattern, mask, [&](size_t off) {
+          logged_callback(i + off);
+        });
+  }
+
+  if (internal_match_count > 0) {
+    LogDebug("Masked AVX2 Match! Found {} occurrences in 32MB chunk",
+             internal_match_count);
   }
 }
 
@@ -147,7 +258,8 @@ MAIA_TARGET_AVX2 void ScanMemCmpAvx2_Impl(
   maia::Assert(stride > 0 && stride <= 32, "Stride must be between 1 and 32");
   const size_t size = std::min(buf1.size(), buf2.size());
   if (size < 32) {
-    ScanMemCmpScalar(buf1, buf2, find_equal, stride, std::move(callback));
+    maia::core::internal::ScanMemCmpScalar(
+        buf1, buf2, find_equal, stride, std::move(callback));
     return;
   }
 
@@ -199,9 +311,10 @@ MAIA_TARGET_AVX2 void ScanMemCmpAvx2_Impl(
   if (i < size) {
     std::span<const std::byte> t1 = buf1.subspan(i);
     std::span<const std::byte> t2 = buf2.subspan(i);
-    ScanMemCmpScalar(t1, t2, find_equal, stride, [&](size_t offset) {
-      callback(i + offset);
-    });
+    maia::core::internal::ScanMemCmpScalar(
+        t1, t2, find_equal, stride, [&](size_t offset) {
+          callback(i + offset);
+        });
   }
 }
 
@@ -213,7 +326,8 @@ MAIA_TARGET_AVX2 void ScanMemCompareGreaterAvx2_Int32_Impl(
   const size_t size = std::min(buf1.size(), buf2.size());
 
   if (size < 32) {
-    ScanMemCompareGreaterScalar<int32_t>(buf1, buf2, std::move(callback));
+    maia::core::internal::ScanMemCompareGreaterScalar<int32_t>(
+        buf1, buf2, std::move(callback));
     return;
   }
 
@@ -240,7 +354,7 @@ MAIA_TARGET_AVX2 void ScanMemCompareGreaterAvx2_Int32_Impl(
   if (i < size) {
     std::span<const std::byte> t1 = buf1.subspan(i);
     std::span<const std::byte> t2 = buf2.subspan(i);
-    ScanMemCompareGreaterScalar<int32_t>(
+    maia::core::internal::ScanMemCompareGreaterScalar<int32_t>(
         t1, t2, [&](size_t offset) { callback(i + offset); });
   }
 }
@@ -253,7 +367,8 @@ MAIA_TARGET_AVX2 void ScanMemCompareGreaterAvx2_Float_Impl(
   const size_t size = std::min(buf1.size(), buf2.size());
 
   if (size < 32) {
-    ScanMemCompareGreaterScalar<float>(buf1, buf2, std::move(callback));
+    maia::core::internal::ScanMemCompareGreaterScalar<float>(
+        buf1, buf2, std::move(callback));
     return;
   }
 
@@ -279,7 +394,7 @@ MAIA_TARGET_AVX2 void ScanMemCompareGreaterAvx2_Float_Impl(
   if (i < size) {
     std::span<const std::byte> t1 = buf1.subspan(i);
     std::span<const std::byte> t2 = buf2.subspan(i);
-    ScanMemCompareGreaterScalar<float>(
+    maia::core::internal::ScanMemCompareGreaterScalar<float>(
         t1, t2, [&](size_t offset) { callback(i + offset); });
   }
 }

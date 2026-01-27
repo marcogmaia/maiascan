@@ -16,6 +16,14 @@ namespace maia {
 
 template <typename T>
 std::optional<T> ParseValue(std::string_view sview, int base = 10) {
+  // Trim leading/trailing whitespace
+  size_t start = sview.find_first_not_of(" \t\r\n");
+  if (start == std::string_view::npos) {
+    return std::nullopt;
+  }
+  size_t end = sview.find_last_not_of(" \t\r\n");
+  sview = sview.substr(start, end - start + 1);
+
   if (base == 16 && sview.starts_with("0x")) {
     sview = sview.substr(2);
   }
@@ -75,6 +83,11 @@ inline std::vector<std::byte> ParseStringByType(const std::string& str,
       return NumberStrToBytes<float>(str, base);
     case ScanValueType::kDouble:
       return NumberStrToBytes<double>(str, base);
+    case ScanValueType::kString: {
+      std::vector<std::byte> bytes(str.size());
+      std::memcpy(bytes.data(), str.data(), str.size());
+      return bytes;
+    }
     default:
       return {};
   }

@@ -129,7 +129,10 @@ enum class ScanValueType {
   kInt64,
   kUInt64,
   kFloat,
-  kDouble
+  kDouble,
+  kString,
+  kWString,
+  kArrayOfBytes
 };
 
 constexpr size_t GetSizeForType(ScanValueType type) {
@@ -148,6 +151,10 @@ constexpr size_t GetSizeForType(ScanValueType type) {
     case ScanValueType::kUInt64:
     case ScanValueType::kDouble:
       return 8;
+    case ScanValueType::kString:
+    case ScanValueType::kWString:
+    case ScanValueType::kArrayOfBytes:
+      return 0;  // Variable size
   }
   return 0;
 }
@@ -156,7 +163,8 @@ struct ScanStorage {
   std::vector<uintptr_t> addresses;
   std::vector<std::byte> curr_raw;
   std::vector<std::byte> prev_raw;
-  size_t stride;
+  size_t stride = 0;
+  ScanValueType value_type = ScanValueType::kUInt32;
 };
 
 }  // namespace maia

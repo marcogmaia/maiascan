@@ -109,6 +109,62 @@ void ScanBuffer(std::span<const std::byte> buffer,
   }
 }
 
+namespace internal {
+
+void ScanBufferMaskedAvx2_Impl(std::span<const std::byte> buffer,
+                               std::span<const std::byte> pattern,
+                               std::span<const std::byte> mask,
+                               std::function<void(size_t)> callback);
+
+template <typename Callback>
+void ScanBufferMaskedScalar(std::span<const std::byte> buffer,
+                            std::span<const std::byte> pattern,
+                            std::span<const std::byte> mask,
+                            Callback&& callback) {
+  if (pattern.empty() || buffer.size() < pattern.size() ||
+      mask.size() < pattern.size()) {
+    return;
+  }
+
+  const size_t pattern_size = pattern.size();
+  const size_t limit = buffer.size() - pattern_size;
+  const std::byte* buf_ptr = buffer.data();
+  const std::byte* pat_ptr = pattern.data();
+  const std::byte* mask_ptr = mask.data();
+
+  for (size_t offset = 0; offset <= limit; ++offset) {
+    bool match = true;
+    for (size_t i = 0; i < pattern_size; ++i) {
+      if ((buf_ptr[offset + i] & mask_ptr[i]) != (pat_ptr[i] & mask_ptr[i])) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      callback(offset);
+    }
+  }
+}
+
+}  // namespace internal
+
+/// \brief Scans a memory buffer for a masked pattern.
+/// \param mask Must be same size as pattern. 0xFF checks byte, 0x00 ignores.
+template <typename Callback>
+void ScanBufferMasked(std::span<const std::byte> buffer,
+                      std::span<const std::byte> pattern,
+                      std::span<const std::byte> mask,
+                      Callback&& callback) {
+  static const bool kHasAvx2 = HasAvx2();
+  if (kHasAvx2) {
+    internal::ScanBufferMaskedAvx2_Impl(
+        buffer, pattern, mask, std::forward<Callback>(callback));
+  } else {
+    internal::ScanBufferMaskedScalar(
+        buffer, pattern, mask, std::forward<Callback>(callback));
+  }
+}
+
 /// \brief Scans a memory buffer for a pattern (unaligned, byte-level).
 /// \deprecated Prefer the aligned overload for type-safe scanning.
 template <typename Callback>

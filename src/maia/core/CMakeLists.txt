@@ -14,12 +14,14 @@ target_sources(
         cpu_info.h
         memory_common.h
         process.h
+        pattern_parser.h
         simd_scanner.h
         scoped_process_suspend.h
   PRIVATE
     address_formatter.cpp
     cpu_info.cpp
     process.cpp
+    pattern_parser.cpp
     simd_scanner.cpp
 )
 
@@ -31,22 +33,19 @@ target_link_libraries(
     mmem
 )
 
-add_executable(simd_scanner_test simd_scanner_test.cpp)
+add_executable(
+  core_test
+  address_formatter_test.cpp
+  pattern_parser_test.cpp
+  simd_scanner_test.cpp
+  value_parser_test.cpp
+)
+
 target_link_libraries(
-  simd_scanner_test
+  core_test
   PRIVATE
     core
     GTest::gmock_main
 )
 
-gtest_discover_tests(simd_scanner_test DISCOVERY_TIMEOUT 60)
-
-add_executable(address_formatter_test address_formatter_test.cpp)
-target_link_libraries(
-  address_formatter_test
-  PRIVATE
-    core
-    GTest::gmock_main
-)
-
-gtest_discover_tests(address_formatter_test DISCOVERY_TIMEOUT 60)
+gtest_discover_tests(core_test DISCOVERY_TIMEOUT 60)

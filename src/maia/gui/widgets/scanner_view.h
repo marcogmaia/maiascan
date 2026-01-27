@@ -32,10 +32,16 @@ class ScannerWidget {
     /// \brief Emitted when the user clicks the "Next Scan" button.
     entt::sigh<void()> next_scan_pressed;
 
+    /// \brief Emitted when the user selects a different value type.
+    entt::sigh<void(ScanValueType)> value_type_selected;
+
     /// \brief Emitted when the user changes the target scan value in the input
     /// field.
     /// \param value The parsed byte representation of the new target value.
-    entt::sigh<void(std::vector<std::byte> /* value */)> target_value_selected;
+    /// \param mask The parsed byte mask (for AOB).
+    entt::sigh<void(std::vector<std::byte> /* value */,
+                    std::vector<std::byte> /* mask */)>
+        target_value_selected;
 
     /// \brief Emitted when the user selects a different comparison type (e.g.,
     /// Exact Value, Changed).
@@ -71,6 +77,7 @@ class ScannerWidget {
     auto NewScanPressed() {return entt::sink(view.signals_.new_scan_pressed);}
     auto NextScanPressed() {return entt::sink(view.signals_.next_scan_pressed);}
     auto TargetValueSelected() {return entt::sink(view.signals_.target_value_selected);}
+    auto ValueTypeSelected() {return entt::sink(view.signals_.value_type_selected);}
     auto ScanComparisonSelected() {return entt::sink(view.signals_.scan_comparison_selected);}
     auto AutoUpdateChanged() {return entt::sink(view.signals_.auto_update_changed);}
     auto PauseWhileScanningChanged() {return entt::sink(view.signals_.pause_while_scanning_changed);}
@@ -86,6 +93,9 @@ class ScannerWidget {
   Signals signals_;
 
   std::string str_;
+  std::vector<std::byte> parsed_preview_;  // Cache for UI feedback
+  bool parse_error_ = false;
+
   int selected_index_ = 0;
   bool is_hex_input_ = false;
   bool auto_update_enabled_ = false;

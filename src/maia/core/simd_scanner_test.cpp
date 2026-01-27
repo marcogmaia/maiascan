@@ -418,4 +418,44 @@ TEST_F(SimdScannerTest, ScanBufferScalarFallbackRespectsAlignment) {
   EXPECT_EQ(found_offsets_[1], 12);
 }
 
+TEST_F(SimdScannerTest, ScanBufferMaskedSimple) {
+  std::vector<std::byte> buffer(64, std::byte{0});
+  buffer[10] = std::byte{0xAA};
+  buffer[11] = std::byte{0xBB};
+  buffer[12] = std::byte{0xCC};
+
+  buffer[40] = std::byte{0xAA};
+  buffer[41] = std::byte{0xDD};  // Wildcard match here
+  buffer[42] = std::byte{0xCC};
+
+  std::vector<std::byte> pattern = {
+      std::byte{0xAA}, std::byte{0x00}, std::byte{0xCC}};
+  std::vector<std::byte> mask = {
+      std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}};
+
+  ScanBufferMasked(buffer, pattern, mask, [this](size_t o) { OnMatch(o); });
+
+  ASSERT_EQ(found_offsets_.size(), 2);
+  EXPECT_EQ(found_offsets_[0], 10);
+  EXPECT_EQ(found_offsets_[1], 40);
+}
+
+TEST_F(SimdScannerTest, ScanBufferMaskedFirstByteWildcard) {
+  std::vector<std::byte> buffer(64, std::byte{0x11});
+  buffer[10] = std::byte{0xAA};
+  buffer[11] = std::byte{0xBB};
+
+  std::vector<std::byte> pattern = {std::byte{0x00}, std::byte{0xBB}};
+  std::vector<std::byte> mask = {std::byte{0x00}, std::byte{0xFF}};
+
+  // This should trigger the non-v_first optimization path (scalar or fallback)
+  ScanBufferMasked(buffer, pattern, mask, [this](size_t o) { OnMatch(o); });
+
+  // Should find many matches since first byte is ignored and 0xBB is at 11
+  // and all other bytes are 0x11 (but only offset 10 matches the 0xBB at offset
+  // + 1)
+  ASSERT_EQ(found_offsets_.size(), 1);
+  EXPECT_EQ(found_offsets_[0], 10);
+}
+
 }  // namespace maia::core

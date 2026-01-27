@@ -5,6 +5,7 @@ add_subdirectory(console)
 add_subdirectory(core)
 add_subdirectory(gui)
 add_subdirectory(mmem)
+add_subdirectory(tests)
 
 find_package(spdlog CONFIG REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
