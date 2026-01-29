@@ -72,8 +72,8 @@ struct CheatTableEntry {
 /// active process and re-applies frozen values.
 class CheatTableModel {
  public:
-  explicit CheatTableModel(
-      std::unique_ptr<core::ITaskRunner> task_runner = nullptr);
+  explicit CheatTableModel(std::unique_ptr<core::ITaskRunner> task_runner =
+                               std::make_unique<core::AsyncTaskRunner>());
 
   ~CheatTableModel();
 
