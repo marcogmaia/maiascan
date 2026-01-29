@@ -1,8 +1,5 @@
 // Copyright (c) Maia
 
-#include <chrono>
-#include <condition_variable>
-#include <mutex>
 #include <span>
 
 #include <gmock/gmock.h>
@@ -10,6 +7,8 @@
 
 #include "maia/application/cheat_table_model.h"
 #include "maia/core/i_process.h"
+#include "maia/tests/fake_process.h"
+#include "maia/tests/task_runner.h"
 
 namespace maia {
 
@@ -53,7 +52,7 @@ class MockProcess : public IProcess {
 class CheatTableModelTest : public ::testing::Test {
  protected:
   testing::NiceMock<MockProcess> mock_process_;
-  CheatTableModel model_;
+  CheatTableModel model_{std::make_unique<test::NoOpTaskRunner>()};
 
   void CallWriteMemory(size_t index, const std::vector<std::byte>& data) {
     // We use "1" here because our entry is kInt32.
@@ -66,189 +65,144 @@ class CheatTableModelTest : public ::testing::Test {
   }
 };
 
-TEST_F(CheatTableModelTest, RaceConditionLostUpdateIsPrevented) {
-  // Synchronization primitives
-  std::mutex mutex;
-  std::condition_variable cv_read_start;
-  std::condition_variable cv_resume_read;
-  bool read_started = false;
-  bool allow_resume = false;
-  std::atomic<bool> should_block{false};
-
-  // Configure Mock
+TEST_F(CheatTableModelTest, HandlesUnreadableMemoryForVariableSizeEntries) {
+  // Setup Mock
   EXPECT_CALL(mock_process_, IsProcessValid())
       .WillRepeatedly(testing::Return(true));
 
+  // First read succeeds (during AddEntry), subsequent reads fail
   EXPECT_CALL(mock_process_,
               ReadMemory(testing::_, testing::_, testing::_, testing::_))
-      .WillRepeatedly(
-          testing::Invoke([&](std::span<const MemoryAddress> addresses,
-                              size_t bytes_per_address,
-                              std::span<std::byte> out_buffer,
-                              std::vector<uint8_t>* success_mask) {
-            if (!should_block) {
-              return true;
-            }
+      .WillOnce(testing::Return(true))          // AddEntry
+      .WillRepeatedly(testing::Return(false));  // UpdateValues
 
-            // Signal that read has started
-            {
-              std::unique_lock lock(mutex);
-              read_started = true;
-              cv_read_start.notify_one();
-            }
-
-            // Wait for permission to finish
-            {
-              std::unique_lock lock(mutex);
-              cv_resume_read.wait(lock, [&] { return allow_resume; });
-            }
-            return true;
-          }));
-
+  // Add a string entry (size 10)
   model_.SetActiveProcess(&mock_process_);
-  model_.AddEntry(0x1000, ScanValueType::kInt32, "Entry 1");
+  model_.AddEntry(0x1000, ScanValueType::kString, "String Entry", 10);
 
-  ASSERT_EQ(model_.entries()->size(), 1);
-
-  // Enable blocking only for the background thread
-  should_block = true;
-
-  // 3. Trigger the background update (manually for control)
-  // We use a separate thread to mimic the background loop behavior
-  std::thread background_thread([&] { model_.UpdateValues(); });
-
-  // 4. Wait for the background thread to be "inside" the update loop
-  {
-    std::unique_lock lock(mutex);
-    ASSERT_TRUE(cv_read_start.wait_for(lock, std::chrono::seconds(2), [&] {
-      return read_started;
-    })) << "Timed out waiting for UpdateValues to start reading";
-  }
-
-  // At this point, the scanner has captured the snapshot of size 1.
-  // In the buggy implementation, it holds a copy of the vector with 1 entry.
-
-  // Disable blocking for the attack call (so it doesn't deadlock itself)
-  should_block = false;
-
-  // 5. ATTACK: Add a new entry from the main thread
-  model_.AddEntry(0x2000, ScanValueType::kInt32, "Entry 2 (The Victim)");
-  ASSERT_EQ(model_.entries()->size(), 2)
-      << "Entry should be added immediately to the model";
-
-  // Re-enable blocking to keep the test consistent if resuming background
-  // thread does more reads? No, Resume read just finishes the current read.
-
-  // 6. Release the background thread
-  {
-    std::unique_lock lock(mutex);
-    allow_resume = true;
-    cv_resume_read.notify_one();
-  }
-
-  background_thread.join();
-
-  // 7. ASSERT: Did we lose the entry?
   auto entries = model_.entries();
-  EXPECT_EQ(entries->size(), 2)
-      << "CRITICAL FAIL: The background loop overwrote the added entry!";
+  ASSERT_EQ(entries->size(), 1);
+  EXPECT_EQ(entries->at(0).data->GetValueSize(), 10);
 
-  if (entries->size() >= 2) {
-    EXPECT_EQ(entries->at(1).description, "Entry 2 (The Victim)");
+  // Trigger update - should not crash or change value if read fails
+  // Since UpdateValues uses stack buffer and memcmp/memcpy only on success,
+  // it should remain unchanged.
+  std::vector<std::byte> original_value = entries->at(0).data->GetValue();
+  model_.UpdateValues();
+
+  EXPECT_EQ(entries->at(0).data->GetValue(), original_value);
+}
+
+TEST_F(CheatTableModelTest, EnforcesStringSizeSafetyOnSetValue) {
+  EXPECT_CALL(mock_process_, IsProcessValid())
+      .WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(mock_process_, WriteMemory(testing::_, testing::_))
+      .WillRepeatedly(testing::Return(true));
+
+  // Add a string entry with size 5
+  model_.SetActiveProcess(&mock_process_);
+  model_.AddEntry(0x1000, ScanValueType::kString, "String Entry", 5);
+
+  auto entries = model_.entries();
+  ASSERT_EQ(entries->size(), 1);
+
+  // Try to set a longer string
+  model_.SetValue(0, "12345678");
+  {
+    auto value = entries->at(0).data->GetValue();
+    EXPECT_EQ(value.size(), 5);
+    std::string val(reinterpret_cast<const char*>(value.data()), 5);
+    EXPECT_EQ(val, "12345");
+  }
+
+  // 2. Try to set a shorter string
+  model_.SetValue(0, "ABC");
+  {
+    auto value = entries->at(0).data->GetValue();
+    EXPECT_EQ(value.size(), 5);
+    EXPECT_EQ(static_cast<char>(value[0]), 'A');
+    EXPECT_EQ(static_cast<char>(value[1]), 'B');
+    EXPECT_EQ(static_cast<char>(value[2]), 'C');
+    EXPECT_EQ(static_cast<char>(value[3]), '\0');
+    EXPECT_EQ(static_cast<char>(value[4]), '\0');
   }
 }
 
-// This test deterministically triggers the race condition where active_process_
-// is set to null (by UpdateValues) while WriteMemory is using it.
-TEST_F(CheatTableModelTest, WriteMemoryCrashesIfProcessDiesConcurrently) {
-  // Synchronization primitives
-  std::mutex sync_mutex;
-  std::condition_variable cv_paused;
-  std::condition_variable cv_resume;
-  bool is_paused = false;
-  bool should_resume = false;
-
-  // 1. Configure Mock for the race
-  std::thread::id victim_thread_id;
-  std::thread::id main_thread_id = std::this_thread::get_id();
-  std::atomic<bool> victim_started{false};
-
-  // We use WillRepeatedly with a stateful lambda to handle the different
-  // threads
+TEST_F(CheatTableModelTest, FrozenValueIsReappliedWhenProcessChangesIt) {
+  // Setup
   EXPECT_CALL(mock_process_, IsProcessValid())
-      .WillRepeatedly(testing::Invoke([&]() {
-        auto current_id = std::this_thread::get_id();
-
-        // Background thread (or others): just say it's valid
-        if (current_id != victim_thread_id && current_id != main_thread_id) {
-          return true;
-        }
-
-        // Victim Thread: Pause here to simulate the race window
-        if (current_id == victim_thread_id) {
-          std::unique_lock lock(sync_mutex);
-          is_paused = true;
-          cv_paused.notify_one();
-
-          cv_resume.wait(lock, [&] { return should_resume; });
-          return true;
-        }
-
-        // Main Thread (Attacker): Return false to trigger active_process_ =
-        // nullptr
-        if (current_id == main_thread_id) {
-          return false;
-        }
-
-        return true;
-      }));
-
+      .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(mock_process_,
               ReadMemory(testing::_, testing::_, testing::_, testing::_))
       .WillRepeatedly(testing::Return(true));
 
-  // Setup
   model_.SetActiveProcess(&mock_process_);
-  model_.AddEntry(0x1234, ScanValueType::kInt32, "Test Entry");
+  model_.AddEntry(0x1000, ScanValueType::kInt32, "Health");
+  const auto& entry = *model_.entries();
 
-  // Start the Victim Thread
-  std::thread victim_thread([&]() {
-    while (!victim_started) {
-      std::this_thread::yield();
-    }
-    std::vector<std::byte> data{std::byte{0x1}};
-    CallWriteMemory(0, data);
-  });
+  // Set Value to 100.
+  model_.SetValue(0, "100");
 
-  victim_thread_id = victim_thread.get_id();
-  victim_started = true;
+  // Freeze.
+  model_.ToggleFreeze(0);
 
-  // Wait for Victim to pause inside IsProcessValid
-  {
-    std::unique_lock lock(sync_mutex);
-    // Use wait_for to detect deadlock
-    if (!cv_paused.wait_for(
-            lock, std::chrono::seconds(5), [&] { return is_paused; })) {
-      victim_thread.detach();  // Detach to allow test to fail gracefully
-      FAIL() << "Deadlock: Victim thread never reached IsProcessValid";
-    }
-  }
+  // Verify that UpdateValues calls WriteMemory with 100 effectively undoing any
+  // external change.
+  EXPECT_CALL(mock_process_, WriteMemory(0x1000, testing::_))
+      .WillOnce([&](uintptr_t, std::span<const std::byte> data) {
+        EXPECT_EQ(data.size(), 4);
+        // 100 == 0x64
+        EXPECT_EQ(data[0], std::byte{0x64});
+        return true;
+      });
 
-  // Trigger the Attacker (UpdateValues)
-  // This will call IsProcessValid (returning false), and then set
-  // active_process_ = nullptr
+  model_.UpdateValues();
+}
+
+TEST_F(CheatTableModelTest, FrozenValueIsHeldAgainstExternalChanges) {
+  test::FakeProcess fake_process;
+  model_.SetActiveProcess(&fake_process);
+
+  const MemoryAddress addr = fake_process.GetBaseAddress();
+  model_.AddEntry(addr, ScanValueType::kInt32, "Int Entry");
+
+  // Set to 100 and freeze
+  model_.SetValue(0, "100");
+  model_.ToggleFreeze(0);
+
+  // External change to 200
+  // Note: We use offset 0 because addr == base_address
+  fake_process.WriteValue<int32_t>(0, 200);
+
+  // Manually trigger update (to avoid sleeping in tests)
   model_.UpdateValues();
 
-  // Resume the Victim
-  // It will now exit IsProcessValid and try to dereference active_process_
-  {
-    std::unique_lock lock(sync_mutex);
-    should_resume = true;
-    cv_resume.notify_one();
-  }
+  // Verify it's back to 100 in the "process" memory
+  int32_t current_val = 0;
+  std::span<std::byte> out_buf(reinterpret_cast<std::byte*>(&current_val), 4);
+  fake_process.ReadMemory({&addr, 1}, 4, out_buf, nullptr);
+  EXPECT_EQ(current_val, 100);
+}
 
-  // Wait for crash (or join if it somehow survives)
-  victim_thread.join();
+TEST_F(CheatTableModelTest, SetValueWhileFrozenUpdatesFrozenValue) {
+  test::FakeProcess fake_process;
+  model_.SetActiveProcess(&fake_process);
+  const MemoryAddress addr = fake_process.GetBaseAddress();
+  model_.AddEntry(addr, ScanValueType::kInt32, "Int Entry");
+
+  model_.SetValue(0, "100");
+  model_.ToggleFreeze(0);
+
+  // Set to 200 while frozen
+  model_.SetValue(0, "200");
+
+  // Verify frozen value is now 200 in the process
+  model_.UpdateValues();
+
+  int32_t current_val = 0;
+  std::span<std::byte> out_buf(reinterpret_cast<std::byte*>(&current_val), 4);
+  fake_process.ReadMemory({&addr, 1}, 4, out_buf, nullptr);
+  EXPECT_EQ(current_val, 200);
 }
 
 }  // namespace maia

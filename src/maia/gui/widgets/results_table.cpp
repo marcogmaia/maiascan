@@ -3,6 +3,8 @@
 #include "maia/gui/widgets/results_table.h"
 
 #include <algorithm>
+#include <concepts>
+#include <cstring>
 #include <format>
 #include <optional>
 #include <span>
@@ -17,6 +19,12 @@
 namespace maia {
 
 namespace {
+
+struct Utf8String {};
+
+struct Utf16String {};
+
+struct ByteArray {};
 
 template <typename T>
 void DrawFormattedValue(std::span<const std::byte> data,
@@ -48,6 +56,54 @@ void DrawFormattedValue(std::span<const std::byte> data,
   }
 }
 
+template <>
+void DrawFormattedValue<Utf8String>(std::span<const std::byte> data,
+                                    bool /*is_hex*/,
+                                    std::optional<ImVec4> color) {
+  std::string text(reinterpret_cast<const char*>(data.data()), data.size());
+  if (color) {
+    ImGui::TextColored(*color, "%s", text.c_str());
+  } else {
+    ImGui::TextUnformatted(text.c_str());
+  }
+}
+
+template <>
+void DrawFormattedValue<Utf16String>(std::span<const std::byte> data,
+                                     bool /*is_hex*/,
+                                     std::optional<ImVec4> color) {
+  // Very basic UTF-16LE to UTF-8 conversion for display
+  std::string text;
+  text.reserve(data.size() / 2);
+  for (size_t i = 0; i + 1 < data.size(); i += 2) {
+    char c = static_cast<char>(data[i]);
+    text += (c == '\0') ? ' ' : c;  // Replace nulls with spaces for display
+  }
+  if (color) {
+    ImGui::TextColored(*color, "%s", text.c_str());
+  } else {
+    ImGui::TextUnformatted(text.c_str());
+  }
+}
+
+template <>
+void DrawFormattedValue<ByteArray>(std::span<const std::byte> data,
+                                   bool /*is_hex*/,
+                                   std::optional<ImVec4> color) {
+  std::string text;
+  text.reserve(data.size() * 3);
+  for (size_t i = 0; i < data.size(); ++i) {
+    text += std::format("{:02X}{}",
+                        static_cast<uint8_t>(data[i]),
+                        (i == data.size() - 1) ? "" : " ");
+  }
+  if (color) {
+    ImGui::TextColored(*color, "%s", text.c_str());
+  } else {
+    ImGui::TextUnformatted(text.c_str());
+  }
+}
+
 // clang-format off
 void DrawEntryByType(std::span<const std::byte> data,
                     ScanValueType type,
@@ -69,6 +125,9 @@ void DrawEntryByType(std::span<const std::byte> data,
     case ScanValueType::kUInt64: DrawFormattedValue<uint64_t>(data, is_hex, color); break;
     case ScanValueType::kFloat:  DrawFormattedValue<float>(data, false, color); break;
     case ScanValueType::kDouble: DrawFormattedValue<double>(data, false, color); break;
+    case ScanValueType::kString: DrawFormattedValue<Utf8String>(data, false, color); break;
+    case ScanValueType::kWString: DrawFormattedValue<Utf16String>(data, false, color); break;
+    case ScanValueType::kArrayOfBytes: DrawFormattedValue<ByteArray>(data, false, color); break;
   }
 }
 

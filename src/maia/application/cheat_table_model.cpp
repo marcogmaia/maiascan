@@ -5,19 +5,78 @@
 #include <array>
 #include <cstring>
 
+#include "maia/assert.h"
 #include "maia/core/memory_common.h"
 #include "maia/core/value_parser.h"
+#include "maia/logging.h"
 
 namespace maia {
 
-CheatTableModel::CheatTableModel()
-    : entries_(std::make_shared<std::vector<CheatTableEntry>>()) {
-  update_task_ = std::jthread(
+void CheatTableEntryData::Resize(size_t size) {
+  std::scoped_lock lock(mutex_);
+  value_.resize(size);
+  frozen_value_.resize(size);
+}
+
+std::vector<std::byte> CheatTableEntryData::GetValue() const {
+  std::scoped_lock lock(mutex_);
+  return value_;
+}
+
+size_t CheatTableEntryData::GetValueSize() const {
+  std::scoped_lock lock(mutex_);
+  return value_.size();
+}
+
+void CheatTableEntryData::SetValue(const std::vector<std::byte>& new_value) {
+  std::scoped_lock lock(mutex_);
+  value_ = new_value;
+  if (is_frozen_) {
+    frozen_value_ = new_value;
+  }
+}
+
+bool CheatTableEntryData::IsFrozen() const {
+  std::scoped_lock lock(mutex_);
+  return is_frozen_;
+}
+
+void CheatTableEntryData::ToggleFreeze() {
+  std::scoped_lock lock(mutex_);
+  is_frozen_ = !is_frozen_;
+  if (is_frozen_) {
+    frozen_value_ = value_;
+  }
+}
+
+std::vector<std::byte> CheatTableEntryData::GetFrozenValue() const {
+  std::scoped_lock lock(mutex_);
+  return frozen_value_;
+}
+
+void CheatTableEntryData::UpdateFromProcess(
+    const std::span<const std::byte>& new_value) {
+  std::scoped_lock lock(mutex_);
+  const size_t size_to_copy = std::min(value_.size(), new_value.size());
+  if (size_to_copy == 0) {
+    return;
+  }
+  if (std::memcmp(value_.data(), new_value.data(), size_to_copy) != 0) {
+    std::memcpy(value_.data(), new_value.data(), size_to_copy);
+  }
+}
+
+CheatTableModel::CheatTableModel(std::unique_ptr<core::ITaskRunner> task_runner)
+    : entries_(std::make_shared<std::vector<CheatTableEntry>>()),
+      task_runner_(std::move(task_runner)) {
+  Assert(task_runner_ != nullptr);
+  task_runner_->Run(
       [this](std::stop_token stop_token) { AutoUpdateLoop(stop_token); });
 }
 
 CheatTableModel::~CheatTableModel() {
-  update_task_.request_stop();
+  task_runner_->RequestStop();
+  task_runner_->Join();
 }
 
 std::shared_ptr<const std::vector<CheatTableEntry>> CheatTableModel::entries()
@@ -27,7 +86,8 @@ std::shared_ptr<const std::vector<CheatTableEntry>> CheatTableModel::entries()
 
 void CheatTableModel::AddEntry(MemoryAddress address,
                                ScanValueType type,
-                               const std::string& description) {
+                               const std::string& description,
+                               size_t size) {
   std::scoped_lock lock(mutex_);
 
   auto current_snapshot = entries_.load();
@@ -39,13 +99,16 @@ void CheatTableModel::AddEntry(MemoryAddress address,
   entry.type = type;
   entry.description = description;
   entry.data = std::make_shared<CheatTableEntryData>();
-  entry.data->value.resize(GetSizeForType(type));
-  entry.data->frozen_value.resize(GetSizeForType(type));
+
+  const size_t entry_size = size > 0 ? size : GetSizeForType(type);
+  entry.data->Resize(entry_size);
 
   // Initial read
   if (active_process_) {
+    auto initial_value = entry.data->GetValue();
     active_process_->ReadMemory(
-        {&entry.address, 1}, entry.data->value.size(), entry.data->value);
+        {&entry.address, 1}, initial_value.size(), initial_value);
+    entry.data->UpdateFromProcess(initial_value);
   }
 
   new_entries->emplace_back(std::move(entry));
@@ -81,33 +144,39 @@ void CheatTableModel::UpdateEntryDescription(size_t index,
 void CheatTableModel::ToggleFreeze(size_t index) {
   auto snapshot = entries_.load();
   if (index < snapshot->size()) {
-    auto& entry = (*snapshot)[index];
-    std::scoped_lock entry_lock(entry.data->mutex);
-    entry.data->is_frozen = !entry.data->is_frozen;
-    if (entry.data->is_frozen) {
-      entry.data->frozen_value = entry.data->value;
-    }
+    (*snapshot)[index].data->ToggleFreeze();
   }
 }
 
 void CheatTableModel::SetValue(size_t index, const std::string& value_str) {
   auto snapshot = entries_.load();
   if (index < snapshot->size()) {
-    auto& entry = (*snapshot)[index];
+    const auto& entry = (*snapshot)[index];
     auto data = ParseStringByType(value_str, entry.type);
-    if (data.empty()) {
+    if (data.empty() && !value_str.empty() &&
+        entry.type != ScanValueType::kString) {
       return;
+    }
+
+    // Enforce size for strings and byte arrays to avoid OOB writes in the
+    // target process.
+    if (entry.type == ScanValueType::kString ||
+        entry.type == ScanValueType::kWString ||
+        entry.type == ScanValueType::kArrayOfBytes) {
+      const size_t original_size = entry.data->GetValueSize();
+      if (data.size() > original_size) {
+        data.resize(original_size);
+      } else if (data.size() < original_size) {
+        // Pad with nulls
+        data.resize(original_size, std::byte{0});
+      }
     }
 
     // Write to process (if valid)
     WriteMemory(index, data);
 
     // Update local version
-    std::scoped_lock entry_lock(entry.data->mutex);
-    entry.data->value = data;
-    if (entry.data->is_frozen) {
-      entry.data->frozen_value = data;
-    }
+    entry.data->SetValue(data);
   }
 }
 
@@ -135,6 +204,7 @@ void CheatTableModel::UpdateValues() {
   }
 
   if (!active_process_->IsProcessValid()) {
+    LogInfo("Active process is no longer valid. Clearing.");
     std::scoped_lock lock(mutex_);
     active_process_ = nullptr;
     // We can't easily zero out values in a const snapshot without casting,
@@ -143,27 +213,26 @@ void CheatTableModel::UpdateValues() {
     return;
   }
 
-  for (auto& entry : *snapshot) {
-    if (entry.data->is_frozen) {
-      std::scoped_lock entry_lock(entry.data->mutex);
-      active_process_->WriteMemory(entry.address, entry.data->frozen_value);
-      entry.data->value = entry.data->frozen_value;
+  for (const auto& entry : *snapshot) {
+    if (entry.data->IsFrozen()) {
+      auto frozen_val = entry.data->GetFrozenValue();
+      if (active_process_->WriteMemory(entry.address, frozen_val)) {
+        entry.data->UpdateFromProcess(frozen_val);
+      } else {
+        LogWarning("Failed to write frozen value to 0x{:X}", entry.address);
+      }
     } else {
-      // Small optimization: use a stack buffer for small types to avoid heap
-      // allocation in the loop.
-      std::array<std::byte, 64> stack_buffer;
-      const size_t type_size = GetSizeForType(entry.type);
-      const size_t read_size = std::min(type_size, stack_buffer.size());
+      // TODO: Review this stack allocation.
+      // Use the actual size of the entry's value buffer.
+      std::array<std::byte, 1024> stack_buffer;
+      const size_t entry_size = entry.data->GetValueSize();
+      const size_t read_size = std::min(entry_size, stack_buffer.size());
 
-      if (active_process_->ReadMemory({&entry.address, 1},
+      if (read_size > 0 &&
+          active_process_->ReadMemory({&entry.address, 1},
                                       read_size,
                                       {stack_buffer.data(), read_size})) {
-        std::scoped_lock entry_lock(entry.data->mutex);
-        if (std::memcmp(entry.data->value.data(),
-                        stack_buffer.data(),
-                        read_size) != 0) {
-          std::memcpy(entry.data->value.data(), stack_buffer.data(), read_size);
-        }
+        entry.data->UpdateFromProcess({stack_buffer.data(), read_size});
       }
     }
   }

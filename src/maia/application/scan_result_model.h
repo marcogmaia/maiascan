@@ -12,6 +12,7 @@
 
 #include "maia/core/i_process.h"
 #include "maia/core/scan_types.h"
+#include "maia/core/task_runner.h"
 
 namespace maia {
 
@@ -19,6 +20,10 @@ namespace maia {
 /// updates.
 class ScanResultModel {
  public:
+  explicit ScanResultModel(
+      std::unique_ptr<core::ITaskRunner> task_runner = nullptr,
+      size_t chunk_size = 32 * 1024 * 1024);
+
   auto sinks() {
     return Sinks{*this};
   }
@@ -36,8 +41,19 @@ class ScanResultModel {
     scan_comparison_ = scan_comparison;
   }
 
+  void SetScanValueType(ScanValueType scan_value_type) {
+    scan_value_type_ = scan_value_type;
+  }
+
   void SetTargetScanValue(std::vector<std::byte> target_scan_value) {
     target_scan_value_ = std::move(target_scan_value);
+    target_scan_mask_.clear();  // Clear mask when setting value directly
+  }
+
+  void SetTargetScanPattern(std::vector<std::byte> value,
+                            std::vector<std::byte> mask) {
+    target_scan_value_ = std::move(value);
+    target_scan_mask_ = std::move(mask);
   }
 
   void SetPauseWhileScanning(bool enabled) {
@@ -96,12 +112,15 @@ class ScanResultModel {
 
   void AutoUpdateLoop(std::stop_token stop_token);
 
+  void ExecuteScanWorker(std::stop_token stop_token);
+
   Signals signals_;
   IProcess* active_process_{};
 
   ScanComparison scan_comparison_{ScanComparison::kChanged};
   ScanValueType scan_value_type_{ScanValueType::kUInt32};
   std::vector<std::byte> target_scan_value_;
+  std::vector<std::byte> target_scan_mask_;
   bool pause_while_scanning_enabled_ = false;
   bool fast_scan_enabled_ = true;  // Default: aligned scanning for speed
 
@@ -115,7 +134,8 @@ class ScanResultModel {
   std::atomic<bool> is_scanning_{false};
   std::atomic<float> progress_{0.0f};
   std::atomic<bool> scan_finished_flag_{false};
-  std::jthread scan_thread_;
+  std::unique_ptr<core::ITaskRunner> task_runner_;
+  size_t chunk_size_;
 
   // Storage for the result of the background scan, waiting to be swapped in.
   ScanStorage pending_storage_;

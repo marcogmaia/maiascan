@@ -56,8 +56,9 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
   connections_.emplace_back(scanner_widget_.sinks().NewScanPressed().connect<&ScanResultModel::FirstScan>(scan_result_model_));
   connections_.emplace_back(scanner_widget_.sinks().NextScanPressed().connect<&ScanResultModel::NextScan>(scan_result_model_));
   connections_.emplace_back(scanner_widget_.sinks().ScanComparisonSelected().connect<&ScanResultModel::SetScanComparison>(scan_result_model_));
-  connections_.emplace_back(scanner_widget_.sinks().TargetValueSelected().connect<&ScanResultModel::SetTargetScanValue>(scan_result_model_));
+  connections_.emplace_back(scanner_widget_.sinks().TargetValueSelected().connect<&ScanResultModel::SetTargetScanPattern>(scan_result_model_));
   connections_.emplace_back(scanner_widget_.sinks().CancelScanPressed().connect<&ScanResultModel::CancelScan>(scan_result_model_));
+  connections_.emplace_back(scanner_widget_.sinks().ValueTypeSelected().connect<&ScanResultModel::SetScanValueType>(scan_result_model_));
 
   // connections_.emplace_back(scanner_widget_.sinks().AutoUpdateChanged().connect<&ScannerPresenter::OnAutoUpdateChanged>(*this));
   // I don't know if I'll keep this signature here, I'm just exploring ideas on how to mimic Qt's connection for signal/slow.
@@ -106,7 +107,7 @@ void ScannerPresenter::OnEntryDoubleClicked(int index, ScanValueType type) {
     MemoryAddress address = results.addresses[index];
     // TODO: Get more meaningful description?
     std::string description = "No description";
-    cheat_table_model_.AddEntry(address, type, description);
+    cheat_table_model_.AddEntry(address, type, description, results.stride);
   }
 }
 
