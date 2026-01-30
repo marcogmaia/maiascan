@@ -4,15 +4,20 @@
 
 #include <atomic>
 #include <cstddef>
+#include <future>
+#include <memory>
 #include <mutex>
+#include <stop_token>
 #include <thread>
 #include <vector>
 
 #include <entt/signal/sigh.hpp>
 
 #include "maia/core/i_process.h"
+#include "maia/core/scan_config.h"
+#include "maia/core/scan_session.h"
 #include "maia/core/scan_types.h"
-#include "maia/core/task_runner.h"
+#include "maia/core/scanner.h"
 
 namespace maia {
 
@@ -20,17 +25,14 @@ namespace maia {
 /// updates.
 class ScanResultModel {
  public:
-  explicit ScanResultModel(
-      std::unique_ptr<core::ITaskRunner> task_runner = nullptr,
-      size_t chunk_size = 32 * 1024 * 1024);
+  explicit ScanResultModel(size_t chunk_size = 32 * 1024 * 1024);
+  ~ScanResultModel();
 
   auto sinks() {
     return Sinks{*this};
   }
 
-  const ScanStorage& entries() const {
-    return scan_storage_;
-  }
+  const ScanStorage& entries() const;
 
   void FirstScan();
   void NextScan();
@@ -47,7 +49,7 @@ class ScanResultModel {
 
   void SetTargetScanValue(std::vector<std::byte> target_scan_value) {
     target_scan_value_ = std::move(target_scan_value);
-    target_scan_mask_.clear();  // Clear mask when setting value directly
+    target_scan_mask_.clear();
   }
 
   void SetTargetScanPattern(std::vector<std::byte> value,
@@ -78,9 +80,9 @@ class ScanResultModel {
     return progress_.load();
   }
 
-  bool HasPendingResult() const {
-    return scan_finished_flag_.load();
-  }
+  bool HasPendingResult() const;
+
+  void WaitForScanToFinish();
 
   void ApplyPendingResult();
 
@@ -96,9 +98,12 @@ class ScanResultModel {
     return modules_;
   }
 
+  core::ScanConfig GetSessionConfig() const {
+    return session_->GetConfig();
+  }
+
  private:
   struct Signals {
-    /// \brief Emitted when the scan results change.
     entt::sigh<void(const ScanStorage&)> memory_changed;
   };
 
@@ -110,9 +115,9 @@ class ScanResultModel {
 
   // clang-format on
 
-  void AutoUpdateLoop(std::stop_token stop_token);
+  core::ScanConfig BuildScanConfig(bool use_previous) const;
 
-  void ExecuteScanWorker(std::stop_token stop_token);
+  void AutoUpdateLoop(std::stop_token stop_token);
 
   Signals signals_;
   IProcess* active_process_{};
@@ -122,24 +127,18 @@ class ScanResultModel {
   std::vector<std::byte> target_scan_value_;
   std::vector<std::byte> target_scan_mask_;
   bool pause_while_scanning_enabled_ = false;
-  bool fast_scan_enabled_ = true;  // Default: aligned scanning for speed
+  bool fast_scan_enabled_ = true;
 
-  // Current list of matches.
+  // Core components
+  std::shared_ptr<core::ScanSession> session_;
+  core::Scanner scanner_;
 
-  // Every time a successful scan is made (First or Next), it also updates the
-  // "prev" with the most recent scan result.
-  ScanStorage scan_storage_;
-
-  // Async scanning state.
+  // Async scanning state
   std::atomic<bool> is_scanning_{false};
   std::atomic<float> progress_{0.0f};
-  std::atomic<bool> scan_finished_flag_{false};
-  std::unique_ptr<core::ITaskRunner> task_runner_;
-  size_t chunk_size_;
-
-  // Storage for the result of the background scan, waiting to be swapped in.
-  ScanStorage pending_storage_;
-  mutable std::mutex pending_mutex_;
+  std::future<core::ScanResult> pending_scan_;
+  std::stop_source stop_source_;
+  core::ScanConfig pending_config_;
 
   mutable std::mutex mutex_;
   std::jthread task_;

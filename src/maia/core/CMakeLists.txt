@@ -15,6 +15,9 @@ target_sources(
         memory_common.h
         process.h
         pattern_parser.h
+        scan_config.h
+        scan_session.h
+        scanner.h
         simd_scanner.h
         scoped_process_suspend.h
   PRIVATE
@@ -22,6 +25,7 @@ target_sources(
     cpu_info.cpp
     process.cpp
     pattern_parser.cpp
+    scanner.cpp
     simd_scanner.cpp
 )
 
