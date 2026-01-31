@@ -146,6 +146,14 @@ PointerScanResult PointerScanner::FindPaths(
       int64_t offset = static_cast<int64_t>(current.address) -
                        static_cast<int64_t>(entry.value);
 
+      // Check last_offsets filter: if this level has a constraint, verify
+      // the offset matches the expected value.
+      if (current.level < config.last_offsets.size()) {
+        if (offset != config.last_offsets[current.level]) {
+          continue;
+        }
+      }
+
       // Create new offset chain.
       // Because we trace backwards (Target <- ... <- Base), the offset we just
       // found (Current - Value) is the LAST offset applied in the forward path.
@@ -212,10 +220,16 @@ std::future<PointerScanResult> PointerScanner::FindPathsAsync(
 
 std::optional<uint64_t> PointerScanner::ResolvePath(
     IProcess& process, const PointerPath& path) const {
+  return ResolvePath(process, path, process.GetModules());
+}
+
+std::optional<uint64_t> PointerScanner::ResolvePath(
+    IProcess& process,
+    const PointerPath& path,
+    const std::vector<mmem::ModuleDescriptor>& modules) const {
   uint64_t current_base = path.base_address;
 
   if (!path.module_name.empty()) {
-    auto modules = process.GetModules();
     const auto mod = FindModuleByName(path.module_name, modules);
 
     if (!mod) {

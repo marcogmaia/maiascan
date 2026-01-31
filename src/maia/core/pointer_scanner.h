@@ -55,6 +55,13 @@ struct PointerScanConfig {
   // Only accept paths ending in these modules (empty = accept all static
   // addresses)
   std::unordered_set<std::string> allowed_modules;
+
+  // Known last offsets filter (simplified).
+  // Index 0 = last offset (closest to target), index 1 = second-to-last, etc.
+  // If non-empty, paths must end with this exact sequence of offsets.
+  // Example: To filter paths ending in [..., 0x10, 0x58] (where 0x58 is last):
+  //   last_offsets = {0x58, 0x10};
+  std::vector<int64_t> last_offsets;
 };
 
 struct PointerScanResult {
@@ -108,6 +115,16 @@ class PointerScanner {
   /// pointer).
   [[nodiscard]] std::optional<uint64_t> ResolvePath(
       IProcess& process, const PointerPath& path) const;
+
+  /// \brief Resolve a single path using cached modules.
+  /// \param process The live process to read from.
+  /// \param path The path to resolve.
+  /// \param modules Cached list of modules to resolve static addresses.
+  /// \return The final address, or nullopt if resolution fails.
+  [[nodiscard]] std::optional<uint64_t> ResolvePath(
+      IProcess& process,
+      const PointerPath& path,
+      const std::vector<mmem::ModuleDescriptor>& modules) const;
 };
 
 }  // namespace maia::core

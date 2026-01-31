@@ -71,6 +71,21 @@ core::PointerScanConfig PointerScannerView::GetScanConfig() const {
     config.allowed_modules.insert(module);
   }
 
+  // Parse last offsets from filter input.
+  // User enters offsets in forward order (e.g., "10, 58" for [..., +10, +58]).
+  // We reverse them so index 0 = last offset (closest to target).
+  config.last_offsets.clear();
+  for (const auto& offset_str : SplitAndTrim(last_offsets_input_)) {
+    try {
+      int64_t offset =
+          static_cast<int64_t>(std::stoull(offset_str, nullptr, 16));
+      config.last_offsets.push_back(offset);
+    } catch (...) {
+      // Skip invalid entries
+    }
+  }
+  std::reverse(config.last_offsets.begin(), config.last_offsets.end());
+
   return config;
 }
 
@@ -83,7 +98,8 @@ void PointerScannerView::Render(
     bool is_generating_map,
     bool is_scanning,
     const std::vector<CheatTableEntry>& cheat_entries,
-    const ScanStorage& scan_results) {
+    const ScanStorage& scan_results,
+    PointerScannerView::PathResolver path_resolver) {
   if (!is_open || !*is_open) {
     return;
   }
@@ -100,7 +116,7 @@ void PointerScannerView::Render(
     RenderActionSection(
         is_generating_map, is_scanning, !paths.empty(), scan_progress);
     ImGui::Separator();
-    RenderResultsSection(paths, is_scanning);
+    RenderResultsSection(paths, is_scanning, path_resolver);
   }
   ImGui::End();
 }
@@ -308,6 +324,13 @@ void PointerScannerView::RenderConfigSection() {
   ImGui::InputText("Allowed Modules (comma-separated)", &module_filter_input_);
   ImGui::PopItemWidth();
   ImGui::TextDisabled("Example: game.exe, engine.dll, kernel32.dll");
+
+  // Last offsets filter
+  ImGui::PushItemWidth(400);
+  ImGui::InputText("Last Offsets (hex, comma-separated)", &last_offsets_input_);
+  ImGui::PopItemWidth();
+  ImGui::TextDisabled(
+      "Example: 10, 58 means paths must end with [..., +10, +58]");
 }
 
 void PointerScannerView::RenderActionSection(bool is_generating_map,
@@ -364,7 +387,9 @@ void PointerScannerView::RenderActionSection(bool is_generating_map,
 }
 
 void PointerScannerView::RenderResultsSection(
-    const std::vector<core::PointerPath>& paths, bool is_scanning) {
+    const std::vector<core::PointerPath>& paths,
+    bool is_scanning,
+    PointerScannerView::PathResolver path_resolver) {
   if (paths.empty() && !is_scanning) {
     return;
   }
@@ -395,9 +420,16 @@ void PointerScannerView::RenderResultsSection(
   ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                           ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
 
-  if (ImGui::BeginTable("PointerPaths", 2, flags)) {
+  // Add Value column when resolver is provided
+  const int column_count = path_resolver ? 3 : 2;
+
+  if (ImGui::BeginTable("PointerPaths", column_count, flags)) {
     ImGui::TableSetupColumn("Module", ImGuiTableColumnFlags_WidthFixed, 200.0f);
     ImGui::TableSetupColumn("Path");
+    if (path_resolver) {
+      ImGui::TableSetupColumn(
+          "Value", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+    }
     ImGui::TableHeadersRow();
 
     size_t max_display =
@@ -427,6 +459,17 @@ void PointerScannerView::RenderResultsSection(
         ImGui::TableSetColumnIndex(1);
         std::string path_str = FormatPointerPath(path);
         ImGui::Text("%s", path_str.c_str());
+
+        // Value column (if resolver provided)
+        if (path_resolver) {
+          ImGui::TableSetColumnIndex(2);
+          auto resolved = path_resolver(path);
+          if (resolved) {
+            ImGui::Text("0x%llX", *resolved);
+          } else {
+            ImGui::TextDisabled("???");
+          }
+        }
 
         // Double-click to add to cheat table - check entire row, not just text
         // Use ImGuiHoveredFlags_RectOnly to check the full item rectangle

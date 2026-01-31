@@ -16,7 +16,6 @@
 #include "maia/core/i_process.h"
 #include "maia/core/pointer_map.h"
 #include "maia/core/pointer_scanner.h"
-#include "maia/core/scan_types.h"
 
 namespace maia {
 
@@ -148,6 +147,12 @@ class PointerScannerModel {
 
   /// \brief Clear all paths and results.
   void Clear();
+
+  /// \brief Resolve a single path using the active process.
+  /// \param path The pointer path to resolve.
+  /// \return The resolved address or nullopt.
+  [[nodiscard]] std::optional<uint64_t> ResolvePath(
+      const core::PointerPath& path) const;
 
  private:
   struct Signals {

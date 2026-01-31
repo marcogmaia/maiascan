@@ -319,6 +319,16 @@ void ScannerWidget::Render(const ScanStorage& entries,
   } else {
     ImGui::TextDisabled("No results.");
   }
+
+  // Shortcut hints
+  if (ImGui::TreeNode("Shortcuts")) {
+    ImGui::TextDisabled("Next Scan: Ctrl+Enter | New Scan: Ctrl+N");
+    ImGui::TextDisabled(
+        "Ctrl+Shift+C=Changed | U=Unchanged | +=Increased | -=Decreased | "
+        "E=Exact");
+    ImGui::TreePop();
+  }
+
   ImGui::Separator();
 
   // Render Result Table.

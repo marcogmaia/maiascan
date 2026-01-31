@@ -18,9 +18,12 @@ target_sources(
         process_selector_presenter.h
         scanner_presenter.h
         scan_result_model.h
+        global_hotkey_manager.h
   PRIVATE
     cheat_table_model.cpp
     cheat_table_presenter.cpp
+    global_hotkey_manager.cpp
+    $<$<PLATFORM_ID:Windows>:global_hotkey_manager_win32.cpp>
     pointer_scanner_model.cpp
     pointer_scanner_presenter.cpp
     process_selector_presenter.cpp
