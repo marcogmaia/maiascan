@@ -9,11 +9,16 @@
 #include "application/scanner_presenter.h"
 #include "maia/application/cheat_table_model.h"
 #include "maia/application/cheat_table_presenter.h"
+#include "maia/application/pointer_scanner_model.h"
+#include "maia/application/pointer_scanner_presenter.h"
 #include "maia/application/process_selector_presenter.h"
 #include "maia/application/scan_result_model.h"
 #include "maia/gui/imgui_extensions.h"
 #include "maia/gui/layout.h"
 #include "maia/gui/widgets/cheat_table_view.h"
+#include "maia/gui/widgets/pointer_scanner_view.h"
+#include "maia/gui/widgets/process_selector_view.h"
+#include "maia/gui/widgets/scanner_view.h"
 #include "maia/logging.h"
 
 namespace maia {
@@ -83,16 +88,44 @@ int main() {
   maia::CheatTableView cheat_table_view{};
   maia::CheatTablePresenter cheat_table{cheat_table_model, cheat_table_view};
 
+  // Pointer Scanner
+  maia::PointerScannerModel pointer_scanner_model{};
+  maia::PointerScannerView pointer_scanner_view{};
+  maia::PointerScannerPresenter pointer_scanner{pointer_scanner_model,
+                                                process_model,
+                                                cheat_table_model,
+                                                scan_result_model,
+                                                pointer_scanner_view};
+
   while (!gui_system.WindowShouldClose()) {
     gui_system.PollEvents();
 
     gui_system.BeginFrame();
+
+    // Main menu bar
+    if (ImGui::BeginMainMenuBar()) {
+      if (ImGui::BeginMenu("Tools")) {
+        bool is_open = pointer_scanner.IsVisible();
+        if (ImGui::MenuItem("Pointer Scanner", "Ctrl+Shift+P", &is_open)) {
+          pointer_scanner.SetVisible(is_open);
+        }
+        ImGui::EndMenu();
+      }
+      ImGui::EndMainMenuBar();
+    }
+
+    // Keyboard shortcut for pointer scanner
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_P)) {
+      pointer_scanner.ToggleVisibility();
+    }
 
     maia::CreateDockSpace();
 
     process_selector.Render();
     scanner.Render();
     cheat_table.Render();
+    pointer_scanner.Render();
 
     gui_system.ClearWindow(clear_color.x * clear_color.w,
                            clear_color.y * clear_color.w,

@@ -11,6 +11,7 @@ target_sources(
         imgui_extensions.h
         layout.h
         widgets/cheat_table_view.h
+        widgets/pointer_scanner_view.h
         widgets/process_selector_view.h
         widgets/results_table.h
         widgets/scanner_view.h
@@ -18,6 +19,7 @@ target_sources(
     imgui_extensions.cpp
     layout.cpp
     widgets/cheat_table_view.cpp
+    widgets/pointer_scanner_view.cpp
     widgets/process_selector_view.cpp
     widgets/results_table.cpp
     widgets/scanner_view.cpp

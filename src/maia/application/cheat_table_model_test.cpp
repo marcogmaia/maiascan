@@ -206,4 +206,40 @@ TEST_F(CheatTableModelTest, SetValueWhileFrozenUpdatesFrozenValue) {
   EXPECT_EQ(current_val, 200);
 }
 
+TEST_F(CheatTableModelTest, UpdateValuesHandlesLargeEntries) {
+  EXPECT_CALL(mock_process_, IsProcessValid())
+      .WillRepeatedly(testing::Return(true));
+
+  model_.SetActiveProcess(&mock_process_);
+
+  // Initial AddEntry read
+  EXPECT_CALL(mock_process_,
+              ReadMemory(testing::_, 2048, testing::_, testing::_))
+      .WillOnce(testing::Return(true));
+
+  model_.AddEntry(0x1000, ScanValueType::kArrayOfBytes, "Large Entry", 2048);
+
+  // UpdateValues read: simulate filling the entire buffer with 0xFF
+  EXPECT_CALL(mock_process_,
+              ReadMemory(testing::_, testing::_, testing::_, testing::_))
+      .WillOnce([&](std::span<const MemoryAddress>,
+                    size_t,
+                    std::span<std::byte> out_buffer,
+                    auto*) {
+        std::fill(out_buffer.begin(), out_buffer.end(), std::byte{0xFF});
+        return true;
+      });
+
+  model_.UpdateValues();
+
+  auto entries = model_.entries();
+  ASSERT_EQ(entries->size(), 1);
+  const auto& val = entries->at(0).data->GetValue();
+
+  ASSERT_EQ(val.size(), 2048);
+  // Check that the end of the buffer was updated.
+  // If the buffer was capped at 1024, this would fail.
+  EXPECT_EQ(val[2047], std::byte{0xFF});
+}
+
 }  // namespace maia

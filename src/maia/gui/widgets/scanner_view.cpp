@@ -336,9 +336,8 @@ void ScannerWidget::Render(const ScanStorage& entries,
     if (double_clicked) {
       signals_.entry_double_clicked.publish(selected_index_, type);
     }
-
-    ImGui::EndChild();
   }
+  ImGui::EndChild();
   ImGui::End();
 }
 
