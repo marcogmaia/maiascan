@@ -137,16 +137,20 @@ void PointerScannerPresenter::Render() {
   const auto& cheat_entries = *cheat_entries_ptr;
   const auto& scan_results = scan_result_model_.entries();
 
-  // Render the view
-  pointer_scanner_view_.Render(&is_visible_,
-                               paths,
-                               pointer_scanner_model_.GetMapEntryCount(),
-                               pointer_scanner_model_.GetProgress(),
-                               pointer_scanner_model_.GetProgress(),
-                               pointer_scanner_model_.IsGeneratingMap(),
-                               pointer_scanner_model_.IsScanning(),
-                               cheat_entries,
-                               scan_results);
+  // Render the view with path resolver
+  pointer_scanner_view_.Render(
+      &is_visible_,
+      paths,
+      pointer_scanner_model_.GetMapEntryCount(),
+      pointer_scanner_model_.GetMapProgress(),
+      pointer_scanner_model_.GetScanProgress(),
+      pointer_scanner_model_.IsGeneratingMap(),
+      pointer_scanner_model_.IsScanning(),
+      cheat_entries,
+      scan_results,
+      [this](const core::PointerPath& path) {
+        return pointer_scanner_model_.ResolvePath(path);
+      });
 }
 
 void PointerScannerPresenter::OnTargetAddressChanged(uint64_t address) {

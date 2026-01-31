@@ -9,6 +9,7 @@
 #include "application/scanner_presenter.h"
 #include "maia/application/cheat_table_model.h"
 #include "maia/application/cheat_table_presenter.h"
+#include "maia/application/global_hotkey_manager.h"
 #include "maia/application/pointer_scanner_model.h"
 #include "maia/application/pointer_scanner_presenter.h"
 #include "maia/application/process_selector_presenter.h"
@@ -81,9 +82,16 @@ int main() {
   maia::ScanResultModel scan_result_model{};
   maia::CheatTableModel cheat_table_model{};
 
+  // Create global hotkey manager
+  auto hotkey_manager =
+      maia::GlobalHotkeyManager::Create(gui_system.window_handle());
+
   maia::ScannerWidget scanner_widget{};
-  maia::ScannerPresenter scanner{
-      scan_result_model, process_model, cheat_table_model, scanner_widget};
+  maia::ScannerPresenter scanner{scan_result_model,
+                                 process_model,
+                                 cheat_table_model,
+                                 scanner_widget,
+                                 *hotkey_manager};
 
   maia::CheatTableView cheat_table_view{};
   maia::CheatTablePresenter cheat_table{cheat_table_model, cheat_table_view};
@@ -99,6 +107,11 @@ int main() {
 
   while (!gui_system.WindowShouldClose()) {
     gui_system.PollEvents();
+
+    // Poll global hotkeys
+    if (hotkey_manager) {
+      hotkey_manager->Poll();
+    }
 
     gui_system.BeginFrame();
 

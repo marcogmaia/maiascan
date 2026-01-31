@@ -477,4 +477,15 @@ void PointerScannerModel::Clear() {
   LogInfo("Pointer scan results cleared.");
 }
 
+std::optional<uint64_t> PointerScannerModel::ResolvePath(
+    const core::PointerPath& path) const {
+  std::scoped_lock lock(mutex_);
+  if (!active_process_ || !active_process_->IsProcessValid()) {
+    return std::nullopt;
+  }
+
+  core::PointerScanner scanner;
+  return scanner.ResolvePath(*active_process_, path, modules_);
+}
+
 }  // namespace maia

@@ -267,4 +267,80 @@ TEST_F(PointerScannerTest, PointerSize32BitMaskingRegression) {
   }
 }
 
+TEST_F(PointerScannerTest, LastOffsetsFilterSingleLevel) {
+  // Test filtering by the last offset (Level 0).
+  // Setup: game.exe+0x100 -> 0 -> 0x20 leads to target 0x100080
+  // Without filter: finds paths with last offset 0x20 and 0x60
+  // With filter for 0x20: should only find paths ending in 0x20
+  SetupChain(*process_);
+
+  auto map = PointerMap::Generate(*process_);
+  ASSERT_TRUE(map.has_value());
+
+  PointerScanner scanner;
+  PointerScanConfig config;
+  config.target_address = 0x100080;
+  config.max_level = 2;
+  config.max_offset = 0x100;
+
+  // First, scan without filter to see all results
+  auto result_unfiltered =
+      scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result_unfiltered.success);
+  ASSERT_GE(result_unfiltered.paths.size(), 2);
+
+  // Now filter: only allow last offset (level 0) to be 0x20
+  // last_offsets[0] = last offset (closest to target)
+  config.last_offsets = {0x20};
+
+  auto result_filtered =
+      scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result_filtered.success);
+
+  // Should have fewer results than unfiltered
+  EXPECT_LT(result_filtered.paths.size(), result_unfiltered.paths.size());
+
+  // All paths should have 0x20 as the last offset
+  for (const auto& path : result_filtered.paths) {
+    ASSERT_FALSE(path.offsets.empty());
+    EXPECT_EQ(path.offsets.back(), 0x20) << "Path should end with offset 0x20";
+  }
+}
+
+TEST_F(PointerScannerTest, LastOffsetsFilterMultipleLevels) {
+  // Test filtering by multiple known offsets (e.g., last two offsets).
+  // Setup: game.exe+0x100 -> 0 -> 0x20 leads to target 0x100080
+  // Filter: level 0 = 0x20, level 1 = 0x0
+  // Should only match the deep path game.exe+0x100 -> 0 -> 0x20
+  SetupChain(*process_);
+
+  auto map = PointerMap::Generate(*process_);
+  ASSERT_TRUE(map.has_value());
+
+  PointerScanner scanner;
+  PointerScanConfig config;
+  config.target_address = 0x100080;
+  config.max_level = 3;
+  config.max_offset = 0x100;
+
+  // Filter: last offset must be 0x20, second-to-last must be 0x0
+  // last_offsets = {last, second-to-last} = {0x20, 0x0}
+  config.last_offsets = {0x20, 0x0};
+
+  auto result = scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result.success);
+
+  // Should find at least one path matching the constraint
+  ASSERT_FALSE(result.paths.empty());
+
+  // All paths must have at least 2 offsets and match the filter
+  for (const auto& path : result.paths) {
+    ASSERT_GE(path.offsets.size(), 2)
+        << "Path should have at least 2 offsets to match filter";
+    EXPECT_EQ(path.offsets.back(), 0x20) << "Last offset should be 0x20";
+    EXPECT_EQ(path.offsets[path.offsets.size() - 2], 0x0)
+        << "Second-to-last offset should be 0x0";
+  }
+}
+
 }  // namespace maia::core

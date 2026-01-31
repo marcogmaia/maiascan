@@ -3,6 +3,7 @@
 #pragma once
 
 #include "maia/application/cheat_table_model.h"
+#include "maia/application/global_hotkey_manager.h"
 #include "maia/application/process_model.h"
 #include "maia/application/scan_result_model.h"
 #include "maia/gui/widgets/scanner_view.h"
@@ -14,7 +15,8 @@ class ScannerPresenter {
   ScannerPresenter(ScanResultModel& scan_result_model,
                    ProcessModel& process_model,
                    CheatTableModel& cheat_table_model,
-                   ScannerWidget& scanner_widget);
+                   ScannerWidget& scanner_widget,
+                   GlobalHotkeyManager& global_hotkey_manager);
 
   void Render() {
     // Apply async scan results on the main thread when ready.
@@ -33,11 +35,13 @@ class ScannerPresenter {
   void OnPauseWhileScanningChanged(bool is_checked);
   void OnFastScanChanged(bool is_checked);
   void OnEntryDoubleClicked(int index, ScanValueType type);
+  void OnGlobalHotkey(int id);
 
   ScanResultModel& scan_result_model_;
   ProcessModel& process_model_;
   CheatTableModel& cheat_table_model_;
   ScannerWidget& scanner_widget_;
+  GlobalHotkeyManager& global_hotkey_manager_;
 
   std::vector<entt::scoped_connection> connections_;
 };

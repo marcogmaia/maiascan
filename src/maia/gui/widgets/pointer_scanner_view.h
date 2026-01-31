@@ -5,6 +5,8 @@
 #include <imgui.h>
 #include <cstdint>
 #include <entt/signal/sigh.hpp>
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,6 +23,10 @@ class PointerScannerView {
  public:
   PointerScannerView();
 
+  /// \brief Path resolver function type.
+  using PathResolver =
+      std::function<std::optional<uint64_t>(const core::PointerPath&)>;
+
   /// \brief Render the pointer scanner window.
   /// \param is_open Pointer to control window visibility (ImGui pattern).
   /// \param paths The discovered pointer paths.
@@ -31,6 +37,7 @@ class PointerScannerView {
   /// \param is_scanning Whether path scanning is in progress.
   /// \param cheat_entries Available cheat table entries for target selection.
   /// \param scan_results Available scan results for target selection.
+  /// \param path_resolver Optional callback to resolve a path's current value.
   void Render(bool* is_open,
               const std::vector<core::PointerPath>& paths,
               size_t map_entry_count,
@@ -39,7 +46,8 @@ class PointerScannerView {
               bool is_generating_map,
               bool is_scanning,
               const std::vector<CheatTableEntry>& cheat_entries,
-              const ScanStorage& scan_results);
+              const ScanStorage& scan_results,
+              PathResolver path_resolver = nullptr);
 
   auto sinks() {
     return Sinks{*this};
@@ -119,7 +127,8 @@ class PointerScannerView {
                            bool has_paths,
                            float scan_progress);
   void RenderResultsSection(const std::vector<core::PointerPath>& paths,
-                            bool is_scanning);
+                            bool is_scanning,
+                            PathResolver path_resolver);
 
   std::string FormatPointerPath(const core::PointerPath& path) const;
 
@@ -139,6 +148,7 @@ class PointerScannerView {
   int max_results_ = 0;  // 0 = unlimited
   std::vector<std::string> allowed_modules_;
   std::string module_filter_input_;
+  std::string last_offsets_input_;  // User input for known last offsets
 
   // Display
   bool show_all_results_ = false;

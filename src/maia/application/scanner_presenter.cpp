@@ -38,16 +38,28 @@ void Connect(Storage& storage, Sink&& sink, SlotTag<Candidate>) {
   storage.emplace_back(sink.template connect<Candidate>());
 }
 
+enum GlobalHotkeyId {
+  kHotkeyChanged = 1,
+  kHotkeyUnchanged,
+  kHotkeyIncreased,
+  kHotkeyDecreased,
+  kHotkeyExact,
+  kHotkeyNextScan,
+  kHotkeyNewScan
+};
+
 }  // namespace
 
 ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
                                    ProcessModel& process_model,
                                    CheatTableModel& cheat_table_model,
-                                   ScannerWidget& scanner_widget)
+                                   ScannerWidget& scanner_widget,
+                                   GlobalHotkeyManager& global_hotkey_manager)
     : scan_result_model_(scan_result_model),
       process_model_(process_model),
       cheat_table_model_(cheat_table_model),
-      scanner_widget_(scanner_widget) {
+      scanner_widget_(scanner_widget),
+      global_hotkey_manager_(global_hotkey_manager) {
   // clang-format off
 
   // Connect ProcessModel to CheatTableModel 
@@ -67,22 +79,32 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
   Connect(connections_, scanner_widget_.sinks().FastScanChanged(), this, Slot<&ScannerPresenter::OnFastScanChanged>);
   Connect(connections_, scanner_widget_.sinks().EntryDoubleClicked(), this, Slot<&ScannerPresenter::OnEntryDoubleClicked>);
 
+  // Register Global Hotkeys using cross-platform API
+  using Key = KeyCode;
+  using Mod = KeyModifier;
+  const auto ctrl_shift = Mod::kControl | Mod::kShift;
+  
+  // Ctrl + Shift + C (Changed)
+  global_hotkey_manager_.Register(kHotkeyChanged, ctrl_shift, Key::kC);
+  // Ctrl + Shift + U (Unchanged)
+  global_hotkey_manager_.Register(kHotkeyUnchanged, ctrl_shift, Key::kU);
+  // Ctrl + Shift + + (Increased) - register both main keyboard and numpad
+  global_hotkey_manager_.Register(kHotkeyIncreased, ctrl_shift, Key::kPlus);
+  global_hotkey_manager_.Register(kHotkeyIncreased, ctrl_shift, Key::kNumpadAdd);
+  // Ctrl + Shift + - (Decreased) - register both main keyboard and numpad
+  global_hotkey_manager_.Register(kHotkeyDecreased, ctrl_shift, Key::kMinus);
+  global_hotkey_manager_.Register(kHotkeyDecreased, ctrl_shift, Key::kNumpadSubtract);
+  // Ctrl + Shift + E (Exact Value)
+  global_hotkey_manager_.Register(kHotkeyExact, ctrl_shift, Key::kE);
+  // Ctrl + Enter (Next Scan)
+  global_hotkey_manager_.Register(kHotkeyNextScan, Mod::kControl, Key::kReturn);
+  // Ctrl + N (New Scan)
+  global_hotkey_manager_.Register(kHotkeyNewScan, Mod::kControl, Key::kN);
+
+  Connect(connections_, global_hotkey_manager_.sinks().HotkeyTriggered(), this, Slot<&ScannerPresenter::OnGlobalHotkey>);
+
   // clang-format on
-
-  // TODO: Set initial state.
-  // scanner_widget_.signals().scan_comparison_selected.publish(
-  //     ScanComparison::kChanged);
 }
-
-// void ScannerPresenter::Render() {
-//     bool scanning = model_.IsScanning();
-//     controls_view_.Render(scanning);
-//     // The Presenter grabs the 'const &' from the model and passes it to
-//     View.
-//     // No copying happens here. It's just a pointer pass.
-//     const TableStorage& data = model_.GetDisplayResults();
-//     table_view_.Render(data);
-// }
 
 void ScannerPresenter::OnAutoUpdateChanged(bool is_checked) {
   if (is_checked) {
@@ -108,6 +130,37 @@ void ScannerPresenter::OnEntryDoubleClicked(int index, ScanValueType type) {
     // TODO: Get more meaningful description?
     std::string description = "No description";
     cheat_table_model_.AddEntry(address, type, description, results.stride);
+  }
+}
+
+void ScannerPresenter::OnGlobalHotkey(int id) {
+  switch (id) {
+    case kHotkeyChanged:
+      scan_result_model_.SetScanComparison(ScanComparison::kChanged);
+      scan_result_model_.NextScan();
+      break;
+    case kHotkeyUnchanged:
+      scan_result_model_.SetScanComparison(ScanComparison::kUnchanged);
+      scan_result_model_.NextScan();
+      break;
+    case kHotkeyIncreased:
+      scan_result_model_.SetScanComparison(ScanComparison::kIncreased);
+      scan_result_model_.NextScan();
+      break;
+    case kHotkeyDecreased:
+      scan_result_model_.SetScanComparison(ScanComparison::kDecreased);
+      scan_result_model_.NextScan();
+      break;
+    case kHotkeyExact:
+      scan_result_model_.SetScanComparison(ScanComparison::kExactValue);
+      // We don't auto-scan for Exact Value as it usually requires input
+      break;
+    case kHotkeyNextScan:
+      scan_result_model_.NextScan();
+      break;
+    case kHotkeyNewScan:
+      scan_result_model_.FirstScan();
+      break;
   }
 }
 
