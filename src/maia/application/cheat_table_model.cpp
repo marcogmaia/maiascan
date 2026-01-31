@@ -3,6 +3,7 @@
 #include "maia/application/cheat_table_model.h"
 
 #include <array>
+#include <bit>
 #include <cstring>
 
 #include "maia/assert.h"
@@ -117,6 +118,47 @@ void CheatTableModel::AddEntry(MemoryAddress address,
   signals_.table_changed.publish();
 }
 
+void CheatTableModel::AddPointerChainEntry(MemoryAddress base_address,
+                                           const std::vector<int64_t>& offsets,
+                                           const std::string& module_name,
+                                           uint64_t module_offset,
+                                           ScanValueType type,
+                                           const std::string& description,
+                                           size_t size) {
+  std::scoped_lock lock(mutex_);
+
+  auto current_snapshot = entries_.load();
+  auto new_entries =
+      std::make_shared<std::vector<CheatTableEntry>>(*current_snapshot);
+
+  CheatTableEntry entry;
+  // For pointer chains, address is 0 (will be resolved dynamically)
+  entry.address = 0;
+  entry.pointer_base = base_address;
+  entry.pointer_offsets = offsets;
+  entry.pointer_module = module_name;
+  entry.pointer_module_offset = module_offset;
+  entry.type = type;
+  entry.description = description;
+  entry.data = std::make_shared<CheatTableEntryData>();
+
+  const size_t entry_size = size > 0 ? size : GetSizeForType(type);
+  entry.data->Resize(entry_size);
+
+  // Initial read - resolve the pointer chain
+  if (active_process_) {
+    std::vector<std::byte> initial_value(entry_size);
+    if (ReadEntryValue(entry, initial_value)) {
+      entry.data->UpdateFromProcess(initial_value);
+    }
+  }
+
+  new_entries->emplace_back(std::move(entry));
+  entries_.store(std::move(new_entries));
+
+  signals_.table_changed.publish();
+}
+
 void CheatTableModel::RemoveEntry(size_t index) {
   std::scoped_lock lock(mutex_);
   auto current_snapshot = entries_.load();
@@ -187,11 +229,10 @@ void CheatTableModel::SetActiveProcess(IProcess* process) {
 
 void CheatTableModel::WriteMemory(size_t index,
                                   const std::vector<std::byte>& data) {
-  // Capture pointer to avoid race with UpdateValues nulling it
-  if (IProcess* proc = active_process_; proc->IsProcessValid()) {
-    auto snapshot = entries_.load();
-    if (index < snapshot->size()) {
-      proc->WriteMemory((*snapshot)[index].address, data);
+  auto snapshot = entries_.load();
+  if (index < snapshot->size()) {
+    if (!WriteEntryValue((*snapshot)[index], data)) {
+      LogWarning("Failed to write memory for entry {}", index);
     }
   }
 }
@@ -199,7 +240,13 @@ void CheatTableModel::WriteMemory(size_t index,
 void CheatTableModel::UpdateValues() {
   auto snapshot = entries_.load();
 
+  if (!snapshot) {
+    LogWarning("Snapshot isn't valid.");
+    return;
+  }
+
   if (!active_process_) {
+    // This is here to avoid excessive logs.
     return;
   }
 
@@ -213,26 +260,28 @@ void CheatTableModel::UpdateValues() {
     return;
   }
 
+  // Reuse a single buffer across all entries to minimize allocations.
+  std::vector<std::byte> read_buffer;
+
   for (const auto& entry : *snapshot) {
     if (entry.data->IsFrozen()) {
       auto frozen_val = entry.data->GetFrozenValue();
-      if (active_process_->WriteMemory(entry.address, frozen_val)) {
+      if (WriteEntryValue(entry, frozen_val)) {
         entry.data->UpdateFromProcess(frozen_val);
       } else {
-        LogWarning("Failed to write frozen value to 0x{:X}", entry.address);
+        MemoryAddress addr =
+            entry.IsPointerChain() ? ResolvePointerChain(entry) : entry.address;
+        LogWarning("Failed to write frozen value to 0x{:X}", addr);
       }
     } else {
-      // TODO: Review this stack allocation.
-      // Use the actual size of the entry's value buffer.
-      std::array<std::byte, 1024> stack_buffer;
       const size_t entry_size = entry.data->GetValueSize();
-      const size_t read_size = std::min(entry_size, stack_buffer.size());
+      if (entry_size == 0) {
+        continue;
+      }
 
-      if (read_size > 0 &&
-          active_process_->ReadMemory({&entry.address, 1},
-                                      read_size,
-                                      {stack_buffer.data(), read_size})) {
-        entry.data->UpdateFromProcess({stack_buffer.data(), read_size});
+      read_buffer.resize(entry_size);
+      if (ReadEntryValue(entry, read_buffer)) {
+        entry.data->UpdateFromProcess(read_buffer);
       }
     }
   }
@@ -243,6 +292,85 @@ void CheatTableModel::AutoUpdateLoop(std::stop_token stop_token) {
     UpdateValues();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+}
+
+MemoryAddress CheatTableModel::ResolvePointerChain(
+    const CheatTableEntry& entry) const {
+  if (!active_process_ || !active_process_->IsProcessValid()) {
+    return 0;
+  }
+
+  // Start with base address
+  MemoryAddress current = entry.pointer_base;
+
+  // Follow the chain of offsets
+  for (size_t i = 0; i < entry.pointer_offsets.size(); ++i) {
+    // Read pointer at current address
+    std::array<std::byte, 8> ptr_buffer;
+    const size_t ptr_size = active_process_->GetPointerSize();
+
+    if (!active_process_->ReadMemory(
+            {&current, 1}, ptr_size, {ptr_buffer.data(), ptr_size})) {
+      return 0;  // Failed to read pointer
+    }
+
+    // Extract pointer value.
+    uint64_t ptr_value = 0;
+    if (ptr_size == 4) {
+      std::array<std::byte, 4> temp;
+      std::ranges::copy(std::span(ptr_buffer.begin(), 4), temp.begin());
+      ptr_value = std::bit_cast<uint32_t>(temp);
+    } else if (ptr_size == 8) {
+      ptr_value = std::bit_cast<uint64_t>(ptr_buffer);
+    }
+
+    if (ptr_value == 0) {
+      return 0;  // Null pointer in chain
+    }
+
+    // Apply offset (can be negative)
+    current = ptr_value + entry.pointer_offsets[i];
+  }
+
+  return current;
+}
+
+bool CheatTableModel::ReadEntryValue(const CheatTableEntry& entry,
+                                     std::span<std::byte> out_buffer) {
+  if (!active_process_ || !active_process_->IsProcessValid()) {
+    return false;
+  }
+
+  MemoryAddress addr;
+  if (entry.IsPointerChain()) {
+    addr = ResolvePointerChain(entry);
+    if (addr == 0) {
+      return false;  // Failed to resolve pointer chain
+    }
+  } else {
+    addr = entry.address;
+  }
+
+  return active_process_->ReadMemory({&addr, 1}, out_buffer.size(), out_buffer);
+}
+
+bool CheatTableModel::WriteEntryValue(const CheatTableEntry& entry,
+                                      std::span<const std::byte> data) {
+  if (!active_process_ || !active_process_->IsProcessValid()) {
+    return false;
+  }
+
+  MemoryAddress addr;
+  if (entry.IsPointerChain()) {
+    addr = ResolvePointerChain(entry);
+    if (addr == 0) {
+      return false;  // Failed to resolve pointer chain
+    }
+  } else {
+    addr = entry.address;
+  }
+
+  return active_process_->WriteMemory(addr, data);
 }
 
 }  // namespace maia

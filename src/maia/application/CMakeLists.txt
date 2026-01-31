@@ -12,6 +12,8 @@ target_sources(
       FILES
         cheat_table_model.h
         cheat_table_presenter.h
+        pointer_scanner_model.h
+        pointer_scanner_presenter.h
         process_model.h
         process_selector_presenter.h
         scanner_presenter.h
@@ -19,6 +21,8 @@ target_sources(
   PRIVATE
     cheat_table_model.cpp
     cheat_table_presenter.cpp
+    pointer_scanner_model.cpp
+    pointer_scanner_presenter.cpp
     process_selector_presenter.cpp
     scanner_presenter.cpp
     scan_result_model.cpp
@@ -32,6 +36,7 @@ target_sources(
   PRIVATE
     scan_result_model_test.cpp
     cheat_table_model_test.cpp
+    pointer_scanner_model_test.cpp
 )
 target_link_libraries(
   application_test

@@ -16,16 +16,20 @@ namespace {
 class ScanResultModelTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    process_ = std::make_unique<test::FakeProcess>(1024);
-    model_ = std::make_unique<ScanResultModel>();
-    model_->SetActiveProcess(process_.get());
-    model_->StopAutoUpdate();
+    Init(1024, 32 * 1024 * 1024);
   }
 
   void TearDown() override {
     if (model_) {
       model_->Clear();
     }
+  }
+
+  void Init(size_t process_size, size_t chunk_size) {
+    process_ = std::make_unique<test::FakeProcess>(process_size);
+    model_ = std::make_unique<ScanResultModel>(chunk_size);
+    model_->SetActiveProcess(process_.get());
+    model_->StopAutoUpdate();
   }
 
   void WaitForScanComplete() {
@@ -45,6 +49,83 @@ class ScanResultModelTest : public ::testing::Test {
     return b;
   }
 
+  std::vector<std::byte> StringToBytes(std::string_view str) {
+    std::vector<std::byte> result;
+    for (char c : str) {
+      result.push_back(static_cast<std::byte>(c));
+    }
+    return result;
+  }
+
+  template <typename T>
+  void WriteValue(size_t offset, T value) {
+    process_->WriteValue<T>(offset, value);
+  }
+
+  template <typename T>
+  void PerformFirstScan(ScanComparison comparison,
+                        std::optional<T> value = std::nullopt) {
+    model_->SetScanComparison(comparison);
+    if (value.has_value()) {
+      model_->SetTargetScanValue(ToBytes(*value));
+    }
+    Scan();
+  }
+
+  template <typename T>
+  void PerformNextScan(ScanComparison comparison,
+                       std::optional<T> value = std::nullopt) {
+    model_->SetScanComparison(comparison);
+    if (value.has_value()) {
+      model_->SetTargetScanValue(ToBytes(*value));
+    }
+    model_->NextScan();
+    WaitForScanComplete();
+  }
+
+  void StartScanWithoutWaiting(ScanComparison comparison) {
+    model_->SetScanComparison(comparison);
+    model_->FirstScan();
+  }
+
+  void VerifyAddressCount(size_t expected) {
+    EXPECT_EQ(model_->entries().addresses.size(), expected);
+  }
+
+  void VerifyAddresses(const std::vector<size_t>& expected_offsets) {
+    const auto& addresses = model_->entries().addresses;
+    ASSERT_EQ(addresses.size(), expected_offsets.size());
+    uintptr_t base = process_->GetBaseAddress();
+    for (size_t i = 0; i < expected_offsets.size(); ++i) {
+      EXPECT_EQ(addresses[i], base + expected_offsets[i]);
+    }
+  }
+
+  template <typename T>
+  void VerifyFirstValue(T expected) {
+    ASSERT_GE(model_->entries().curr_raw.size(), sizeof(T));
+    T actual = *reinterpret_cast<const T*>(model_->entries().curr_raw.data());
+    EXPECT_EQ(actual, expected);
+  }
+
+  template <typename T>
+  void VerifyPrevValue(T expected) {
+    ASSERT_GE(model_->entries().prev_raw.size(), sizeof(T));
+    T actual = *reinterpret_cast<const T*>(model_->entries().prev_raw.data());
+    EXPECT_EQ(actual, expected);
+  }
+
+  void VerifyStride(size_t expected) {
+    EXPECT_EQ(model_->entries().stride, expected);
+  }
+
+  template <typename T>
+  T GetCommittedValue() {
+    core::ScanConfig config = model_->GetSessionConfig();
+    EXPECT_EQ(config.value.size(), sizeof(T));
+    return *reinterpret_cast<const T*>(config.value.data());
+  }
+
   std::unique_ptr<ScanResultModel> model_;
   std::unique_ptr<test::FakeProcess> process_;
 };
@@ -52,107 +133,68 @@ class ScanResultModelTest : public ::testing::Test {
 class ScanResultModelLogicTest : public ScanResultModelTest {
  protected:
   void SetUp() override {
-    model_ = std::make_unique<ScanResultModel>(4096);
-    process_ = std::make_unique<test::FakeProcess>(8192);
-    model_->SetActiveProcess(process_.get());
-    model_->StopAutoUpdate();
+    Init(8192, 4096);
   }
 };
 
 class ScanResultModelChunkedTest : public ScanResultModelTest {
  protected:
   void SetUp() override {
-    process_ = std::make_unique<test::FakeProcess>(40 * 1024 * 1024);
-    model_ = std::make_unique<ScanResultModel>();
-    model_->SetActiveProcess(process_.get());
-    model_->StopAutoUpdate();
+    Init(40 * 1024 * 1024, 32 * 1024 * 1024);
   }
 };
 
 // --- Standard Tests ---
 
 TEST_F(ScanResultModelTest, FirstScanExactValueFindsMatches) {
-  process_->WriteValue<uint32_t>(100, 42);
-  process_->WriteValue<uint32_t>(200, 99);
-  process_->WriteValue<uint32_t>(500, 42);
+  WriteValue<uint32_t>(100, 42);
+  WriteValue<uint32_t>(200, 99);
+  WriteValue<uint32_t>(500, 42);
 
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(42));
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, 42);
 
-  Scan();
-
-  const auto& storage = model_->entries();
-  ASSERT_EQ(storage.addresses.size(), 2);
-  EXPECT_EQ(storage.addresses[0], 0x100000 + 100);
-  EXPECT_EQ(storage.addresses[1], 0x100000 + 500);
-
-  EXPECT_EQ(storage.stride, 4);
-  uint32_t val1 = *reinterpret_cast<const uint32_t*>(storage.curr_raw.data());
-  EXPECT_EQ(val1, 42);
+  VerifyAddressCount(2);
+  VerifyAddresses({100, 500});
+  VerifyStride(sizeof(uint32_t));
+  VerifyFirstValue<uint32_t>(42);
 }
 
 TEST_F(ScanResultModelTest, FirstScanUnknownValueSnapshotsMemory) {
-  process_->WriteValue<uint32_t>(0, 10);
-  model_->SetScanComparison(ScanComparison::kUnknown);
+  WriteValue<uint32_t>(0, 10);
 
-  Scan();
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
 
-  const auto& entries = model_->entries();
-  EXPECT_GT(entries.addresses.size(), 250);
-
-  uint32_t val0 = *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
-  EXPECT_EQ(val0, 10);
+  EXPECT_GT(model_->entries().addresses.size(), 250);
+  VerifyFirstValue<uint32_t>(10);
 }
 
 TEST_F(ScanResultModelTest, NextScanIncreasedValueFiltersResults) {
-  process_->WriteValue<uint32_t>(100, 10);
-  process_->WriteValue<uint32_t>(200, 50);
+  WriteValue<uint32_t>(100, 10);
+  WriteValue<uint32_t>(200, 50);
 
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  Scan();
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
 
-  process_->WriteValue<uint32_t>(100, 15);
+  WriteValue<uint32_t>(100, 15);
 
-  model_->SetScanComparison(ScanComparison::kIncreased);
-  model_->NextScan();
-  WaitForScanComplete();
+  PerformNextScan<uint32_t>(ScanComparison::kIncreased);
 
-  const auto& entries = model_->entries();
-
-  bool found_100 = false;
-  bool found_200 = false;
-
-  for (const auto addr : entries.addresses) {
-    if (addr == 0x100000 + 100) {
-      found_100 = true;
-    }
-    if (addr == 0x100000 + 200) {
-      found_200 = true;
-    }
-  }
-
-  EXPECT_TRUE(found_100);
-  EXPECT_FALSE(found_200);
+  VerifyAddressCount(1);
+  VerifyAddresses({100});
 }
 
 TEST_F(ScanResultModelTest, NextScanExactValueFiltersResults) {
-  process_->WriteValue<uint32_t>(16, 100);
-  process_->WriteValue<uint32_t>(32, 100);
+  WriteValue<uint32_t>(16, 100);
+  WriteValue<uint32_t>(32, 100);
 
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(100));
-  Scan();
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, 100);
+  VerifyAddressCount(2);
 
-  ASSERT_EQ(model_->entries().addresses.size(), 2);
+  WriteValue<uint32_t>(32, 101);
 
-  process_->WriteValue<uint32_t>(32, 101);
+  PerformNextScan<uint32_t>(ScanComparison::kExactValue, 100);
 
-  model_->NextScan();
-  WaitForScanComplete();
-
-  const auto& entries = model_->entries();
-  ASSERT_EQ(entries.addresses.size(), 1);
-  EXPECT_EQ(entries.addresses[0], 0x100000 + 16);
+  VerifyAddressCount(1);
+  VerifyAddresses({16});
 }
 
 TEST_F(ScanResultModelTest, SignalEmittedOnScan) {
@@ -167,17 +209,12 @@ TEST_F(ScanResultModelTest, SignalEmittedOnScan) {
   };
 
   TestListener listener;
-
   entt::scoped_connection conn =
       model_->sinks().MemoryChanged().connect<&TestListener::OnMemoryChanged>(
           listener);
 
-  process_->WriteValue<uint32_t>(16, 999);
-
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(999));
-
-  Scan();
+  WriteValue<uint32_t>(16, 999);
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, 999);
 
   EXPECT_TRUE(listener.signal_received);
   EXPECT_EQ(listener.received_count, 1);
@@ -185,16 +222,14 @@ TEST_F(ScanResultModelTest, SignalEmittedOnScan) {
 
 TEST_F(ScanResultModelTest, InvalidProcessDoesNothing) {
   process_->SetValid(false);
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  model_->FirstScan();
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
   EXPECT_FALSE(model_->IsScanning());
   EXPECT_TRUE(model_->entries().addresses.empty());
 }
 
 TEST_F(ScanResultModelTest, ClearResetsStorage) {
-  process_->WriteValue<uint32_t>(0, 123);
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  Scan();
+  WriteValue<uint32_t>(0, 123);
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
   ASSERT_FALSE(model_->entries().addresses.empty());
 
   model_->Clear();
@@ -204,121 +239,74 @@ TEST_F(ScanResultModelTest, ClearResetsStorage) {
 }
 
 TEST_F(ScanResultModelTest, NextScanPopulatesPreviousValues) {
-  process_->WriteValue<uint32_t>(100, 10);
+  WriteValue<uint32_t>(100, 10);
 
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  Scan();
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
 
-  process_->WriteValue<uint32_t>(100, 20);
-  model_->SetScanComparison(ScanComparison::kChanged);
-  model_->NextScan();
-  WaitForScanComplete();
+  WriteValue<uint32_t>(100, 20);
+  PerformNextScan<uint32_t>(ScanComparison::kChanged);
 
-  const auto& entries = model_->entries();
-  ASSERT_FALSE(entries.addresses.empty());
-
-  ASSERT_EQ(entries.prev_raw.size(), entries.curr_raw.size())
-      << "Previous raw buffer should be same size as current raw buffer";
-
-  uint32_t prev_val =
-      *reinterpret_cast<const uint32_t*>(entries.prev_raw.data());
-  uint32_t curr_val =
-      *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
-  EXPECT_EQ(prev_val, 20);
-  EXPECT_EQ(curr_val, 20);
+  VerifyAddressCount(1);
+  VerifyFirstValue<uint32_t>(20);
+  VerifyPrevValue<uint32_t>(20);
 }
 
 TEST_F(ScanResultModelTest, NextScanPreservesSnapshotAgainstAutoUpdate) {
-  constexpr uintptr_t kAddressOffset = 0x10;
-  process_->WriteValue<uint32_t>(kAddressOffset, 10);
+  constexpr size_t kAddressOffset = 0x10;
+  WriteValue<uint32_t>(kAddressOffset, 10);
 
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  Scan();
-
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
   ASSERT_FALSE(model_->entries().addresses.empty());
 
-  process_->WriteValue<uint32_t>(kAddressOffset, 20);
-
+  WriteValue<uint32_t>(kAddressOffset, 20);
   model_->UpdateCurrentValues();
 
-  model_->SetScanComparison(ScanComparison::kChanged);
-  model_->NextScan();
-  WaitForScanComplete();
+  PerformNextScan<uint32_t>(ScanComparison::kChanged);
 
-  EXPECT_FALSE(model_->entries().addresses.empty())
-      << "Entry incorrectly removed! NextScan likely compared against the "
-         "auto-updated value instead of the snapshot.";
-
-  if (!model_->entries().addresses.empty()) {
-    const auto& entries = model_->entries();
-    uint32_t current_val =
-        *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
-    uint32_t prev_val =
-        *reinterpret_cast<const uint32_t*>(entries.prev_raw.data());
-
-    EXPECT_EQ(current_val, 20) << "Current value should reflect RAM";
-    EXPECT_EQ(prev_val, 20) << "Previous value should be updated to the new "
-                               "baseline AFTER the scan succeeds";
-  }
+  VerifyAddressCount(1);
+  VerifyFirstValue<uint32_t>(20);
+  VerifyPrevValue<uint32_t>(20);
 }
 
 TEST_F(ScanResultModelTest,
        BugReproductionChangedFirstScanThenChangedNextScan) {
-  process_->WriteValue<uint32_t>(100, 10);
+  WriteValue<uint32_t>(100, 10);
 
-  model_->SetScanComparison(ScanComparison::kChanged);
-
-  Scan();
-
+  PerformFirstScan<uint32_t>(ScanComparison::kChanged);
   ASSERT_FALSE(model_->entries().addresses.empty());
 
-  process_->WriteValue<uint32_t>(100, 20);
+  WriteValue<uint32_t>(100, 20);
+  PerformNextScan<uint32_t>(ScanComparison::kChanged);
 
-  model_->NextScan();
-  WaitForScanComplete();
-
-  EXPECT_FALSE(model_->entries().addresses.empty());
+  VerifyAddressCount(1);
 }
 
 TEST_F(ScanResultModelTest, NextScanIncreasedByFindsMatch) {
-  process_->WriteValue<uint32_t>(100, 10);
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  Scan();
+  WriteValue<uint32_t>(100, 10);
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
 
-  process_->WriteValue<uint32_t>(100, 13);
+  WriteValue<uint32_t>(100, 13);
 
-  model_->SetScanComparison(ScanComparison::kIncreasedBy);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(3));
-  model_->NextScan();
-  WaitForScanComplete();
+  PerformNextScan<uint32_t>(ScanComparison::kIncreasedBy, 3);
 
-  const auto& entries = model_->entries();
-  ASSERT_FALSE(entries.addresses.empty());
-  EXPECT_EQ(entries.addresses[0], 0x100000 + 100);
-
-  uint32_t val = *reinterpret_cast<const uint32_t*>(entries.curr_raw.data());
-  EXPECT_EQ(val, 13);
+  VerifyAddressCount(1);
+  VerifyAddresses({100});
+  VerifyFirstValue<uint32_t>(13);
 }
 
 TEST_F(ScanResultModelTest, NextScanGracefullyHandlesInvalidMemory) {
-  process_->WriteValue<uint32_t>(100, 42);
-  process_->WriteValue<uint32_t>(200, 42);
+  WriteValue<uint32_t>(100, 42);
+  WriteValue<uint32_t>(200, 42);
 
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(42));
-  Scan();
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, 42);
+  VerifyAddressCount(2);
 
-  ASSERT_EQ(model_->entries().addresses.size(), 2);
+  process_->MarkAddressInvalid(process_->GetBaseAddress() + 100);
 
-  process_->MarkAddressInvalid(0x100000 + 100);
+  PerformNextScan<uint32_t>(ScanComparison::kUnchanged);
 
-  model_->SetScanComparison(ScanComparison::kUnchanged);
-  model_->NextScan();
-  WaitForScanComplete();
-
-  const auto& entries = model_->entries();
-  ASSERT_EQ(entries.addresses.size(), 1);
-  EXPECT_EQ(entries.addresses[0], 0x100000 + 200);
+  VerifyAddressCount(1);
+  VerifyAddresses({200});
 }
 
 TEST_F(ScanResultModelTest, FirstScanAobFindsMatches) {
@@ -328,47 +316,37 @@ TEST_F(ScanResultModelTest, FirstScanAobFindsMatches) {
   uint8_t noisy[] = {0xAA, 0xBB, 0x00, 0xDD, 0xEE};
   std::memcpy(process_->GetRawMemory().data() + 600, noisy, 5);
 
-  std::vector<std::byte> val = {std::byte{0xAA},
+  model_->SetScanComparison(ScanComparison::kExactValue);
+  model_->SetScanValueType(ScanValueType::kArrayOfBytes);
+  model_->SetTargetScanPattern({std::byte{0xAA},
                                 std::byte{0xBB},
                                 std::byte{0x00},
                                 std::byte{0xDD},
-                                std::byte{0xEE}};
-  std::vector<std::byte> mask = {std::byte{0xFF},
-                                 std::byte{0xFF},
-                                 std::byte{0x00},
-                                 std::byte{0xFF},
-                                 std::byte{0xFF}};
-
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetScanValueType(ScanValueType::kArrayOfBytes);
-  model_->SetTargetScanPattern(val, mask);
+                                std::byte{0xEE}},
+                               {std::byte{0xFF},
+                                std::byte{0xFF},
+                                std::byte{0x00},
+                                std::byte{0xFF},
+                                std::byte{0xFF}});
 
   Scan();
 
-  const auto& storage = model_->entries();
-  EXPECT_EQ(storage.stride, 5);
+  VerifyStride(5);
 }
 
 TEST_F(ScanResultModelTest, FirstScanStringWithSpacesFindsMatches) {
   const char* text = "hello world";
   std::memcpy(process_->GetRawMemory().data() + 400, text, std::strlen(text));
 
-  std::string search = "hello wor";
-  std::vector<std::byte> val;
-  for (char c : search) {
-    val.push_back(static_cast<std::byte>(c));
-  }
-
   model_->SetScanComparison(ScanComparison::kExactValue);
   model_->SetScanValueType(ScanValueType::kString);
-  model_->SetTargetScanValue(val);
+  model_->SetTargetScanValue(StringToBytes("hello wor"));
 
   Scan();
 
-  const auto& storage = model_->entries();
-  ASSERT_EQ(storage.addresses.size(), 1);
-  EXPECT_EQ(storage.addresses[0], 0x100000 + 400);
-  EXPECT_EQ(storage.stride, search.size());
+  VerifyAddressCount(1);
+  VerifyAddresses({400});
+  VerifyStride(9);
 }
 
 TEST_F(ScanResultModelTest, FirstScanStringWithSpacesAtUnalignedAddress) {
@@ -377,21 +355,14 @@ TEST_F(ScanResultModelTest, FirstScanStringWithSpacesAtUnalignedAddress) {
       process_->GetRawMemory().data(), 0, process_->GetRawMemory().size());
   std::memcpy(process_->GetRawMemory().data() + 401, text, std::strlen(text));
 
-  std::string search = "hello wor";
-  std::vector<std::byte> val;
-  for (char c : search) {
-    val.push_back(static_cast<std::byte>(c));
-  }
-
   model_->SetScanComparison(ScanComparison::kExactValue);
   model_->SetScanValueType(ScanValueType::kString);
-  model_->SetTargetScanValue(val);
+  model_->SetTargetScanValue(StringToBytes("hello wor"));
 
   Scan();
 
-  const auto& storage = model_->entries();
-  ASSERT_EQ(storage.addresses.size(), 1);
-  EXPECT_EQ(storage.addresses[0], 0x100000 + 401);
+  VerifyAddressCount(1);
+  VerifyAddresses({401});
 }
 
 // --- Logic Tests ---
@@ -399,39 +370,32 @@ TEST_F(ScanResultModelTest, FirstScanStringWithSpacesAtUnalignedAddress) {
 TEST_F(ScanResultModelLogicTest,
        UnknownScanFindsUnalignedWhenFastScanDisabled) {
   model_->SetFastScan(false);
-  model_->SetScanComparison(ScanComparison::kUnknown);
 
-  Scan();
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
 
-  const auto& storage = model_->entries();
-  const uintptr_t base = process_->GetBaseAddress();
+  EXPECT_GT(model_->entries().addresses.size(), 8000);
+  VerifyStride(sizeof(uint32_t));
 
-  ASSERT_GT(storage.addresses.size(), 8000);
-  EXPECT_EQ(storage.addresses[0], base + 0);
-  EXPECT_EQ(storage.addresses[1], base + 1);
-  EXPECT_EQ(storage.addresses[2], base + 2);
-  EXPECT_EQ(storage.addresses[3], base + 3);
-
-  EXPECT_EQ(storage.stride, sizeof(uint32_t));
+  uintptr_t base = process_->GetBaseAddress();
+  EXPECT_EQ(model_->entries().addresses[0], base + 0);
+  EXPECT_EQ(model_->entries().addresses[1], base + 1);
+  EXPECT_EQ(model_->entries().addresses[2], base + 2);
+  EXPECT_EQ(model_->entries().addresses[3], base + 3);
 }
 
 TEST_F(ScanResultModelLogicTest, UnknownScanSnapshotsAcrossChunks) {
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  Scan();
+  PerformFirstScan<uint32_t>(ScanComparison::kUnknown);
 
-  const auto& storage = model_->entries();
-  const uintptr_t base = process_->GetBaseAddress();
+  VerifyAddressCount(2048);
 
-  ASSERT_EQ(storage.addresses.size(), 2048);
+  uintptr_t base = process_->GetBaseAddress();
+  EXPECT_EQ(model_->entries().addresses[0], base + 0);
+  EXPECT_EQ(model_->entries().addresses[1023], base + 4092);
+  EXPECT_EQ(model_->entries().addresses[1024], base + 4096);
+  EXPECT_EQ(model_->entries().addresses[2047], base + 8188);
 
-  EXPECT_EQ(storage.addresses[0], base + 0);
-  EXPECT_EQ(storage.addresses[1023], base + 4092);
-
-  EXPECT_EQ(storage.addresses[1024], base + 4096);
-  EXPECT_EQ(storage.addresses[2047], base + 8188);
-
-  for (size_t i = 0; i < storage.addresses.size(); ++i) {
-    EXPECT_EQ(storage.addresses[i], base + (i * 4))
+  for (size_t i = 0; i < model_->entries().addresses.size(); ++i) {
+    EXPECT_EQ(model_->entries().addresses[i], base + (i * 4))
         << "Gap found at index " << i;
   }
 }
@@ -440,33 +404,24 @@ TEST_F(ScanResultModelLogicTest, UnknownScanSnapshotsAcrossChunks) {
 
 TEST_F(ScanResultModelChunkedTest, FindsMatchCrossingChunkBoundary) {
   constexpr size_t kChunkSize = 32 * 1024 * 1024;
-
   const size_t near_boundary_offset = kChunkSize - 4;
   const uint32_t magic_value = 0xDEADBEEF;
 
-  process_->WriteValue<uint32_t>(near_boundary_offset, magic_value);
+  WriteValue<uint32_t>(near_boundary_offset, magic_value);
+  WriteValue<uint32_t>(100, magic_value);
+  WriteValue<uint32_t>(kChunkSize + 100, magic_value);
 
-  process_->WriteValue<uint32_t>(100, magic_value);
-  process_->WriteValue<uint32_t>(kChunkSize + 100, magic_value);
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, magic_value);
 
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(magic_value));
+  VerifyAddressCount(3);
 
-  Scan();
-
-  const auto& storage = model_->entries();
-
-  ASSERT_EQ(storage.addresses.size(), 3);
-
-  bool found_near_boundary = false;
   uintptr_t base = process_->GetBaseAddress();
-
-  for (auto addr : storage.addresses) {
+  bool found_near_boundary = false;
+  for (auto addr : model_->entries().addresses) {
     if (addr == base + near_boundary_offset) {
       found_near_boundary = true;
     }
   }
-
   EXPECT_TRUE(found_near_boundary)
       << "Failed to find match near 32MB chunk boundary!";
 }
@@ -474,33 +429,23 @@ TEST_F(ScanResultModelChunkedTest, FindsMatchCrossingChunkBoundary) {
 TEST_F(ScanResultModelChunkedTest, ExactScanSkipsUnalignedAddresses) {
   const uint32_t magic_value = 0xCAFEBABE;
 
-  process_->WriteValue<uint32_t>(0, magic_value);
-  process_->WriteValue<uint32_t>(100, magic_value);
-  process_->WriteValue<uint32_t>(1000, magic_value);
+  WriteValue<uint32_t>(0, magic_value);
+  WriteValue<uint32_t>(100, magic_value);
+  WriteValue<uint32_t>(1000, magic_value);
 
-  process_->WriteValue<uint32_t>(201, magic_value);
-  process_->WriteValue<uint32_t>(307, magic_value);
-  process_->WriteValue<uint32_t>(503, magic_value);
+  WriteValue<uint32_t>(201, magic_value);
+  WriteValue<uint32_t>(307, magic_value);
+  WriteValue<uint32_t>(503, magic_value);
 
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(magic_value));
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, magic_value);
 
-  Scan();
+  VerifyAddressCount(3);
+  VerifyAddresses({0, 100, 1000});
 
-  const auto& storage = model_->entries();
   uintptr_t base = process_->GetBaseAddress();
-
-  ASSERT_EQ(storage.addresses.size(), 3)
-      << "Should only find aligned matches, not unaligned ones";
-
-  for (auto addr : storage.addresses) {
-    size_t offset = addr - base;
-    EXPECT_EQ(offset % 4, 0) << "Found unaligned address at offset " << offset;
+  for (auto addr : model_->entries().addresses) {
+    EXPECT_EQ((addr - base) % 4, 0) << "Found unaligned address";
   }
-
-  EXPECT_EQ(storage.addresses[0], base + 0);
-  EXPECT_EQ(storage.addresses[1], base + 100);
-  EXPECT_EQ(storage.addresses[2], base + 1000);
 }
 
 TEST_F(ScanResultModelChunkedTest, ExactScanUnalignedOnlyFindsNothing) {
@@ -526,70 +471,48 @@ TEST_F(ScanResultModelChunkedTest, AlignmentAcrossChunkBoundary) {
   constexpr size_t kChunkSize = 32 * 1024 * 1024;
   const uint32_t magic_value = 0xBEEFCAFE;
 
-  process_->WriteValue<uint32_t>(0, magic_value);
-  process_->WriteValue<uint32_t>(kChunkSize, magic_value);
-  process_->WriteValue<uint32_t>(kChunkSize + 100, magic_value);
+  WriteValue<uint32_t>(0, magic_value);
+  WriteValue<uint32_t>(kChunkSize, magic_value);
+  WriteValue<uint32_t>(kChunkSize + 100, magic_value);
 
-  process_->WriteValue<uint32_t>(kChunkSize + 201, magic_value);
-  process_->WriteValue<uint32_t>(kChunkSize + 303, magic_value);
+  WriteValue<uint32_t>(kChunkSize + 201, magic_value);
+  WriteValue<uint32_t>(kChunkSize + 303, magic_value);
 
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(magic_value));
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, magic_value);
 
-  Scan();
-
-  const auto& storage = model_->entries();
-  uintptr_t base = process_->GetBaseAddress();
-
-  ASSERT_EQ(storage.addresses.size(), 3);
-  EXPECT_EQ(storage.addresses[0], base + 0);
-  EXPECT_EQ(storage.addresses[1], base + kChunkSize);
-  EXPECT_EQ(storage.addresses[2], base + kChunkSize + 100);
+  VerifyAddressCount(3);
+  VerifyAddresses({0, kChunkSize, kChunkSize + 100});
 }
 
 TEST_F(ScanResultModelChunkedTest, FindsUnalignedWhenFastScanDisabled) {
   const uint32_t magic_value = 0xCAFEBABE;
-  const uintptr_t base = process_->GetBaseAddress();
 
-  process_->WriteValue<uint32_t>(1, magic_value);
-  process_->WriteValue<uint32_t>(13, magic_value);
+  WriteValue<uint32_t>(1, magic_value);
+  WriteValue<uint32_t>(13, magic_value);
 
   model_->SetFastScan(false);
-  model_->SetScanComparison(ScanComparison::kExactValue);
-  model_->SetTargetScanValue(ToBytes<uint32_t>(magic_value));
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, magic_value);
 
-  Scan();
-
-  const auto& storage = model_->entries();
-
-  ASSERT_EQ(storage.addresses.size(), 2);
-  EXPECT_EQ(storage.addresses[0], base + 1);
-  EXPECT_EQ(storage.addresses[1], base + 13);
+  VerifyAddressCount(2);
+  VerifyAddresses({1, 13});
 }
 
 TEST_F(ScanResultModelChunkedTest, DestructorDoesNotHangWhenScanning) {
-  model_->SetScanComparison(ScanComparison::kUnknown);
-  model_->FirstScan();
+  StartScanWithoutWaiting(ScanComparison::kUnknown);
   model_.reset();
 }
 
 TEST_F(ScanResultModelTest, CommittedConfigMatchesScanTimeSettings) {
-  process_->WriteValue<uint32_t>(100, 42);
+  WriteValue<uint32_t>(100, 42);
 
   model_->SetScanComparison(ScanComparison::kExactValue);
   model_->SetTargetScanValue(ToBytes<uint32_t>(42));
   model_->FirstScan();
 
   model_->SetTargetScanValue(ToBytes<uint32_t>(99));
-
   WaitForScanComplete();
 
-  core::ScanConfig committed_config = model_->GetSessionConfig();
-
-  ASSERT_EQ(committed_config.value.size(), sizeof(uint32_t));
-  uint32_t committed_value =
-      *reinterpret_cast<const uint32_t*>(committed_config.value.data());
-  EXPECT_EQ(committed_value, 42)
+  EXPECT_EQ(GetCommittedValue<uint32_t>(), 42)
       << "Committed config should use the value from scan start (42), not the "
          "value changed mid-scan (99)";
 }

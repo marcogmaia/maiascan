@@ -50,7 +50,9 @@ void ProcessSelectorView::Render(bool* p_open,
 
   RenderProcessPickerButton();
 
-  ImGui::InputText("Filter", filter_.data(), filter_.size());
+  if (ImGui::InputText("Filter", filter_.data(), filter_.size())) {
+    signals_.refresh_requested.publish();
+  }
   std::string filter_lower = ToLower(std::string(filter_.data()));
 
   ImGui::Separator();

@@ -60,10 +60,31 @@ class CheatTableEntryData {
 
 /// \brief Represents an entry in the cheat table.
 struct CheatTableEntry {
+  // For static addresses: direct memory address
   MemoryAddress address;
+
+  // For pointer chains: base address of the chain (e.g., module base + offset)
+  MemoryAddress pointer_base = 0;
+
+  // For pointer chains: module name if base is relative to a module
+  std::string pointer_module;
+
+  // For pointer chains: offset from module base to the base address
+  uint64_t pointer_module_offset = 0;
+
+  // For pointer chains: offsets to follow from base to final address
+  // Example: [0x10, 0x48] means [[base]+0x10]+0x48
+  std::vector<int64_t> pointer_offsets;
+
+  // Type and metadata
   ScanValueType type;
   std::string description;
   std::shared_ptr<CheatTableEntryData> data;
+
+  /// \brief Check if this entry represents a pointer chain.
+  [[nodiscard]] bool IsPointerChain() const {
+    return pointer_base != 0 || !pointer_offsets.empty();
+  }
 };
 
 /// \brief Manages the list of cheat table entries and handles auto-updates.
@@ -84,7 +105,7 @@ class CheatTableModel {
   /// \brief Returns a shared pointer to the current snapshot of entries.
   std::shared_ptr<const std::vector<CheatTableEntry>> entries() const;
 
-  /// \brief Adds a new entry to the cheat table.
+  /// \brief Adds a new entry to the cheat table (static address).
   /// \param address The memory address to track.
   /// \param type The data type of the value at the address.
   /// \param description A user-provided name for the entry.
@@ -93,6 +114,22 @@ class CheatTableModel {
                 ScanValueType type,
                 const std::string& description,
                 size_t size = 0);
+
+  /// \brief Adds a new pointer chain entry to the cheat table.
+  /// \param base_address The static base address (e.g., module + offset).
+  /// \param offsets The chain of offsets to follow from base.
+  /// \param module_name Module name if base is relative (empty for absolute).
+  /// \param module_offset Offset from module base to the pointer.
+  /// \param type The data type of the final value.
+  /// \param description A user-provided name for the entry.
+  /// \param size (Optional) Override for the data size.
+  void AddPointerChainEntry(MemoryAddress base_address,
+                            const std::vector<int64_t>& offsets,
+                            const std::string& module_name,
+                            uint64_t module_offset,
+                            ScanValueType type,
+                            const std::string& description,
+                            size_t size = 0);
 
   /// \brief Removes an entry from the cheat table by its index.
   void RemoveEntry(size_t index);
@@ -131,6 +168,20 @@ class CheatTableModel {
 
   void AutoUpdateLoop(std::stop_token stop_token);
   void WriteMemory(size_t index, const std::vector<std::byte>& data);
+
+  /// \brief Resolves a pointer chain to get the final memory address.
+  /// \param entry The cheat table entry containing the pointer chain.
+  /// \return The resolved address, or 0 if resolution failed.
+  [[nodiscard]] MemoryAddress ResolvePointerChain(
+      const CheatTableEntry& entry) const;
+
+  /// \brief Reads memory for an entry, handling both static and pointer chain.
+  [[nodiscard]] bool ReadEntryValue(const CheatTableEntry& entry,
+                                    std::span<std::byte> out_buffer);
+
+  /// \brief Writes memory for an entry, handling both static and pointer chain.
+  [[nodiscard]] bool WriteEntryValue(const CheatTableEntry& entry,
+                                     std::span<const std::byte> data);
 
   Signals signals_;
   std::atomic<std::shared_ptr<const std::vector<CheatTableEntry>>> entries_;
