@@ -47,9 +47,9 @@ class PointerScannerTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // Create a large FakeProcess to support 0x400000 address range.
-    process_ = std::make_unique<test::FakeProcess>(0x500000);
-
-    // Set base address to 0 for absolute addressing simulation.
+    // Default base address is 0x100000.
+    // Use 8-byte pointer size for 64-bit pointer tests.
+    process_ = std::make_unique<test::FakeProcess>(0x500000, 8);
   }
 
   std::unique_ptr<test::FakeProcess> process_;
@@ -123,6 +123,148 @@ TEST_F(PointerScannerTest, FilterPaths) {
   auto valid = scanner.FilterPaths(*process_, paths, 0x100080);
   ASSERT_EQ(valid.size(), 1);
   EXPECT_EQ(valid[0].offsets[1], 0x20);
+}
+
+TEST_F(PointerScannerTest, MaxResultsLimit) {
+  SetupChain(*process_);
+
+  // Add another pointer that also leads to target
+  // Create a second path: game.exe+0x200 -> 0x10 -> 0x20
+  WriteAt<uint64_t>(*process_, 0x100040, 0x100060);
+  WriteAt<uint64_t>(*process_, 0x400200, 0x100040);
+  process_->AddModule("game.exe", 0x400000, 0x10000);
+
+  // Generate map
+  auto map = PointerMap::Generate(*process_);
+  ASSERT_TRUE(map.has_value());
+
+  PointerScanner scanner;
+  PointerScanConfig config;
+  config.target_address = 0x100080;
+  config.max_level = 2;
+  config.max_offset = 0x100;
+  config.max_results = 1;
+
+  auto result = scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result.success);
+
+  // Should only return 1 path even though multiple exist
+  EXPECT_EQ(result.paths.size(), 1);
+  EXPECT_GE(result.paths_evaluated, 1);
+}
+
+TEST_F(PointerScannerTest, CircularReferenceDetection) {
+  SetupChain(*process_);
+
+  // Create circular reference: A -> B -> C -> A
+  // 0x100020 -> 0x100060 (existing)
+  // 0x100060 -> 0x100020 (circular)
+  WriteAt<uint64_t>(*process_, 0x100060, 0x100020);
+
+  auto map = PointerMap::Generate(*process_);
+  ASSERT_TRUE(map.has_value());
+
+  PointerScanner scanner;
+  PointerScanConfig config;
+  config.target_address = 0x100080;
+  config.max_level = 5;
+  config.max_offset = 0x100;
+
+  auto result = scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result.success);
+
+  // Should complete without infinite loop
+  // Should find at least the original path
+  EXPECT_GE(result.paths.size(), 1);
+
+  // Verify the found path is valid
+  for (const auto& path : result.paths) {
+    auto resolved = scanner.ResolvePath(*process_, path);
+    ASSERT_TRUE(resolved.has_value());
+    EXPECT_EQ(*resolved, config.target_address);
+  }
+}
+
+TEST_F(PointerScannerTest, PointerSize32Bit) {
+  // Test with 32-bit addresses (all < 4GB)
+  // Override the default 8-byte pointer size from SetUp()
+  process_->SetPointerSize(4);
+
+  // Create a simple pointer chain with 32-bit values
+  WriteAt<uint32_t>(*process_, 0x100080, 999);
+  WriteAt<uint32_t>(*process_, 0x100020, 0x100060);
+  WriteAt<uint32_t>(*process_, 0x400100, 0x100020);
+  process_->AddModule("game.exe", 0x400000, 0x10000);
+
+  auto map = PointerMap::Generate(*process_);
+  ASSERT_TRUE(map.has_value());
+
+  // Should detect 4-byte pointer size
+  EXPECT_EQ(map->GetPointerSize(), 4);
+
+  PointerScanner scanner;
+  PointerScanConfig config;
+  config.target_address = 0x100080;
+  config.max_level = 2;
+  config.max_offset = 0x100;
+
+  auto result = scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result.success);
+  EXPECT_FALSE(result.paths.empty());
+
+  // Verify resolution works with 32-bit pointers
+  auto resolved = scanner.ResolvePath(*process_, result.paths[0]);
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_EQ(*resolved, 0x100080);
+}
+
+TEST_F(PointerScannerTest, PointerSize32BitMaskingRegression) {
+  // Regression test for 32-bit pointer masking bug.
+  // The bug: when reading 4 bytes into an 8-byte variable, the upper
+  // 4 bytes could contain garbage, causing incorrect address calculations.
+  // This test ensures the masking fix works correctly.
+
+  // Use 32-bit pointer size.
+  process_->SetPointerSize(4);
+
+  // Write valid 32-bit pointer values.
+  WriteAt<uint32_t>(*process_, 0x100080, 999);
+  WriteAt<uint32_t>(*process_, 0x100020, 0x100060);
+  WriteAt<uint32_t>(*process_, 0x400100, 0x100020);
+  process_->AddModule("game.exe", 0x400000, 0x10000);
+
+  // Now write garbage in the upper 4 bytes of the pointer locations.
+  // Without proper masking, this garbage would be included in address
+  // calculations and cause incorrect results.
+  // Write at offset +4 from each 32-bit pointer location.
+
+  // Upper bytes of 0x100020
+  WriteAt<uint32_t>(*process_, 0x100024, 0xDEADBEEF);
+  // Upper bytes of 0x400100
+  WriteAt<uint32_t>(*process_, 0x400104, 0xCAFEBABE);
+
+  auto map = PointerMap::Generate(*process_);
+  ASSERT_TRUE(map.has_value());
+
+  PointerScanner scanner;
+  PointerScanConfig config;
+  config.target_address = 0x100080;
+  config.max_level = 2;
+  config.max_offset = 0x100;
+
+  auto result = scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result.success);
+  ASSERT_FALSE(result.paths.empty());
+
+  // Verify each found path resolves correctly despite garbage in upper bytes.
+  // Without the masking fix, the garbage would corrupt the address calculation.
+  for (const auto& path : result.paths) {
+    auto resolved = scanner.ResolvePath(*process_, path);
+    ASSERT_TRUE(resolved.has_value())
+        << "Path resolution failed for module: " << path.module_name;
+    EXPECT_EQ(*resolved, 0x100080)
+        << "Resolved address mismatch - masking may have failed";
+  }
 }
 
 }  // namespace maia::core

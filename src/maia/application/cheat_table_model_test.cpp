@@ -46,6 +46,7 @@ class MockProcess : public IProcess {
 
   MOCK_METHOD(bool, Suspend, (), (override));
   MOCK_METHOD(bool, Resume, (), (override));
+  MOCK_METHOD(size_t, GetPointerSize, (), (const, override));
 };
 
 // Test fixture for verifying concurrency fixes

@@ -9,7 +9,8 @@
 
 namespace maia::test {
 
-FakeProcess::FakeProcess(size_t memory_size) {
+FakeProcess::FakeProcess(size_t memory_size, size_t pointer_size)
+    : pointer_size_(pointer_size) {
   memory_.resize(memory_size, std::byte{0});
   base_address_ = 0x100000;
 }
@@ -131,6 +132,14 @@ bool FakeProcess::Suspend() {
 
 bool FakeProcess::Resume() {
   return true;
+}
+
+size_t FakeProcess::GetPointerSize() const {
+  return pointer_size_;
+}
+
+void FakeProcess::SetPointerSize(size_t size) {
+  pointer_size_ = size;
 }
 
 void FakeProcess::SetValid(bool valid) {

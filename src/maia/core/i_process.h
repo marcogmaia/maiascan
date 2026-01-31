@@ -77,6 +77,10 @@ class IProcess {
   /// \brief Resumes all threads in the process.
   /// \return true if successful, false otherwise.
   virtual bool Resume() = 0;
+
+  /// \brief Gets the pointer size of the process (4 for 32-bit, 8 for 64-bit).
+  /// \return The pointer size in bytes.
+  virtual size_t GetPointerSize() const = 0;
 };
 
 }  // namespace maia

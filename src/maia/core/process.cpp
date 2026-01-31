@@ -291,4 +291,8 @@ bool Process::Resume() {
   return mmem::ResumeProcess(descriptor_);
 }
 
+size_t Process::GetPointerSize() const {
+  return descriptor_.bits / 8;
+}
+
 }  // namespace maia
