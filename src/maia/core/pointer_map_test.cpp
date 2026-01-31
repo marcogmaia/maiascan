@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <filesystem>
+#include <sstream>
 #include <vector>
 
 #include "maia/tests/fake_process.h"
@@ -37,16 +37,9 @@ void SetupFakeProcess(test::FakeProcess& process) {
 
 class PointerMapTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    temp_dir_ = std::filesystem::temp_directory_path() / "maia_test";
-    std::filesystem::create_directories(temp_dir_);
-  }
+  void SetUp() override {}
 
-  void TearDown() override {
-    std::filesystem::remove_all(temp_dir_);
-  }
-
-  std::filesystem::path temp_dir_;
+  void TearDown() override {}
 };
 
 TEST_F(PointerMapTest, GenerateFindsValidPointers) {
@@ -95,16 +88,19 @@ TEST_F(PointerMapTest, FindPointersToRange) {
   EXPECT_TRUE(results.empty());
 }
 
-TEST_F(PointerMapTest, SaveAndLoad) {
+TEST_F(PointerMapTest, SaveAndLoadStream) {
   test::FakeProcess process;
   SetupFakeProcess(process);
   auto map = PointerMap::Generate(process);
   ASSERT_TRUE(map.has_value());
 
-  auto path = temp_dir_ / "test.pmap";
-  ASSERT_TRUE(map->Save(path));
+  std::stringstream ss(std::ios::in | std::ios::out | std::ios::binary);
+  ASSERT_TRUE(map->Save(ss));
 
-  auto loaded_map = PointerMap::Load(path);
+  // Reset stream for reading
+  ss.seekg(0);
+
+  auto loaded_map = PointerMap::Load(ss);
   ASSERT_TRUE(loaded_map.has_value());
 
   EXPECT_EQ(loaded_map->GetEntryCount(), map->GetEntryCount());
@@ -115,6 +111,85 @@ TEST_F(PointerMapTest, SaveAndLoad) {
   // Verify content
   auto results = loaded_map->FindPointersToRange(0x100100, 0x100100);
   EXPECT_EQ(results.size(), 2);
+}
+
+TEST_F(PointerMapTest, LoadRejectsMalformedStream) {
+  std::stringstream ss(std::ios::in | std::ios::out | std::ios::binary);
+  char bad_magic[8] = {'F', 'A', 'K', 'E', 'F', 'I', 'L', 'E'};
+  ss.write(bad_magic, 8);
+  ss.seekg(0);
+
+  auto loaded = PointerMap::Load(ss);
+  EXPECT_FALSE(loaded.has_value());
+}
+
+TEST_F(PointerMapTest, LoadRejectsStreamWithHugeEntryCount) {
+  std::stringstream ss(std::ios::in | std::ios::out | std::ios::binary);
+
+  // Write valid header with huge entry_count
+  char magic[8] = {'M', 'A', 'I', 'A', 'P', 'T', 'R', '\0'};
+  ss.write(magic, 8);
+
+  uint32_t version = 1;
+  ss.write(reinterpret_cast<const char*>(&version), 4);
+
+  uint32_t pointer_size = 8;
+  ss.write(reinterpret_cast<const char*>(&pointer_size), 4);
+
+  uint64_t entry_count = 1000000000;  // 1 billion entries
+  ss.write(reinterpret_cast<const char*>(&entry_count), 8);
+
+  // Write minimal other header fields
+  uint64_t timestamp = 0;
+  ss.write(reinterpret_cast<const char*>(&timestamp), 8);
+
+  uint32_t flags = 0;
+  ss.write(reinterpret_cast<const char*>(&flags), 4);
+
+  uint32_t name_len = 0;
+  ss.write(reinterpret_cast<const char*>(&name_len), 4);
+
+  // Write padding
+  uint8_t padding[24] = {0};
+  ss.write(reinterpret_cast<const char*>(padding), 24);
+
+  ss.seekg(0);
+
+  // Loading should fail gracefully, not crash or allocate huge memory
+  auto loaded = PointerMap::Load(ss);
+  EXPECT_FALSE(loaded.has_value());
+}
+
+TEST_F(PointerMapTest, PointerAtRegionBaseIsValid) {
+  // Regression test: pointers that exactly match a memory region's
+  // base address should be considered valid.
+  // Bug: IsValidPointer uses std::lower_bound which incorrectly rejects
+  // pointers at the exact start of the first region.
+
+  test::FakeProcess process;
+
+  // The FakeProcess has a memory region at [0x100000, 0x104000)
+  // Write a pointer at offset 0 that points exactly to the region base:
+  // 0x100000
+  process.WriteValue<uint64_t>(0, 0x100000);
+
+  // Write another pointer at offset 8 that points just past the base
+  process.WriteValue<uint64_t>(8, 0x100001);
+
+  auto map = PointerMap::Generate(process);
+  ASSERT_TRUE(map.has_value());
+
+  // Both pointers should be found as valid.
+  // The bug causes the pointer to 0x100000 to be incorrectly rejected.
+  EXPECT_EQ(map->GetEntryCount(), 2)
+      << "Pointer to exact region base (0x100000) was incorrectly rejected";
+
+  // Verify we can find the pointer to the region base
+  auto results = map->FindPointersToRange(0x100000, 0x100000);
+  EXPECT_EQ(results.size(), 1)
+      << "Should find exactly one pointer to region base address";
+  EXPECT_EQ(results[0].address, 0x100000)
+      << "Pointer at region base should point to region base";
 }
 
 }  // namespace maia::core

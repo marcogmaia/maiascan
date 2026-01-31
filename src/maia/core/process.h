@@ -77,6 +77,9 @@ class Process : public IProcess {
   /// \brief Resumes all threads in the process.
   bool Resume() override;
 
+  /// \brief Gets the pointer size of the process (4 for 32-bit, 8 for 64-bit).
+  size_t GetPointerSize() const override;
+
  private:
   /// \brief Private constructor for use by the static factory methods.
   explicit Process(mmem::ProcessDescriptor descriptor) noexcept;

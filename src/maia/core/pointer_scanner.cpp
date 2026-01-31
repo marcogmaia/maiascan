@@ -4,9 +4,8 @@
 
 #include <algorithm>
 #include <deque>
+#include <ranges>
 #include <unordered_set>
-
-#include "maia/logging.h"
 
 namespace maia::core {
 
@@ -19,15 +18,49 @@ struct SearchNode {
 };
 
 // Helper to check if an address is static (inside a module)
-// Returns pointer to module if found, nullptr otherwise.
-const mmem::ModuleDescriptor* FindModuleForAddress(
+// Returns module descriptor if found, nullopt otherwise.
+std::optional<mmem::ModuleDescriptor> FindModuleForAddress(
     uint64_t address, const std::vector<mmem::ModuleDescriptor>& modules) {
-  for (const auto& mod : modules) {
-    if (address >= mod.base && address < mod.end) {
-      return &mod;
+  auto it = std::ranges::find_if(modules, [address](const auto& mod) {
+    return address >= mod.base && address < mod.end;
+  });
+  return (it != modules.end()) ? std::make_optional(*it) : std::nullopt;
+}
+
+// Helper to find a module by name.
+std::optional<mmem::ModuleDescriptor> FindModuleByName(
+    const std::string_view name,
+    const std::vector<mmem::ModuleDescriptor>& modules) {
+  auto it = std::ranges::find_if(
+      modules, [name](const auto& mod) { return mod.name == name; });
+  return (it != modules.end()) ? std::make_optional(*it) : std::nullopt;
+}
+
+std::optional<uint64_t> FollowPointerChain(
+    IProcess& process,
+    uint64_t start_address,
+    const std::vector<int64_t>& offsets) {
+  uint64_t current_addr = start_address;
+  const size_t ptr_size = process.GetPointerSize();
+
+  for (const int64_t offset : offsets) {
+    uint64_t ptr_val = 0;
+    // Read the pointer value at current_addr
+    if (!process.ReadMemory(std::span<const uintptr_t>{&current_addr, 1},
+                            ptr_size,
+                            std::as_writable_bytes(std::span{&ptr_val, 1}))) {
+      return std::nullopt;
     }
+    // Mask to ensure only the valid pointer bytes are used.
+    // This handles 32-bit pointers correctly regardless of endianness.
+    if (ptr_size == 4) {
+      ptr_val &= 0xFFFFFFFFULL;
+    }
+    // Apply offset to get the next address in the chain
+    current_addr = ptr_val + offset;
   }
-  return nullptr;
+
+  return current_addr;
 }
 
 }  // namespace
@@ -51,6 +84,7 @@ PointerScanResult PointerScanner::FindPaths(
   visited.insert(config.target_address);
 
   uint64_t paths_evaluated = 0;
+  uint32_t last_reported_level = 0xFFFFFFFF;
 
   // We process level by level to respect max_level.
   while (!queue.empty()) {
@@ -66,6 +100,12 @@ PointerScanResult PointerScanner::FindPaths(
 
     SearchNode current = std::move(queue.front());
     queue.pop_front();
+
+    // Report progress when level changes.
+    if (progress_callback && current.level != last_reported_level) {
+      progress_callback(static_cast<float>(current.level) / config.max_level);
+      last_reported_level = current.level;
+    }
 
     // Check if we hit the level limit
     if (current.level >= config.max_level) {
@@ -96,7 +136,7 @@ PointerScanResult PointerScanner::FindPaths(
         break;
       }
 
-      paths_evaluated++;
+      ++paths_evaluated;
 
       // Prevent loops
       if (visited.contains(entry.address)) {
@@ -114,44 +154,43 @@ PointerScanResult PointerScanner::FindPaths(
       next_offsets.push_back(offset);
 
       // Check if this pointer is a Static Address
-      const auto* mod = FindModuleForAddress(entry.address, modules);
-      if (mod) {
-        // Found a path! Reconstruct path.
-        PointerPath path;
-        path.base_address = entry.address;
-        path.module_name = mod->name;
-        path.module_offset = entry.address - mod->base;
-        path.offsets = next_offsets;
-        std::reverse(path.offsets.begin(), path.offsets.end());
+      const auto mod = FindModuleForAddress(entry.address, modules);
 
-        // Check module filter
-        bool allowed = true;
-        if (!config.allowed_modules.empty()) {
-          bool found = false;
-          for (const auto& allowed_name : config.allowed_modules) {
-            if (mod->name == allowed_name) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            allowed = false;
-          }
-        }
-
-        if (allowed) {
-          result.paths.push_back(std::move(path));
-        }
-
-        // Static addresses are considered roots; stop searching this branch.
+      if (!mod) {
+        // Not static, continue search if level permits
+        visited.insert(entry.address);
+        queue.emplace_back(SearchNode{.address = entry.address,
+                                      .offsets = std::move(next_offsets),
+                                      .level = current.level + 1});
         continue;
       }
 
-      // Not static, continue search if level permits
-      visited.insert(entry.address);
-      queue.push_back(
-          {entry.address, std::move(next_offsets), current.level + 1});
+      // Found a static root!
+      // Check max_results limit before adding
+      if (config.max_results > 0 && result.paths.size() >= config.max_results) {
+        continue;
+      }
+
+      // Check module filter
+      if (!config.allowed_modules.empty() &&
+          !config.allowed_modules.contains(mod->name)) {
+        continue;
+      }
+
+      // Found a path! Reconstruct path.
+      PointerPath path;
+      path.base_address = entry.address;
+      path.module_name = mod->name;
+      path.module_offset = entry.address - mod->base;
+      path.offsets = std::move(next_offsets);
+      std::reverse(path.offsets.begin(), path.offsets.end());
+
+      result.paths.push_back(std::move(path));
     }
+  }
+
+  if (progress_callback && result.success) {
+    progress_callback(1.0f);
   }
 
   result.paths_evaluated = paths_evaluated;
@@ -176,39 +215,18 @@ std::optional<uint64_t> PointerScanner::ResolvePath(
   uint64_t current_base = path.base_address;
 
   if (!path.module_name.empty()) {
-    // Find module in current process.
     auto modules = process.GetModules();
-    bool found = false;
-    for (const auto& mod : modules) {
-      if (mod.name == path.module_name) {
-        current_base = mod.base + path.module_offset;
-        found = true;
-        break;
-      }
+    const auto mod = FindModuleByName(path.module_name, modules);
+
+    if (!mod) {
+      return std::nullopt;
     }
-    if (!found) {
-      return std::nullopt;  // Module not loaded
-    }
+    current_base = mod->base + path.module_offset;
   }
 
   uint64_t current_addr = current_base;
 
-  // Follow the chain: Val = Read(Current), Current = Val + Offset.
-  for (size_t i = 0; i < path.offsets.size(); ++i) {
-    // TODO: Add GetPointerSize() to IProcess. Assuming 8 bytes for now.
-    uint64_t ptr_val = 0;
-    std::byte buffer[8];
-    size_t ptr_size = 8;
-    if (!process.ReadMemory(
-            std::span<const uintptr_t>{&current_addr, 1}, ptr_size, buffer)) {
-      return std::nullopt;
-    }
-
-    ptr_val = *reinterpret_cast<uint64_t*>(buffer);
-    current_addr = ptr_val + path.offsets[i];
-  }
-
-  return current_addr;
+  return FollowPointerChain(process, current_addr, path.offsets);
 }
 
 std::vector<PointerPath> PointerScanner::FilterPaths(
@@ -218,12 +236,13 @@ std::vector<PointerPath> PointerScanner::FilterPaths(
   std::vector<PointerPath> valid_paths;
   valid_paths.reserve(paths.size());
 
-  for (const auto& path : paths) {
+  const auto is_valid = [&](const auto& path) {
     auto resolved = ResolvePath(process, path);
-    if (resolved.has_value() && *resolved == expected_target) {
-      valid_paths.push_back(path);
-    }
-  }
+    return resolved.has_value() && *resolved == expected_target;
+  };
+
+  std::ranges::copy(paths | std::views::filter(is_valid),
+                    std::back_inserter(valid_paths));
 
   return valid_paths;
 }

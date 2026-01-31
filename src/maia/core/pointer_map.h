@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <iosfwd>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -53,6 +54,11 @@ class PointerMap {
       std::stop_token stop_token = {},
       ProgressCallback progress_callback = nullptr);
 
+  /// \brief Factory method: Load a pointer map from a stream.
+  /// \param stream The input stream to read from.
+  /// \return A PointerMap instance or nullopt if loading failed.
+  static std::optional<PointerMap> Load(std::istream& stream);
+
   /// \brief Factory method: Load a pointer map from disk.
   /// \param path File path to the .pmap file.
   /// \return A PointerMap instance or nullopt if loading failed.
@@ -65,6 +71,11 @@ class PointerMap {
   PointerMap& operator=(PointerMap&&) = default;
   PointerMap(const PointerMap&) = delete;
   PointerMap& operator=(const PointerMap&) = delete;
+
+  /// \brief Save the pointer map to a stream.
+  /// \param stream The output stream to write to.
+  /// \return true if successful.
+  bool Save(std::ostream& stream) const;
 
   /// \brief Save the pointer map to disk.
   /// \param path File path for the .pmap file.

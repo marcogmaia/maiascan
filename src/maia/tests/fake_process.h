@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <unordered_set>
@@ -13,7 +14,7 @@ namespace maia::test {
 
 class FakeProcess : public IProcess {
  public:
-  explicit FakeProcess(size_t memory_size = 0x4000);
+  explicit FakeProcess(size_t memory_size = 0x4000, size_t pointer_size = 4);
 
   template <typename T>
   void WriteValue(size_t offset, T value) {
@@ -51,6 +52,10 @@ class FakeProcess : public IProcess {
 
   bool Resume() override;
 
+  size_t GetPointerSize() const override;
+
+  void SetPointerSize(size_t size);
+
   void SetValid(bool valid);
 
  private:
@@ -59,6 +64,7 @@ class FakeProcess : public IProcess {
   std::vector<std::byte> memory_;
   std::vector<mmem::ModuleDescriptor> modules_;
   uintptr_t base_address_;
+  size_t pointer_size_;
   bool is_valid_ = true;
   std::unordered_set<uintptr_t> invalid_addresses_;
 };

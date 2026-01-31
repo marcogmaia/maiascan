@@ -7,6 +7,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "maia/core/i_process.h"
@@ -53,7 +54,7 @@ struct PointerScanConfig {
 
   // Only accept paths ending in these modules (empty = accept all static
   // addresses)
-  std::vector<std::string> allowed_modules;
+  std::unordered_set<std::string> allowed_modules;
 };
 
 struct PointerScanResult {

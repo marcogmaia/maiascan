@@ -31,9 +31,9 @@ struct FileHeader {
 // Helper to check if a value points to valid memory
 bool IsValidPointer(uint64_t ptr_val,
                     const std::vector<MemoryRegion>& sorted_regions) {
-  // Find the first region that starts AFTER ptr_val.
-  // The candidate region that *might* contain ptr_val is the one just before
-  // it.
+  // Use upper_bound to find first region with base > ptr_val.
+  // The previous region (if any) has base <= ptr_val, which correctly
+  // handles the case where ptr_val exactly equals a region's base address.
   auto it = std::upper_bound(sorted_regions.begin(),
                              sorted_regions.end(),
                              ptr_val,
@@ -46,8 +46,7 @@ bool IsValidPointer(uint64_t ptr_val,
   }
 
   const auto& candidate = *std::prev(it);
-  return ptr_val >= candidate.base &&
-         ptr_val < (candidate.base + candidate.size);
+  return ptr_val < (candidate.base + candidate.size);
 }
 
 }  // namespace
@@ -59,18 +58,9 @@ std::optional<PointerMap> PointerMap::Generate(
   PointerMap map;
   map.process_name_ = process.GetProcessName();
   map.timestamp_ = std::chrono::system_clock::now().time_since_epoch().count();
+  map.pointer_size_ = process.GetPointerSize();
 
-  // Determine pointer size based on process architecture.
-  // TODO: Add GetPointerSize() to IProcess interface for explicit architecture
-  // check. Heuristic: if any address > 4GB, assume 64-bit.
-  map.pointer_size_ = 4;
   auto regions = process.GetMemoryRegions();
-  for (const auto& region : regions) {
-    if ((region.base + region.size) > 0xFFFFFFFF) {
-      map.pointer_size_ = 8;
-      break;
-    }
-  }
 
   // Pre-sort regions for efficient validation
   std::sort(regions.begin(),
@@ -86,6 +76,9 @@ std::optional<PointerMap> PointerMap::Generate(
       total_bytes += region.size;
     }
   }
+
+  // Heuristic: reserve 5% of total bytes as pointers to reduce reallocations
+  map.entries_.reserve((total_bytes / map.pointer_size_) / 20);
 
   size_t processed_bytes = 0;
   std::vector<std::byte> buffer;
@@ -160,9 +153,17 @@ std::optional<PointerMap> PointerMap::Load(const std::filesystem::path& path) {
     maia::LogError("Failed to open pointer map file: {}", path.string());
     return std::nullopt;
   }
+  return Load(file);
+}
+
+std::optional<PointerMap> PointerMap::Load(std::istream& stream) {
+  // Get stream size if possible
+  stream.seekg(0, std::ios::end);
+  std::fpos total_size = stream.tellg();
+  stream.seekg(0, std::ios::beg);
 
   FileHeader header;
-  if (!file.read(reinterpret_cast<char*>(&header), sizeof(header))) {
+  if (!stream.read(reinterpret_cast<char*>(&header), sizeof(header))) {
     return std::nullopt;
   }
 
@@ -172,13 +173,30 @@ std::optional<PointerMap> PointerMap::Load(const std::filesystem::path& path) {
     return std::nullopt;
   }
 
+  // Basic size validation to prevent memory exhaustion
+  if (total_size != -1) {
+    uint64_t expected_min_size = sizeof(FileHeader) + header.process_name_len +
+                                 (header.entry_count * sizeof(PointerMapEntry));
+    // NOLINTNEXTLINE
+    if (static_cast<uint64_t>(total_size) < expected_min_size) {
+      maia::LogError("Pointer map file too small for declared entry count");
+      return std::nullopt;
+    }
+  }
+
+  // Limit entry count to something reasonable (e.g. 1 billion entries = ~16GB)
+  if (header.entry_count > 1000000000) {
+    maia::LogError("Pointer map entry count too large: {}", header.entry_count);
+    return std::nullopt;
+  }
+
   PointerMap map;
   map.pointer_size_ = header.pointer_size;
   map.timestamp_ = header.timestamp;
   map.process_name_.resize(header.process_name_len);
 
   if (header.process_name_len > 0) {
-    if (!file.read(map.process_name_.data(), header.process_name_len)) {
+    if (!stream.read(map.process_name_.data(), header.process_name_len)) {
       return std::nullopt;
     }
   }
@@ -186,13 +204,13 @@ std::optional<PointerMap> PointerMap::Load(const std::filesystem::path& path) {
   // Read padding
   size_t current_pos = sizeof(FileHeader) + header.process_name_len;
   size_t padding = (8 - (current_pos % 8)) % 8;
-  file.seekg(padding, std::ios::cur);
+  stream.seekg(padding, std::ios::cur);
 
   // Read entries
   try {
     map.entries_.resize(header.entry_count);
-    if (!file.read(reinterpret_cast<char*>(map.entries_.data()),
-                   header.entry_count * sizeof(PointerMapEntry))) {
+    if (!stream.read(reinterpret_cast<char*>(map.entries_.data()),
+                     header.entry_count * sizeof(PointerMapEntry))) {
       maia::LogError("Failed to read pointer map entries (unexpected EOF)");
       return std::nullopt;
     }
@@ -210,27 +228,30 @@ bool PointerMap::Save(const std::filesystem::path& path) const {
   if (!file) {
     return false;
   }
+  return Save(file);
+}
 
+bool PointerMap::Save(std::ostream& stream) const {
   FileHeader header;
   header.pointer_size = static_cast<uint32_t>(pointer_size_);
   header.entry_count = entries_.size();
   header.timestamp = timestamp_;
   header.process_name_len = static_cast<uint32_t>(process_name_.size());
 
-  file.write(reinterpret_cast<const char*>(&header), sizeof(header));
-  file.write(process_name_.data(), process_name_.size());
+  stream.write(reinterpret_cast<const char*>(&header), sizeof(header));
+  stream.write(process_name_.data(), process_name_.size());
 
   // Padding
   size_t current_pos = sizeof(FileHeader) + process_name_.size();
   size_t padding = (8 - (current_pos % 8)) % 8;
   const char zeros[8] = {0};
-  file.write(zeros, padding);
+  stream.write(zeros, padding);
 
   // Entries
-  file.write(reinterpret_cast<const char*>(entries_.data()),
-             entries_.size() * sizeof(PointerMapEntry));
+  stream.write(reinterpret_cast<const char*>(entries_.data()),
+               entries_.size() * sizeof(PointerMapEntry));
 
-  return file.good();
+  return stream.good();
 }
 
 std::span<const PointerMapEntry> PointerMap::FindPointersToRange(
@@ -239,14 +260,19 @@ std::span<const PointerMapEntry> PointerMap::FindPointersToRange(
   auto it_begin =
       std::lower_bound(entries_.begin(),
                        entries_.end(),
-                       PointerMapEntry{.address = 0, .value = min_value});
+                       min_value,
+                       [](const PointerMapEntry& entry, uint64_t val) {
+                         return entry.value < val;
+                       });
 
   // Binary search for the first entry with value > max_value
-  // Note: we construct a dummy entry with max_value and search for upper bound
   auto it_end =
-      std::upper_bound(entries_.begin(),
+      std::upper_bound(it_begin,
                        entries_.end(),
-                       PointerMapEntry{.address = 0, .value = max_value});
+                       max_value,
+                       [](uint64_t val, const PointerMapEntry& entry) {
+                         return val < entry.value;
+                       });
 
   if (it_begin >= it_end) {
     return {};
