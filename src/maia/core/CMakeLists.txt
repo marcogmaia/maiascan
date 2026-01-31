@@ -15,6 +15,8 @@ target_sources(
         memory_common.h
         process.h
         pattern_parser.h
+        pointer_map.h
+        pointer_scanner.h
         scan_config.h
         scan_session.h
         scanner.h
@@ -25,6 +27,8 @@ target_sources(
     cpu_info.cpp
     process.cpp
     pattern_parser.cpp
+    pointer_map.cpp
+    pointer_scanner.cpp
     scanner.cpp
     simd_scanner.cpp
 )
@@ -41,6 +45,8 @@ add_executable(
   core_test
   address_formatter_test.cpp
   pattern_parser_test.cpp
+  pointer_map_test.cpp
+  pointer_scanner_test.cpp
   simd_scanner_test.cpp
   value_parser_test.cpp
 )
@@ -49,6 +55,7 @@ target_link_libraries(
   core_test
   PRIVATE
     core
+    test_utils
     GTest::gmock_main
 )
 

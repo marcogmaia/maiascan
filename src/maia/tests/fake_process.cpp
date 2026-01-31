@@ -96,7 +96,17 @@ std::vector<MemoryRegion> FakeProcess::GetMemoryRegions() const {
 }
 
 std::vector<mmem::ModuleDescriptor> FakeProcess::GetModules() const {
-  return {};
+  return modules_;
+}
+
+void FakeProcess::AddModule(std::string name, uintptr_t base, size_t size) {
+  mmem::ModuleDescriptor mod;
+  mod.name = std::move(name);
+  mod.path = mod.name;  // simplified
+  mod.base = base;
+  mod.size = size;
+  mod.end = base + size;
+  modules_.push_back(std::move(mod));
 }
 
 uint32_t FakeProcess::GetProcessId() const {
