@@ -35,6 +35,8 @@ class FakeProcess : public IProcess {
 
   std::vector<MemoryRegion> GetMemoryRegions() const override;
 
+  void AddModule(std::string name, uintptr_t base, size_t size);
+
   std::vector<mmem::ModuleDescriptor> GetModules() const override;
 
   uint32_t GetProcessId() const override;
@@ -55,6 +57,7 @@ class FakeProcess : public IProcess {
   void WriteRawMemory(size_t offset, std::span<const std::byte> data);
 
   std::vector<std::byte> memory_;
+  std::vector<mmem::ModuleDescriptor> modules_;
   uintptr_t base_address_;
   bool is_valid_ = true;
   std::unordered_set<uintptr_t> invalid_addresses_;
