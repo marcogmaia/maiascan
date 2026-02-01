@@ -521,24 +521,17 @@ ScanResult Scanner::NextScan(IProcess& process,
                config.comparison == ScanComparison::kUnchanged) {
       const bool find_equal = (config.comparison == ScanComparison::kUnchanged);
       ScanMemCmp(batch_buffer, prev_span, find_equal, stride, callback);
-    } else if ((config.comparison == ScanComparison::kIncreased ||
-                config.comparison == ScanComparison::kDecreased) &&
-               (config.value_type == ScanValueType::kInt32 ||
-                config.value_type == ScanValueType::kFloat)) {
+    } else if (config.comparison == ScanComparison::kIncreased ||
+               config.comparison == ScanComparison::kDecreased) {
       const bool greater = (config.comparison == ScanComparison::kIncreased);
-      if (config.value_type == ScanValueType::kInt32) {
+      DispatchScanType(config.value_type, [&]<typename T>() {
         if (greater) {
-          ScanMemCompareGreater<int32_t>(batch_buffer, prev_span, callback);
+          ScanMemCompareGreater<T>(batch_buffer, prev_span, callback);
         } else {
-          ScanMemCompareGreater<int32_t>(prev_span, batch_buffer, callback);
+          ScanMemCompareGreater<T>(prev_span, batch_buffer, callback);
         }
-      } else {
-        if (greater) {
-          ScanMemCompareGreater<float>(batch_buffer, prev_span, callback);
-        } else {
-          ScanMemCompareGreater<float>(prev_span, batch_buffer, callback);
-        }
-      }
+        return true;
+      });
     } else {
       const std::byte* curr_ptr = batch_buffer.data();
       const std::byte* prev_ptr = prev_span.data();

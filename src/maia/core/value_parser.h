@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include <charconv>
 #include <cstddef>
 #include <cstring>
 #include <optional>
@@ -10,39 +9,15 @@
 #include <string_view>
 #include <vector>
 
+#include "maia/core/pattern_parser.h"
 #include "maia/core/scan_types.h"
+#include "maia/core/string_utils.h"
 
 namespace maia {
 
 template <typename T>
 std::optional<T> ParseValue(std::string_view sview, int base = 10) {
-  // Trim leading/trailing whitespace
-  size_t start = sview.find_first_not_of(" \t\r\n");
-  if (start == std::string_view::npos) {
-    return std::nullopt;
-  }
-  size_t end = sview.find_last_not_of(" \t\r\n");
-  sview = sview.substr(start, end - start + 1);
-
-  if (base == 16 && sview.starts_with("0x")) {
-    sview = sview.substr(2);
-  }
-  const char* first = sview.data();
-  const char* last = first + sview.size();
-
-  T value;
-  std::from_chars_result result;
-
-  if constexpr (std::is_floating_point_v<T>) {
-    result = std::from_chars(first, last, value);
-  } else {
-    result = std::from_chars(first, last, value, base);
-  }
-
-  if (result.ec != std::errc() || result.ptr != last) {
-    return std::nullopt;
-  }
-  return value;
+  return core::ParseNumber<T>(sview, base);
 }
 
 template <typename T>
@@ -53,13 +28,13 @@ std::vector<std::byte> ToByteVector(T value) {
 }
 
 template <typename T>
-std::vector<std::byte> NumberStrToBytes(const std::string& str, int base) {
+std::vector<std::byte> NumberStrToBytes(std::string_view str, int base) {
   return ParseValue<T>(str, base)
       .transform(ToByteVector<T>)
       .value_or(std::vector<std::byte>{});
 }
 
-inline std::vector<std::byte> ParseStringByType(const std::string& str,
+inline std::vector<std::byte> ParseStringByType(std::string_view str,
                                                 ScanValueType type,
                                                 int base = 10) {
   switch (type) {
@@ -91,6 +66,26 @@ inline std::vector<std::byte> ParseStringByType(const std::string& str,
     default:
       return {};
   }
+}
+
+inline Pattern ParsePatternByType(std::string_view str,
+                                  ScanValueType type,
+                                  int base = 10) {
+  if (type == ScanValueType::kArrayOfBytes) {
+    return ParseAob(str);
+  }
+  if (type == ScanValueType::kString) {
+    return ParseText(str, false);
+  }
+  if (type == ScanValueType::kWString) {
+    return ParseText(str, true);
+  }
+
+  // For numeric types, use the standard parser and create a full mask
+  Pattern p;
+  p.value = ParseStringByType(str, type, base);
+  p.mask.resize(p.value.size(), std::byte{0xFF});
+  return p;
 }
 
 }  // namespace maia

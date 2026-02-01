@@ -59,9 +59,11 @@ struct PointerScanConfig {
   // Known last offsets filter (simplified).
   // Index 0 = last offset (closest to target), index 1 = second-to-last, etc.
   // If non-empty, paths must end with this exact sequence of offsets.
-  // Example: To filter paths ending in [..., 0x10, 0x58] (where 0x58 is last):
-  //   last_offsets = {0x58, 0x10};
-  std::vector<int64_t> last_offsets;
+  // Use std::nullopt to represent a wildcard (any offset allowed at that
+  // level). Example: To filter paths ending in [..., 0x10, ANY, 0x58] (where
+  // 0x58 is last):
+  //   last_offsets = {0x58, std::nullopt, 0x10};
+  std::vector<std::optional<int64_t>> last_offsets;
 };
 
 struct PointerScanResult {

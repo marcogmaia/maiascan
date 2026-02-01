@@ -18,6 +18,7 @@
     },
     "libassert",
     "nlohmann-json",
+    "nativefiledialog-extended",
     "spdlog"
   ]
 }

@@ -2,41 +2,11 @@
 
 #include "maia/application/scanner_presenter.h"
 
+#include "maia/core/signal_utils.h"
+
 namespace maia {
 
 namespace {
-
-/// \brief Internal tag type used for compile-time function pointer deduction.
-template <auto Candidate>
-struct SlotTag {};
-
-/// \brief Compile-time constant wrapper for function pointers.
-/// \details Usage: maia::Slot<&Class::Method> or maia::Slot<&FreeFunction>.
-template <auto Candidate>
-constexpr SlotTag<Candidate> Slot = {};  // NOLINT
-
-/// \brief Connects a signal to a member function and manages connection
-/// lifetime.
-/// \param storage Container to hold the scoped connection (e.g., std::vector).
-/// \param sink The source signal or sink.
-/// \param instance The receiver object instance.
-/// \param tag The slot wrapper (use maia::Slot<&Class::Method>).
-template <typename Storage, typename Sink, typename Receiver, auto Candidate>
-void Connect(Storage& storage,
-             Sink&& sink,
-             Receiver* instance,
-             SlotTag<Candidate>) {
-  storage.emplace_back(sink.template connect<Candidate>(instance));
-};
-
-/// \brief Connects a signal to a free function or static method.
-/// \param storage Container to hold the scoped connection.
-/// \param sink The source signal or sink.
-/// \param tag The slot wrapper (use maia::Slot<&Function>).
-template <typename Storage, typename Sink, auto Candidate>
-void Connect(Storage& storage, Sink&& sink, SlotTag<Candidate>) {
-  storage.emplace_back(sink.template connect<Candidate>());
-}
 
 enum GlobalHotkeyId {
   kHotkeyChanged = 1,
@@ -63,17 +33,14 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
   // clang-format off
 
   // Connect ProcessModel to CheatTableModel 
-  connections_.emplace_back(process_model_.sinks().ActiveProcessChanged().connect<&CheatTableModel::SetActiveProcess>(cheat_table_model_));
-  connections_.emplace_back(process_model_.sinks().ActiveProcessChanged().connect<&ScanResultModel::SetActiveProcess>(scan_result_model_));
-  connections_.emplace_back(scanner_widget_.sinks().NewScanPressed().connect<&ScanResultModel::FirstScan>(scan_result_model_));
-  connections_.emplace_back(scanner_widget_.sinks().NextScanPressed().connect<&ScanResultModel::NextScan>(scan_result_model_));
-  connections_.emplace_back(scanner_widget_.sinks().ScanComparisonSelected().connect<&ScanResultModel::SetScanComparison>(scan_result_model_));
-  connections_.emplace_back(scanner_widget_.sinks().TargetValueSelected().connect<&ScanResultModel::SetTargetScanPattern>(scan_result_model_));
-  connections_.emplace_back(scanner_widget_.sinks().CancelScanPressed().connect<&ScanResultModel::CancelScan>(scan_result_model_));
-  connections_.emplace_back(scanner_widget_.sinks().ValueTypeSelected().connect<&ScanResultModel::SetScanValueType>(scan_result_model_));
-
-  // connections_.emplace_back(scanner_widget_.sinks().AutoUpdateChanged().connect<&ScannerPresenter::OnAutoUpdateChanged>(*this));
-  // I don't know if I'll keep this signature here, I'm just exploring ideas on how to mimic Qt's connection for signal/slow.
+  Connect(connections_, process_model_.sinks().ActiveProcessChanged(), &cheat_table_model_, Slot<&CheatTableModel::SetActiveProcess>);
+  Connect(connections_, process_model_.sinks().ActiveProcessChanged(), &scan_result_model_, Slot<&ScanResultModel::SetActiveProcess>);
+  Connect(connections_, scanner_widget_.sinks().NewScanPressed(), &scan_result_model_, Slot<&ScanResultModel::FirstScan>);
+  Connect(connections_, scanner_widget_.sinks().NextScanPressed(), &scan_result_model_, Slot<&ScanResultModel::NextScan>);
+  Connect(connections_, scanner_widget_.sinks().ScanComparisonSelected(), &scan_result_model_, Slot<&ScanResultModel::SetScanComparison>);
+  Connect(connections_, scanner_widget_.sinks().TargetValueSelected(), &scan_result_model_, Slot<&ScanResultModel::SetTargetScanPattern>);
+  Connect(connections_, scanner_widget_.sinks().CancelScanPressed(), &scan_result_model_, Slot<&ScanResultModel::CancelScan>);
+  Connect(connections_, scanner_widget_.sinks().ValueTypeSelected(), &scan_result_model_, Slot<&ScanResultModel::SetScanValueType>);
   Connect(connections_, scanner_widget_.sinks().AutoUpdateChanged(), this, Slot<&ScannerPresenter::OnAutoUpdateChanged>);
   Connect(connections_, scanner_widget_.sinks().PauseWhileScanningChanged(), this, Slot<&ScannerPresenter::OnPauseWhileScanningChanged>);
   Connect(connections_, scanner_widget_.sinks().FastScanChanged(), this, Slot<&ScannerPresenter::OnFastScanChanged>);

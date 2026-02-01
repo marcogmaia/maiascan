@@ -19,10 +19,16 @@ class CheatTablePresenter {
   void OnDescriptionChanged(size_t index, std::string new_desc);
   void OnValueChanged(size_t index, std::string new_val);
   void OnDeleteRequested(size_t index);
+  void OnSaveRequested();
+  void OnLoadRequested();
+  void OnAddManualRequested(std::string address,
+                            ScanValueType type,
+                            std::string description);
 
   CheatTableModel& model_;
   CheatTableView& view_;
   std::vector<entt::scoped_connection> connections_;
+  std::string last_save_path_;
 };
 
 }  // namespace maia

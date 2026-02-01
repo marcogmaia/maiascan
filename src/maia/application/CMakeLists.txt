@@ -1,6 +1,7 @@
 # Copyright (c) Maia
 
 find_package(GTest CONFIG REQUIRED)
+find_package(nfd CONFIG REQUIRED)
 
 add_library(application)
 
@@ -31,7 +32,12 @@ target_sources(
     scan_result_model.cpp
 )
 
-target_link_libraries(application PUBLIC core)
+target_link_libraries(
+  application
+  PUBLIC
+    core
+    nfd::nfd
+)
 
 add_executable(application_test)
 target_sources(

@@ -94,6 +94,10 @@ void PointerScannerModel::SetTargetAddress(uint64_t address) {
   LogInfo("Pointer scan target address set to: 0x{:X}", address);
 }
 
+void PointerScannerModel::SetTargetType(ScanValueType type) {
+  target_type_.store(type);
+}
+
 void PointerScannerModel::SetActiveProcess(IProcess* process) {
   // If busy, cancel and wait to prevent use-after-free
   if (IsBusy()) {
@@ -475,6 +479,16 @@ void PointerScannerModel::Clear() {
   paths_.clear();
   signals_.paths_updated.publish();
   LogInfo("Pointer scan results cleared.");
+}
+
+std::vector<std::string> PointerScannerModel::GetModuleNames() const {
+  std::scoped_lock lock(mutex_);
+  std::vector<std::string> names;
+  names.reserve(modules_.size());
+  for (const auto& mod : modules_) {
+    names.push_back(mod.name);
+  }
+  return names;
 }
 
 std::optional<uint64_t> PointerScannerModel::ResolvePath(

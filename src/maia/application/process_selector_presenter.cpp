@@ -3,6 +3,7 @@
 #include <string>
 
 #include "maia/application/process_selector_presenter.h"
+#include "maia/core/signal_utils.h"
 #include "maia/mmem/mmem.h"
 #include "maia/mmem/process_utils.h"
 
@@ -44,9 +45,9 @@ ProcessSelectorPresenter::ProcessSelectorPresenter(
     : process_model_(process_model),
       process_selector_view_(process_selector_view) {
   // clang-format off
-  process_selector_view.sinks().ProcessPickRequested().connect<&ProcessSelectorPresenter::OnProcessPickRequested>(*this);
-  process_selector_view.sinks().RefreshRequested().connect<&ProcessSelectorPresenter::RefreshProcessList>(*this);
-  process_selector_view.sinks().ProcessSelectedFromList().connect<&ProcessSelectorPresenter::AttachProcess>(*this);
+  Connect(connections_, process_selector_view.sinks().ProcessPickRequested(), this, Slot<&ProcessSelectorPresenter::OnProcessPickRequested>);
+  Connect(connections_, process_selector_view.sinks().RefreshRequested(), this, Slot<&ProcessSelectorPresenter::RefreshProcessList>);
+  Connect(connections_, process_selector_view.sinks().ProcessSelectedFromList(), this, Slot<&ProcessSelectorPresenter::AttachProcess>);
   // clang-format on
   RefreshProcessList();
 }
