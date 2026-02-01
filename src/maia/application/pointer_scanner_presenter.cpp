@@ -41,83 +41,32 @@ PointerScannerPresenter::PointerScannerPresenter(
       cheat_table_model_(cheat_table_model),
       scan_result_model_(scan_result_model),
       pointer_scanner_view_(pointer_scanner_view) {
+  // clang-format off
   // Connect process model signals to presenter handlers
-  Connect(connections_,
-          process_model_.sinks().ActiveProcessChanged(),
-          this,
-          Slot<&PointerScannerPresenter::OnActiveProcessChanged>);
+  Connect(connections_, process_model_.sinks().ActiveProcessChanged(), this, Slot<&PointerScannerPresenter::OnActiveProcessChanged>);
 
   // Connect view signals to presenter handlers
-  Connect(connections_,
-          pointer_scanner_view_.sinks().TargetAddressChanged(),
-          this,
-          Slot<&PointerScannerPresenter::OnTargetAddressChanged>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().TargetFromCheatSelected(),
-          this,
-          Slot<&PointerScannerPresenter::OnTargetFromCheatSelected>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().TargetFromScanSelected(),
-          this,
-          Slot<&PointerScannerPresenter::OnTargetFromScanSelected>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().GenerateMapPressed(),
-          this,
-          Slot<&PointerScannerPresenter::OnGenerateMapPressed>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().SaveMapPressed(),
-          this,
-          Slot<&PointerScannerPresenter::OnSaveMapPressed>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().LoadMapPressed(),
-          this,
-          Slot<&PointerScannerPresenter::OnLoadMapPressed>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().FindPathsPressed(),
-          this,
-          Slot<&PointerScannerPresenter::OnFindPathsPressed>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().ValidatePressed(),
-          this,
-          Slot<&PointerScannerPresenter::OnValidatePressed>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().CancelPressed(),
-          this,
-          Slot<&PointerScannerPresenter::OnCancelPressed>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().ResultDoubleClicked(),
-          this,
-          Slot<&PointerScannerPresenter::OnResultDoubleClicked>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().ShowAllPressed(),
-          this,
-          Slot<&PointerScannerPresenter::OnShowAllPressed>);
-  Connect(connections_,
-          pointer_scanner_view_.sinks().TargetAddressInvalid(),
-          this,
-          Slot<&PointerScannerPresenter::OnTargetAddressInvalid>);
+  Connect(connections_, pointer_scanner_view_.sinks().TargetAddressChanged(),    this, Slot<&PointerScannerPresenter::OnTargetAddressChanged>);
+  Connect(connections_, pointer_scanner_view_.sinks().TargetTypeChanged(),       this, Slot<&PointerScannerPresenter::OnTargetTypeChanged>);
+  Connect(connections_, pointer_scanner_view_.sinks().TargetFromCheatSelected(), this, Slot<&PointerScannerPresenter::OnTargetFromCheatSelected>);
+  Connect(connections_, pointer_scanner_view_.sinks().TargetFromScanSelected(),  this, Slot<&PointerScannerPresenter::OnTargetFromScanSelected>);
+  Connect(connections_, pointer_scanner_view_.sinks().GenerateMapPressed(),      this, Slot<&PointerScannerPresenter::OnGenerateMapPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().SaveMapPressed(),          this, Slot<&PointerScannerPresenter::OnSaveMapPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().LoadMapPressed(),          this, Slot<&PointerScannerPresenter::OnLoadMapPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().FindPathsPressed(),        this, Slot<&PointerScannerPresenter::OnFindPathsPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().ValidatePressed(),         this, Slot<&PointerScannerPresenter::OnValidatePressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().CancelPressed(),           this, Slot<&PointerScannerPresenter::OnCancelPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().ResultDoubleClicked(),     this, Slot<&PointerScannerPresenter::OnResultDoubleClicked>);
+  Connect(connections_, pointer_scanner_view_.sinks().ShowAllPressed(),          this, Slot<&PointerScannerPresenter::OnShowAllPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().TargetAddressInvalid(),    this, Slot<&PointerScannerPresenter::OnTargetAddressInvalid>);
 
   // Connect model signals to presenter handlers
-  Connect(connections_,
-          pointer_scanner_model_.sinks().MapGenerated(),
-          this,
-          Slot<&PointerScannerPresenter::OnMapGenerated>);
-  Connect(connections_,
-          pointer_scanner_model_.sinks().ScanComplete(),
-          this,
-          Slot<&PointerScannerPresenter::OnScanComplete>);
-  Connect(connections_,
-          pointer_scanner_model_.sinks().ProgressUpdated(),
-          this,
-          Slot<&PointerScannerPresenter::OnProgressUpdated>);
-  Connect(connections_,
-          pointer_scanner_model_.sinks().PathsUpdated(),
-          this,
-          Slot<&PointerScannerPresenter::OnPathsUpdated>);
-  Connect(connections_,
-          pointer_scanner_model_.sinks().ValidationComplete(),
-          this,
-          Slot<&PointerScannerPresenter::OnValidationComplete>);
+  Connect(connections_, pointer_scanner_model_.sinks().MapGenerated(),       this, Slot<&PointerScannerPresenter::OnMapGenerated>);
+  Connect(connections_, pointer_scanner_model_.sinks().ScanComplete(),       this, Slot<&PointerScannerPresenter::OnScanComplete>);
+  Connect(connections_, pointer_scanner_model_.sinks().ProgressUpdated(),    this, Slot<&PointerScannerPresenter::OnProgressUpdated>);
+  Connect(connections_, pointer_scanner_model_.sinks().PathsUpdated(),       this, Slot<&PointerScannerPresenter::OnPathsUpdated>);
+  Connect(connections_, pointer_scanner_model_.sinks().ValidationComplete(), this, Slot<&PointerScannerPresenter::OnValidationComplete>);
+  // clang-format on
 }
 
 void PointerScannerPresenter::Render() {
@@ -136,6 +85,7 @@ void PointerScannerPresenter::Render() {
   auto cheat_entries_ptr = cheat_table_model_.entries();
   const auto& cheat_entries = *cheat_entries_ptr;
   const auto& scan_results = scan_result_model_.entries();
+  auto available_modules = pointer_scanner_model_.GetModuleNames();
 
   // Render the view with path resolver
   pointer_scanner_view_.Render(
@@ -148,6 +98,7 @@ void PointerScannerPresenter::Render() {
       pointer_scanner_model_.IsScanning(),
       cheat_entries,
       scan_results,
+      available_modules,
       [this](const core::PointerPath& path) {
         return pointer_scanner_model_.ResolvePath(path);
       });
@@ -155,6 +106,10 @@ void PointerScannerPresenter::Render() {
 
 void PointerScannerPresenter::OnTargetAddressChanged(uint64_t address) {
   pointer_scanner_model_.SetTargetAddress(address);
+}
+
+void PointerScannerPresenter::OnTargetTypeChanged(ScanValueType type) {
+  pointer_scanner_model_.SetTargetType(type);
 }
 
 void PointerScannerPresenter::OnTargetFromCheatSelected(size_t index) {
@@ -276,6 +231,9 @@ void PointerScannerPresenter::UpdateTargetFromCheatTable(size_t index) {
 
   uint64_t address = entries[index].address;
   pointer_scanner_model_.SetTargetAddress(address);
+  pointer_scanner_model_.SetTargetType(entries[index].type);
+  pointer_scanner_view_.SetSelectedType(entries[index].type);
+
   LogInfo("Target address set from cheat table: 0x{:X} ({})",
           address,
           entries[index].description);
@@ -291,6 +249,9 @@ void PointerScannerPresenter::UpdateTargetFromScanResults(size_t index) {
 
   uint64_t address = results.addresses[index];
   pointer_scanner_model_.SetTargetAddress(address);
+  pointer_scanner_model_.SetTargetType(results.value_type);
+  pointer_scanner_view_.SetSelectedType(results.value_type);
+
   LogInfo("Target address set from scan results: 0x{:X}", address);
 }
 
@@ -304,24 +265,33 @@ void PointerScannerPresenter::AddPathToCheatTable(size_t index) {
 
   const auto& path = paths[index];
   uint64_t target = pointer_scanner_model_.GetTargetAddress();
+  ScanValueType type = pointer_scanner_model_.GetTargetType();
+  size_t size = GetSizeForType(type);
 
-  // Create description showing the pointer path
-  std::string description = fmt::format(
-      "Ptr: {}->0x{:X}",
+  // Create description showing the full pointer path with all offsets
+  // Format: "module+offset -> off1 -> off2 -> ..."
+  std::string description =
       path.module_name.empty()
           ? fmt::format("0x{:X}", path.base_address)
-          : fmt::format("{}+{:X}", path.module_name, path.module_offset),
-      target);
+          : fmt::format(
+                "\"{}\" + 0x{:X}", path.module_name, path.module_offset);
+
+  for (const auto& offset : path.offsets) {
+    if (offset >= 0) {
+      description += fmt::format(" -> {:X}", offset);
+    } else {
+      description += fmt::format(" -> -{:X}", -offset);
+    }
+  }
 
   // Add as pointer chain entry - this will dynamically resolve to the target
-  // Default to 4 bytes (32-bit pointer)
   cheat_table_model_.AddPointerChainEntry(path.base_address,
                                           path.offsets,
                                           path.module_name,
                                           path.module_offset,
-                                          ScanValueType::kUInt32,
+                                          type,
                                           description,
-                                          4);
+                                          size);
 
   LogInfo("Added pointer chain to cheat table: {}", description);
 }

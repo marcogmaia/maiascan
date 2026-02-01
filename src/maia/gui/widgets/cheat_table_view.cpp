@@ -4,89 +4,36 @@
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
+#include <chrono>
+#include <cmath>
 #include <cstring>
-#include <format>
-#include <mutex>
 #include <span>
+#include <vector>
+
+#include "maia/core/scan_types.h"
+#include "maia/core/value_formatter.h"
 
 namespace maia {
 
 namespace {
 
-struct Utf8String {};
-
-// Helper to format value for display
-template <typename T>
-std::string FormatValue(std::span<const std::byte> data) {
-  if (data.size() < sizeof(T)) {
-    return "Invalid";
-  }
-  T val;
-  std::memcpy(&val, data.data(), sizeof(T));
-  if constexpr (std::is_floating_point_v<T>) {
-    return std::format("{:.4f}", val);
-  } else {
-    return std::format("{}", val);
-  }
-}
-
-template <>
-std::string FormatValue<Utf8String>(std::span<const std::byte> data) {
-  if (data.empty()) {
-    return "";
-  }
-  // Find null terminator within the data.
-  const char* ptr = reinterpret_cast<const char*>(data.data());
-  size_t len = 0;
-  while (len < data.size() && ptr[len] != '\0') {
-    ++len;
-  }
-  return std::string(ptr, len);
-}
-
-std::string GetValueString(ScanValueType type,
-                           std::span<const std::byte> data) {
-  // clang-format off
-  switch (type) {
-    case ScanValueType::kInt8: return FormatValue<int8_t>(data);
-    case ScanValueType::kUInt8: return FormatValue<uint8_t>(data);
-    case ScanValueType::kInt16: return FormatValue<int16_t>(data);
-    case ScanValueType::kUInt16: return FormatValue<uint16_t>(data);
-    case ScanValueType::kInt32: return FormatValue<int32_t>(data);
-    case ScanValueType::kUInt32: return FormatValue<uint32_t>(data);
-    case ScanValueType::kInt64: return FormatValue<int64_t>(data);
-    case ScanValueType::kUInt64: return FormatValue<uint64_t>(data);
-    case ScanValueType::kFloat: return FormatValue<float>(data);
-    case ScanValueType::kDouble: return FormatValue<double>(data);
-    case ScanValueType::kString: return FormatValue<Utf8String>(data);
-    default: return "?";
-  }
-  // clang-format on
-}
-
-const char* GetTypeString(ScanValueType type) {
-  // clang-format off
-  switch (type) {
-    case ScanValueType::kInt8: 
-    case ScanValueType::kUInt8:  return "1 Byte";
-    case ScanValueType::kInt16:
-    case ScanValueType::kUInt16: return "2 Bytes";
-    case ScanValueType::kInt32:
-    case ScanValueType::kUInt32: return "4 Bytes";
-    case ScanValueType::kInt64:
-    case ScanValueType::kUInt64: return "8 Bytes";
-    case ScanValueType::kFloat:  return "Float";
-    case ScanValueType::kDouble: return "Double";
-    case ScanValueType::kString: return "String";
-  }
-  // clang-format on
-  return "Unknown";
+// Helper to lerp between two ImVec4 colors
+// t=0 returns start_color, t=1 returns end_color
+ImVec4 LerpColor(const ImVec4& start_color, const ImVec4& end_color, float t) {
+  return ImVec4(std::lerp(start_color.x, end_color.x, t),
+                std::lerp(start_color.y, end_color.y, t),
+                std::lerp(start_color.z, end_color.z, t),
+                std::lerp(start_color.w, end_color.w, t));
 }
 
 }  // namespace
 
 void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
   if (ImGui::Begin("Cheat Table")) {
+    // Render toolbar
+    RenderToolbar();
+    ImGui::Separator();
+
     static ImGuiTableFlags flags =
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
         ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
@@ -109,10 +56,25 @@ void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
         // Snapshot of entry data for thread-safe UI rendering
         std::string val_str;
         bool is_frozen = false;
+        std::chrono::steady_clock::time_point last_change_time;
 
         {
-          val_str = GetValueString(entry.type, entry.data->GetValue());
+          val_str =
+              ValueFormatter::Format(entry.data->GetValue(), entry.type, false);
           is_frozen = entry.data->IsFrozen();
+          last_change_time = entry.data->GetLastChangeTime();
+        }
+
+        // Calculate blink effect based on time since last change
+        // Fade from red to white over 1 second
+        constexpr float kBlinkDuration = 1.0f;  // seconds
+        auto now = std::chrono::steady_clock::now();
+        float time_since_change =
+            std::chrono::duration<float>(now - last_change_time).count();
+        float blink_alpha = 0.0f;
+        if (time_since_change < kBlinkDuration &&
+            last_change_time.time_since_epoch().count() > 0) {
+          blink_alpha = 1.0f - (time_since_change / kBlinkDuration);
         }
 
         // 1. Frozen Checkbox
@@ -124,8 +86,6 @@ void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
 
         // 2. Description (Editable)
         ImGui::TableSetColumnIndex(1);
-        // Using InputText for direct editing could be tricky inside a table if
-        // not careful with focus. Simple implementation: InputText
         std::string desc_buffer = entry.description;
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::InputText(
@@ -138,19 +98,42 @@ void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
 
         // 3. Address (Read-only)
         ImGui::TableSetColumnIndex(2);
-        ImGui::Text("0x%llX", entry.address);
+        if (entry.IsPointerChain()) {
+          // Show pointer chain info
+          if (!entry.pointer_module.empty()) {
+            ImGui::Text("[%s+%llX]",
+                        entry.pointer_module.c_str(),
+                        entry.pointer_module_offset);
+          } else {
+            ImGui::Text("[0x%llX]", entry.pointer_base);
+          }
+        } else {
+          ImGui::Text("0x%llX", entry.address);
+        }
 
-        // 4. Type (Read-only for now)
+        // 4. Type (Read-only)
         ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%s", GetTypeString(entry.type));
+        ImGui::Text("%s", ValueFormatter::GetLabel(entry.type));
 
-        // 5. Value (Editable)
+        // 5. Value (Editable with blink effect on change)
         ImGui::TableSetColumnIndex(4);
         ImGui::SetNextItemWidth(-FLT_MIN);
-        // Unique ID based on index
+
+        // Apply red->white fade if value recently changed
+        if (blink_alpha > 0.0f) {
+          ImVec4 default_color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+          const auto color_red = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+          ImVec4 blink_color = LerpColor(default_color, color_red, blink_alpha);
+          ImGui::PushStyleColor(ImGuiCol_Text, blink_color);
+        }
+
         if (ImGui::InputText(
                 "##value", &val_str, ImGuiInputTextFlags_EnterReturnsTrue)) {
           signals_.value_changed.publish(i, val_str);
+        }
+
+        if (blink_alpha > 0.0f) {
+          ImGui::PopStyleColor();
         }
 
         // Context Menu for Delete
@@ -166,8 +149,87 @@ void CheatTableView::Render(const std::vector<CheatTableEntry>& entries) {
 
       ImGui::EndTable();
     }
+
+    // Render add dialog if open
+    RenderAddDialog();
   }
   ImGui::End();
+}
+
+void CheatTableView::RenderToolbar() {
+  if (ImGui::Button("Save")) {
+    signals_.save_requested.publish();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Load")) {
+    signals_.load_requested.publish();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Add Address")) {
+    show_add_dialog_ = true;
+    add_address_input_.clear();
+    add_description_input_.clear();
+    add_type_index_ = 4;  // Default to Int32
+  }
+}
+
+void CheatTableView::RenderAddDialog() {
+  if (!show_add_dialog_) {
+    return;
+  }
+
+  ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+  if (ImGui::BeginPopupModal("Add Address",
+                             &show_add_dialog_,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Address (e.g., 0x1234 or game.exe+0x100):");
+    ImGui::InputText("##addr", &add_address_input_);
+
+    ImGui::Text("Type:");
+    if (ImGui::BeginCombo(
+            "##type",
+            ValueFormatter::GetLabel(kAllScanValueTypes[add_type_index_]))) {
+      for (size_t i = 0; i < kAllScanValueTypes.size(); i++) {
+        const bool is_selected = (add_type_index_ == i);
+        if (ImGui::Selectable(ValueFormatter::GetLabel(kAllScanValueTypes[i]),
+                              is_selected)) {
+          add_type_index_ = i;
+        }
+        if (is_selected) {
+          ImGui::SetItemDefaultFocus();
+        }
+      }
+      ImGui::EndCombo();
+    }
+
+    ImGui::Text("Description:");
+    ImGui::InputText("##desc", &add_description_input_);
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Add", ImVec2(120, 0))) {
+      if (!add_address_input_.empty()) {
+        signals_.add_manual_requested.publish(
+            add_address_input_,
+            kAllScanValueTypes[add_type_index_],
+            add_description_input_);
+        show_add_dialog_ = false;
+      }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+      show_add_dialog_ = false;
+    }
+
+    ImGui::EndPopup();
+  }
+
+  // Open the popup if dialog should be shown
+  if (show_add_dialog_ && !ImGui::IsPopupOpen("Add Address")) {
+    ImGui::OpenPopup("Add Address");
+  }
 }
 
 }  // namespace maia

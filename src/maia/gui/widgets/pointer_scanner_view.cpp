@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <unordered_set>
 
 #include <fmt/core.h>
 #include <imgui.h>
@@ -27,26 +28,72 @@ namespace {
   }
 }
 
-/// \brief Splits a comma-separated string and trims whitespace from each part.
-/// \param input The comma-separated input string.
-/// \return Vector of trimmed non-empty strings.
-[[nodiscard]] std::vector<std::string> SplitAndTrim(const std::string& input) {
+/// \brief Tokenizes a string by spaces and/or commas, trimming each token.
+/// \param input The input string to tokenize.
+/// \return Vector of trimmed non-empty tokens.
+[[nodiscard]] std::vector<std::string> Tokenize(const std::string& input) {
   std::vector<std::string> result;
   if (input.empty()) {
     return result;
   }
 
-  std::stringstream ss(input);
-  std::string item;
-  while (std::getline(ss, item, ',')) {
-    // Trim whitespace
-    size_t first = item.find_first_not_of(" \t");
-    if (first != std::string::npos) {
-      size_t last = item.find_last_not_of(" \t");
-      result.push_back(item.substr(first, last - first + 1));
+  std::string current;
+  for (char c : input) {
+    if (c == ' ' || c == '\t' || c == ',') {
+      if (!current.empty()) {
+        result.push_back(current);
+        current.clear();
+      }
+    } else {
+      current += c;
     }
   }
+  if (!current.empty()) {
+    result.push_back(current);
+  }
   return result;
+}
+
+/// \brief Parses a single offset token to an optional int64_t.
+/// \details Supports wildcards (* or ?), decimal (default), and hex (0x
+/// prefix).
+/// \param token The token to parse.
+/// \return The parsed offset, or std::nullopt for wildcards.
+[[nodiscard]] std::optional<int64_t> ParseOffsetToken(
+    const std::string& token) {
+  if (token.empty()) {
+    return std::nullopt;
+  }
+
+  // Check for wildcard
+  if (token == "*" || token == "?") {
+    return std::nullopt;
+  }
+
+  try {
+    // Check for hex prefix
+    if (token.size() > 2 && token[0] == '0' &&
+        (token[1] == 'x' || token[1] == 'X')) {
+      return static_cast<int64_t>(std::stoull(token, nullptr, 16));
+    }
+    // Default to decimal
+    return static_cast<int64_t>(std::stoll(token, nullptr, 10));
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+/// \brief Shows a help marker (?) with tooltip on hover.
+/// \param desc The tooltip text to display.
+void ShowHelpMarker(const char* desc) {
+  ImGui::SameLine();
+  ImGui::TextDisabled("(?)");
+  if (ImGui::BeginItemTooltip()) {
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+    ImGui::TextUnformatted(desc);
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
+  }
 }
 
 }  // namespace
@@ -67,22 +114,17 @@ core::PointerScanConfig PointerScannerView::GetScanConfig() const {
 
   // Parse allowed modules from filter input
   config.allowed_modules.clear();
-  for (const auto& module : SplitAndTrim(module_filter_input_)) {
+  for (const auto& module : Tokenize(module_filter_input_)) {
     config.allowed_modules.insert(module);
   }
 
   // Parse last offsets from filter input.
-  // User enters offsets in forward order (e.g., "10, 58" for [..., +10, +58]).
+  // User enters offsets in forward order (e.g., "10 58" for [..., +10, +58]).
+  // Supports wildcards (* or ?) and decimal (default) or hex (0x prefix).
   // We reverse them so index 0 = last offset (closest to target).
   config.last_offsets.clear();
-  for (const auto& offset_str : SplitAndTrim(last_offsets_input_)) {
-    try {
-      int64_t offset =
-          static_cast<int64_t>(std::stoull(offset_str, nullptr, 16));
-      config.last_offsets.push_back(offset);
-    } catch (...) {
-      // Skip invalid entries
-    }
+  for (const auto& offset_str : Tokenize(last_offsets_input_)) {
+    config.last_offsets.push_back(ParseOffsetToken(offset_str));
   }
   std::reverse(config.last_offsets.begin(), config.last_offsets.end());
 
@@ -99,6 +141,7 @@ void PointerScannerView::Render(
     bool is_scanning,
     const std::vector<CheatTableEntry>& cheat_entries,
     const ScanStorage& scan_results,
+    const std::vector<std::string>& available_modules,
     PointerScannerView::PathResolver path_resolver) {
   if (!is_open || !*is_open) {
     return;
@@ -111,7 +154,7 @@ void PointerScannerView::Render(
     ImGui::Separator();
     RenderMapSection(map_entry_count, map_progress, is_generating_map);
     ImGui::Separator();
-    RenderConfigSection();
+    RenderConfigSection(available_modules);
     ImGui::Separator();
     RenderActionSection(
         is_generating_map, is_scanning, !paths.empty(), scan_progress);
@@ -125,6 +168,8 @@ void PointerScannerView::RenderTargetSection(
     const std::vector<CheatTableEntry>& cheat_entries,
     const ScanStorage& scan_results) {
   ImGui::Text("Target Address");
+  ShowHelpMarker(
+      "The memory address you want to find a stable pointer path to.");
 
   // Address input with validation feedback
   ImGui::PushItemWidth(200);
@@ -156,7 +201,41 @@ void PointerScannerView::RenderTargetSection(
 
   ImGui::SameLine();
 
+  // Type selector
+  const char* type_names[] = {
+      "Byte", "2 Bytes", "4 Bytes", "8 Bytes", "Float", "Double"};
+  ScanValueType types[] = {ScanValueType::kUInt8,
+                           ScanValueType::kUInt16,
+                           ScanValueType::kUInt32,
+                           ScanValueType::kUInt64,
+                           ScanValueType::kFloat,
+                           ScanValueType::kDouble};
+
+  int current_type_idx = 2;  // Default to 4 Bytes (UInt32)
+  for (int i = 0; i < IM_ARRAYSIZE(types); i++) {
+    if (types[i] == selected_type_) {
+      current_type_idx = i;
+      break;
+    }
+  }
+
+  ImGui::PushItemWidth(100);
+  if (ImGui::Combo(
+          "Type", &current_type_idx, type_names, IM_ARRAYSIZE(type_names))) {
+    selected_type_ = types[current_type_idx];
+    signals_.target_type_changed.publish(selected_type_);
+  }
+  ImGui::PopItemWidth();
+
+  ImGui::SameLine();
+
   // Source selector dropdown
+  // Default to Cheat Table if entries exist and no selection made yet
+  if (selected_source_ == 0 && !cheat_entries.empty() &&
+      target_address_str_.empty()) {
+    selected_source_ = 1;  // From Cheat Table
+  }
+
   const char* sources[] = {
       "Manual Entry", "From Cheat Table", "From Scan Results"};
   ImGui::PushItemWidth(150);
@@ -233,6 +312,8 @@ void PointerScannerView::RenderMapSection(size_t map_entry_count,
                                           float map_progress,
                                           bool is_generating_map) {
   ImGui::Text("Pointer Map");
+  ShowHelpMarker(
+      "A snapshot of all pointers in memory. Required before scanning.");
 
   // Action buttons
   if (is_generating_map) {
@@ -242,17 +323,29 @@ void PointerScannerView::RenderMapSection(size_t map_entry_count,
   if (ImGui::Button("Generate", ImVec2(100, 0))) {
     signals_.generate_map_pressed.publish();
   }
+  if (ImGui::BeginItemTooltip()) {
+    ImGui::Text("Create a new pointer map from current process memory.");
+    ImGui::EndTooltip();
+  }
 
   ImGui::SameLine();
 
   if (ImGui::Button("Save...", ImVec2(100, 0))) {
     signals_.save_map_pressed.publish();
   }
+  if (ImGui::BeginItemTooltip()) {
+    ImGui::Text("Save pointer map to disk for later use.");
+    ImGui::EndTooltip();
+  }
 
   ImGui::SameLine();
 
   if (ImGui::Button("Load...", ImVec2(100, 0))) {
     signals_.load_map_pressed.publish();
+  }
+  if (ImGui::BeginItemTooltip()) {
+    ImGui::Text("Load a previously saved pointer map.");
+    ImGui::EndTooltip();
   }
 
   if (is_generating_map) {
@@ -276,61 +369,105 @@ void PointerScannerView::RenderMapSection(size_t map_entry_count,
   }
 }
 
-void PointerScannerView::RenderConfigSection() {
+void PointerScannerView::RenderConfigSection(
+    const std::vector<std::string>& available_modules) {
   ImGui::Text("Configuration");
 
   // Max Level
   ImGui::PushItemWidth(80);
   ImGui::InputInt("Max Level", &max_level_, 1, 5);
-  if (max_level_ < 1) {
-    max_level_ = 1;
-  }
-  if (max_level_ > 15) {
-    max_level_ = 15;
-  }
+  max_level_ = std::clamp(max_level_, 1, 15);
   ImGui::PopItemWidth();
+  ShowHelpMarker(
+      "Max pointer chain depth (e.g., 7 = up to 7 dereferences). "
+      "Higher values exponentially increase scan time.");
 
   ImGui::SameLine();
 
   // Max Offset
   ImGui::PushItemWidth(100);
   ImGui::InputInt("Max Offset", &max_offset_, 1024, 4096);
-  if (max_offset_ < 64) {
-    max_offset_ = 64;
-  }
-  if (max_offset_ > 65536) {
-    max_offset_ = 65536;
-  }
+  max_offset_ = std::clamp(max_offset_, 64, 65536);
   ImGui::PopItemWidth();
+  ShowHelpMarker(
+      "Maximum byte distance from each pointer. 2048-4096 is "
+      "typically sufficient for most structures.");
 
   ImGui::SameLine();
 
   // Allow negative offsets
   ImGui::Checkbox("Allow Negative Offsets", &allow_negative_offsets_);
+  ShowHelpMarker("Enable if structures use negative indexing (rare).");
 
   // Max Results
   ImGui::PushItemWidth(100);
   ImGui::InputInt("Max Results (0=unlimited)", &max_results_, 100, 1000);
-  if (max_results_ < 0) {
-    max_results_ = 0;
-  }
-  if (max_results_ > 1000000) {
-    max_results_ = 1000000;
-  }
+  max_results_ = std::clamp(max_results_, 0, 1000000);
   ImGui::PopItemWidth();
 
-  // Module filter
-  ImGui::PushItemWidth(400);
-  ImGui::InputText("Allowed Modules (comma-separated)", &module_filter_input_);
+  // Module filter with dropdown picker
+  ImGui::PushItemWidth(350);
+  ImGui::InputText("##ModuleFilter", &module_filter_input_);
   ImGui::PopItemWidth();
-  ImGui::TextDisabled("Example: game.exe, engine.dll, kernel32.dll");
+
+  ImGui::SameLine();
+
+  // Dropdown button for module selection
+  if (ImGui::Button("...##ModuleDropdown")) {
+    ImGui::OpenPopup("ModulePickerPopup");
+  }
+
+  ImGui::SameLine();
+  ImGui::Text("Allowed Modules");
+
+  // Module picker popup with checkboxes
+  if (ImGui::BeginPopup("ModulePickerPopup")) {
+    ImGui::Text("Select modules to filter:");
+    ImGui::Separator();
+
+    // Parse current filter to check which modules are selected
+    auto selected = Tokenize(module_filter_input_);
+    std::unordered_set<std::string> selected_set(selected.begin(),
+                                                 selected.end());
+
+    for (const auto& mod : available_modules) {
+      bool is_checked = selected_set.contains(mod);
+      if (ImGui::Checkbox(mod.c_str(), &is_checked)) {
+        if (is_checked) {
+          // Add module to filter
+          if (!module_filter_input_.empty()) {
+            module_filter_input_ += " ";
+          }
+          module_filter_input_ += mod;
+        } else {
+          // Remove module from filter - rebuild the string
+          std::string new_filter;
+          for (const auto& s : selected) {
+            if (s != mod) {
+              if (!new_filter.empty()) {
+                new_filter += " ";
+              }
+              new_filter += s;
+            }
+          }
+          module_filter_input_ = new_filter;
+        }
+      }
+    }
+
+    if (available_modules.empty()) {
+      ImGui::TextDisabled("No modules available (generate map first)");
+    }
+
+    ImGui::EndPopup();
+  }
 
   // Last offsets filter
   ImGui::PushItemWidth(400);
-  ImGui::InputText("Last Offsets (hex, comma-separated)", &last_offsets_input_);
+  ImGui::InputText("Last Offsets", &last_offsets_input_);
   ImGui::PopItemWidth();
   ImGui::TextDisabled(
-      "Example: 10, 58 means paths must end with [..., +10, +58]");
+      "Example: 16 * 88 (decimal, 0x for hex, * or ? for wildcard)");
 }
 
 void PointerScannerView::RenderActionSection(bool is_generating_map,
@@ -347,6 +484,10 @@ void PointerScannerView::RenderActionSection(bool is_generating_map,
   if (ImGui::Button("Find Paths", ImVec2(120, 0))) {
     signals_.find_paths_pressed.publish();
   }
+  if (ImGui::BeginItemTooltip()) {
+    ImGui::Text("Search for pointer paths from static addresses to target.");
+    ImGui::EndTooltip();
+  }
 
   ImGui::SameLine();
 
@@ -356,6 +497,10 @@ void PointerScannerView::RenderActionSection(bool is_generating_map,
   }
   if (ImGui::Button("Validate", ImVec2(120, 0))) {
     signals_.validate_pressed.publish();
+  }
+  if (ImGui::BeginItemTooltip()) {
+    ImGui::Text("Check which paths still point to the target address.");
+    ImGui::EndTooltip();
   }
   if (!has_paths) {
     ImGui::EndDisabled();
@@ -443,8 +588,8 @@ void PointerScannerView::RenderResultsSection(
       for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
         ImGui::TableNextRow();
 
-        // Store row index for hover detection
-        const int row_index = i;
+        // Use unique ID for each row to avoid conflicts
+        ImGui::PushID(i);
 
         // Module column
         ImGui::TableSetColumnIndex(0);
@@ -453,7 +598,17 @@ void PointerScannerView::RenderResultsSection(
             path.module_name.empty()
                 ? fmt::format("0x{:X}", path.base_address)
                 : fmt::format("{}+{:X}", path.module_name, path.module_offset);
-        ImGui::Text("%s", module_str.c_str());
+
+        // Selectable spanning all columns
+        bool selected = false;
+        if (ImGui::Selectable(module_str.c_str(),
+                              selected,
+                              ImGuiSelectableFlags_SpanAllColumns |
+                                  ImGuiSelectableFlags_AllowDoubleClick)) {
+          if (ImGui::IsMouseDoubleClicked(0)) {
+            signals_.result_double_clicked.publish(i);
+          }
+        }
 
         // Path column
         ImGui::TableSetColumnIndex(1);
@@ -471,14 +626,7 @@ void PointerScannerView::RenderResultsSection(
           }
         }
 
-        // Double-click to add to cheat table - check entire row, not just text
-        // Use ImGuiHoveredFlags_RectOnly to check the full item rectangle
-        // This makes the entire row (including empty space) respond to
-        // double-click
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_RectOnly) &&
-            ImGui::IsMouseDoubleClicked(0)) {
-          signals_.result_double_clicked.publish(row_index);
-        }
+        ImGui::PopID();
       }
     }
 

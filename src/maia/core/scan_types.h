@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -72,6 +73,22 @@ enum class ScanComparison {
   kDecreasedBy,
 };
 
+constexpr auto kAllScanComparisons = std::array{
+    ScanComparison::kUnknown,
+    ScanComparison::kExactValue,
+    ScanComparison::kNotEqual,
+    ScanComparison::kGreaterThan,
+    ScanComparison::kLessThan,
+    ScanComparison::kBetween,
+    ScanComparison::kNotBetween,
+    ScanComparison::kChanged,
+    ScanComparison::kUnchanged,
+    ScanComparison::kIncreased,
+    ScanComparison::kDecreased,
+    ScanComparison::kIncreasedBy,
+    ScanComparison::kDecreasedBy,
+};
+
 // Helper to check which inputs the UI should show (0, 1, or 2 values)
 constexpr int GetRequiredValueCount(ScanComparison type) {
   switch (type) {
@@ -133,6 +150,22 @@ enum class ScanValueType {
   kString,
   kWString,
   kArrayOfBytes
+};
+
+constexpr auto kAllScanValueTypes = std::array{
+    ScanValueType::kInt8,
+    ScanValueType::kUInt8,
+    ScanValueType::kInt16,
+    ScanValueType::kUInt16,
+    ScanValueType::kInt32,
+    ScanValueType::kUInt32,
+    ScanValueType::kInt64,
+    ScanValueType::kUInt64,
+    ScanValueType::kFloat,
+    ScanValueType::kDouble,
+    ScanValueType::kString,
+    ScanValueType::kWString,
+    ScanValueType::kArrayOfBytes,
 };
 
 constexpr size_t GetSizeForType(ScanValueType type) {

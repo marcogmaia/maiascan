@@ -147,9 +147,10 @@ PointerScanResult PointerScanner::FindPaths(
                        static_cast<int64_t>(entry.value);
 
       // Check last_offsets filter: if this level has a constraint, verify
-      // the offset matches the expected value.
+      // the offset matches the expected value. Wildcards (nullopt) match any.
       if (current.level < config.last_offsets.size()) {
-        if (offset != config.last_offsets[current.level]) {
+        const auto& expected = config.last_offsets[current.level];
+        if (expected.has_value() && offset != *expected) {
           continue;
         }
       }

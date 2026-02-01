@@ -5,6 +5,7 @@
 #include <array>
 #include <bit>
 #include <cstring>
+#include <fstream>
 
 #include "maia/assert.h"
 #include "maia/core/memory_common.h"
@@ -12,6 +13,34 @@
 #include "maia/logging.h"
 
 namespace maia {
+
+// clang-format off
+// JSON serialization for ScanValueType
+NLOHMANN_JSON_SERIALIZE_ENUM(ScanValueType,
+                                {{         maia::ScanValueType::kInt8,         "Int8"},
+                                 {        maia::ScanValueType::kUInt8,        "UInt8"},
+                                 {        maia::ScanValueType::kInt16,        "Int16"},
+                                 {       maia::ScanValueType::kUInt16,       "UInt16"},
+                                 {        maia::ScanValueType::kInt32,        "Int32"},
+                                 {       maia::ScanValueType::kUInt32,       "UInt32"},
+                                 {        maia::ScanValueType::kInt64,        "Int64"},
+                                 {       maia::ScanValueType::kUInt64,       "UInt64"},
+                                 {        maia::ScanValueType::kFloat,        "Float"},
+                                 {       maia::ScanValueType::kDouble,       "Double"},
+                                 {       maia::ScanValueType::kString,       "String"},
+                                 {      maia::ScanValueType::kWString,      "WString"},
+                                 { maia::ScanValueType::kArrayOfBytes, "ArrayOfBytes"}});
+// clang-format on
+
+// JSON serialization for CheatTableEntry (without runtime data member)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CheatTableEntry,
+                                   address,
+                                   pointer_base,
+                                   pointer_module,
+                                   pointer_module_offset,
+                                   pointer_offsets,
+                                   type,
+                                   description)
 
 void CheatTableEntryData::Resize(size_t size) {
   std::scoped_lock lock(mutex_);
@@ -55,6 +84,11 @@ std::vector<std::byte> CheatTableEntryData::GetFrozenValue() const {
   return frozen_value_;
 }
 
+std::vector<std::byte> CheatTableEntryData::GetPrevValue() const {
+  std::scoped_lock lock(mutex_);
+  return prev_value_;
+}
+
 void CheatTableEntryData::UpdateFromProcess(
     const std::span<const std::byte>& new_value) {
   std::scoped_lock lock(mutex_);
@@ -63,8 +97,18 @@ void CheatTableEntryData::UpdateFromProcess(
     return;
   }
   if (std::memcmp(value_.data(), new_value.data(), size_to_copy) != 0) {
+    // Save current as previous before updating
+    prev_value_ = value_;
     std::memcpy(value_.data(), new_value.data(), size_to_copy);
+    // Record the time of change for blink effect
+    last_change_time_ = std::chrono::steady_clock::now();
   }
+}
+
+std::chrono::steady_clock::time_point CheatTableEntryData::GetLastChangeTime()
+    const {
+  std::scoped_lock lock(mutex_);
+  return last_change_time_;
 }
 
 CheatTableModel::CheatTableModel(std::unique_ptr<core::ITaskRunner> task_runner)
@@ -222,6 +266,88 @@ void CheatTableModel::SetValue(size_t index, const std::string& value_str) {
   }
 }
 
+bool CheatTableModel::Save(const std::filesystem::path& path) const {
+  std::scoped_lock lock(mutex_);
+  auto snapshot = entries_.load();
+
+  try {
+    nlohmann::json j = nlohmann::json::array();
+    for (const auto& entry : *snapshot) {
+      nlohmann::json entry_json;
+      entry_json["address"] = entry.address;
+      entry_json["pointer_base"] = entry.pointer_base;
+      entry_json["pointer_module"] = entry.pointer_module;
+      entry_json["pointer_module_offset"] = entry.pointer_module_offset;
+      entry_json["pointer_offsets"] = entry.pointer_offsets;
+      entry_json["type"] = entry.type;
+      entry_json["description"] = entry.description;
+      j.push_back(entry_json);
+    }
+
+    std::ofstream file(path);
+    if (!file.is_open()) {
+      LogError("Failed to open file for saving: {}", path.string());
+      return false;
+    }
+    file << j.dump(2);
+    LogInfo("Saved {} entries to {}", snapshot->size(), path.string());
+    return true;
+  } catch (const std::exception& e) {
+    LogError("Failed to save cheat table: {}", e.what());
+    return false;
+  }
+}
+
+bool CheatTableModel::Load(const std::filesystem::path& path) {
+  std::scoped_lock lock(mutex_);
+
+  try {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+      LogWarning("Failed to open file for loading: {}", path.string());
+      return false;
+    }
+
+    nlohmann::json j;
+    file >> j;
+
+    std::vector<CheatTableEntry> entries;
+    entries.reserve(j.size());
+
+    for (const auto& entry_json : j) {
+      CheatTableEntry entry;
+      entry.address = entry_json["address"].get<MemoryAddress>();
+      entry.pointer_base = entry_json.value("pointer_base", 0);
+      entry.pointer_module = entry_json.value("pointer_module", "");
+      entry.pointer_module_offset =
+          entry_json.value("pointer_module_offset", 0);
+
+      if (entry_json.contains("pointer_offsets")) {
+        entry.pointer_offsets =
+            entry_json["pointer_offsets"].get<std::vector<int64_t>>();
+      }
+
+      entry.type = entry_json["type"].get<ScanValueType>();
+      entry.description = entry_json["description"].get<std::string>();
+
+      entry.data = std::make_shared<CheatTableEntryData>();
+      entry.data->Resize(GetSizeForType(entry.type));
+
+      entries.push_back(std::move(entry));
+    }
+
+    auto new_entries = std::make_shared<std::vector<CheatTableEntry>>(entries);
+    entries_.store(new_entries);
+    signals_.table_changed.publish();
+
+    LogInfo("Loaded {} entries from {}", entries.size(), path.string());
+    return true;
+  } catch (const std::exception& e) {
+    LogError("Failed to load cheat table: {}", e.what());
+    return false;
+  }
+}
+
 void CheatTableModel::SetActiveProcess(IProcess* process) {
   std::scoped_lock lock(mutex_);
   active_process_ = process;
@@ -300,8 +426,22 @@ MemoryAddress CheatTableModel::ResolvePointerChain(
     return 0;
   }
 
+  // Resolve the base address
+  MemoryAddress base_address = entry.pointer_base;
+
+  // If a module name is specified, resolve it to the actual module base
+  if (!entry.pointer_module.empty()) {
+    auto modules = active_process_->GetModules();
+    for (const auto& module : modules) {
+      if (module.name == entry.pointer_module) {
+        base_address = module.base + entry.pointer_module_offset;
+        break;
+      }
+    }
+  }
+
   // Start with base address
-  MemoryAddress current = entry.pointer_base;
+  MemoryAddress current = base_address;
 
   // Follow the chain of offsets
   for (size_t i = 0; i < entry.pointer_offsets.size(); ++i) {

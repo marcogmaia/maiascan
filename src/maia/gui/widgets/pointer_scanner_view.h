@@ -37,6 +37,7 @@ class PointerScannerView {
   /// \param is_scanning Whether path scanning is in progress.
   /// \param cheat_entries Available cheat table entries for target selection.
   /// \param scan_results Available scan results for target selection.
+  /// \param available_modules List of loaded modules for filtering.
   /// \param path_resolver Optional callback to resolve a path's current value.
   void Render(bool* is_open,
               const std::vector<core::PointerPath>& paths,
@@ -47,6 +48,7 @@ class PointerScannerView {
               bool is_scanning,
               const std::vector<CheatTableEntry>& cheat_entries,
               const ScanStorage& scan_results,
+              const std::vector<std::string>& available_modules,
               PathResolver path_resolver = nullptr);
 
   auto sinks() {
@@ -56,6 +58,12 @@ class PointerScannerView {
   /// \brief Get the current scan configuration from UI state.
   [[nodiscard]] core::PointerScanConfig GetScanConfig() const;
 
+  /// \brief Update the selected target type in the UI (e.g. when selecting from
+  /// other sources).
+  void SetSelectedType(ScanValueType type) {
+    selected_type_ = type;
+  }
+
  private:
   class Signals {
    public:
@@ -64,6 +72,9 @@ class PointerScannerView {
 
     /// \brief Target address validation failed.
     entt::sigh<void()> target_address_invalid;
+
+    /// \brief Target type changed.
+    entt::sigh<void(ScanValueType /* type */)> target_type_changed;
 
     /// \brief Target address selected from cheat table.
     entt::sigh<void(size_t /* index */)> target_from_cheat_selected;
@@ -102,6 +113,7 @@ class PointerScannerView {
     // clang-format off
      auto TargetAddressChanged() { return entt::sink(view.signals_.target_address_changed); }
      auto TargetAddressInvalid() { return entt::sink(view.signals_.target_address_invalid); }
+     auto TargetTypeChanged() { return entt::sink(view.signals_.target_type_changed); }
      auto TargetFromCheatSelected() { return entt::sink(view.signals_.target_from_cheat_selected); }
     auto TargetFromScanSelected() { return entt::sink(view.signals_.target_from_scan_selected); }
     auto GenerateMapPressed() { return entt::sink(view.signals_.generate_map_pressed); }
@@ -121,7 +133,7 @@ class PointerScannerView {
   void RenderMapSection(size_t map_entry_count,
                         float map_progress,
                         bool is_generating_map);
-  void RenderConfigSection();
+  void RenderConfigSection(const std::vector<std::string>& available_modules);
   void RenderActionSection(bool is_generating_map,
                            bool is_scanning,
                            bool has_paths,
@@ -137,6 +149,7 @@ class PointerScannerView {
   // UI State
   std::string target_address_str_;
   bool target_address_valid_ = true;
+  ScanValueType selected_type_ = ScanValueType::kUInt32;
   int selected_source_ = 0;  // 0=manual, 1=cheat, 2=scan
   int selected_cheat_index_ = -1;
   int selected_scan_index_ = -1;

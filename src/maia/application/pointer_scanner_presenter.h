@@ -42,6 +42,7 @@ class PointerScannerPresenter {
  private:
   // View signal handlers
   void OnTargetAddressChanged(uint64_t address);
+  void OnTargetTypeChanged(ScanValueType type);
   void OnTargetFromCheatSelected(size_t index);
   void OnTargetFromScanSelected(size_t index);
   void OnGenerateMapPressed();

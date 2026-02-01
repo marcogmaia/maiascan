@@ -90,6 +90,8 @@ class ScannerWidget {
 
   void EmitSetComparisonSelected() const;
 
+  void UpdateParsedValue();
+
   Signals signals_;
 
   std::string str_;

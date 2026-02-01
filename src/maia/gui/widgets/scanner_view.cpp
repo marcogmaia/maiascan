@@ -5,96 +5,21 @@
 #include <array>
 #include <cstring>
 #include <format>
+#include <utility>
 #include <vector>
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
 #include "maia/core/pattern_parser.h"
+#include "maia/core/scan_types.h"
+#include "maia/core/value_formatter.h"
 #include "maia/core/value_parser.h"
 #include "maia/gui/widgets/results_table.h"
 
 namespace maia {
 
-namespace {
-
-constexpr auto kScanValueTypeByIndex = std::array{
-    ScanValueType::kInt8,
-    ScanValueType::kUInt8,
-    ScanValueType::kInt16,
-    ScanValueType::kUInt16,
-    ScanValueType::kInt32,
-    ScanValueType::kUInt32,
-    ScanValueType::kInt64,
-    ScanValueType::kUInt64,
-    ScanValueType::kFloat,
-    ScanValueType::kDouble,
-    ScanValueType::kString,
-    ScanValueType::kWString,
-    ScanValueType::kArrayOfBytes,
-};
-
-constexpr auto kScanValueTypeLabels = std::array{
-    "Int8",
-    "UInt8",
-    "Int16",
-    "UInt16",
-    "Int32",
-    "UInt32",
-    "Int64",
-    "UInt64",
-    "Float",
-    "Double",
-    "String",
-    "Unicode String",
-    "Array of Bytes",
-};
-
-constexpr auto kScanComparisonLabels = std::array{
-    "Unknown",
-    "Exact Value",
-    "Not Equal",
-    "Greater Than",
-    "Less Than",
-    "Between",
-    "Not Between",
-    "Changed",
-    "Unchanged",
-    "Increased",
-    "Decreased",
-    "Increased By",
-    "Decreased By",
-};
-
-constexpr auto kScanComparisonByIndex = std::array{
-    ScanComparison::kUnknown,
-    ScanComparison::kExactValue,
-    ScanComparison::kNotEqual,
-    ScanComparison::kGreaterThan,
-    ScanComparison::kLessThan,
-    ScanComparison::kBetween,
-    ScanComparison::kNotBetween,
-    ScanComparison::kChanged,
-    ScanComparison::kUnchanged,
-    ScanComparison::kIncreased,
-    ScanComparison::kDecreased,
-    ScanComparison::kIncreasedBy,
-    ScanComparison::kDecreasedBy,
-};
-
-// Recursive/Fold step: Split first arg from the rest
-template <typename First, typename... Rest>
-constexpr bool AllSizesEqual(First&& first, Rest&&... rest) {
-  // Check if every element in 'rest' has the same size as 'first'
-  return ((rest.size() == first.size()) && ...);
-}
-
-static_assert(AllSizesEqual(kScanValueTypeByIndex,
-                            kScanValueTypeLabels,
-                            kScanComparisonLabels,
-                            kScanValueTypeByIndex));
-
-}  // namespace
+namespace {}  // namespace
 
 void ScannerWidget::Render(const ScanStorage& entries,
                            const AddressFormatter& formatter,
@@ -127,85 +52,60 @@ void ScannerWidget::Render(const ScanStorage& entries,
     ImGui::BeginDisabled(is_scanning);
 
     draw_row("Type:", [this]() {
-      if (ImGui::Combo("##ValueType",
-                       &current_type_index_,
-                       kScanValueTypeLabels.data(),
-                       static_cast<int>(kScanValueTypeLabels.size()))) {
-        const auto new_type = kScanValueTypeByIndex.at(current_type_index_);
-        signals_.value_type_selected.publish(new_type);
+      if (ImGui::BeginCombo("##ValueType",
+                            ValueFormatter::GetLabel(
+                                kAllScanValueTypes[current_type_index_]))) {
+        for (size_t i = 0; i < kAllScanValueTypes.size(); i++) {
+          const bool is_selected = std::cmp_equal(current_type_index_, i);
+          if (ImGui::Selectable(ValueFormatter::GetLabel(kAllScanValueTypes[i]),
+                                is_selected)) {
+            current_type_index_ = static_cast<int>(i);
+            const auto new_type = kAllScanValueTypes.at(current_type_index_);
+            signals_.value_type_selected.publish(new_type);
 
-        // Re-parse and publish the current string with the new type
-        const int base = is_hex_input_ ? 16 : 10;
-        std::vector<std::byte> value;
-        std::vector<std::byte> mask;
+            UpdateParsedValue();
 
-        if (new_type == ScanValueType::kArrayOfBytes) {
-          auto p = ParseAob(str_);
-          value = std::move(p.value);
-          mask = std::move(p.mask);
-        } else if (new_type == ScanValueType::kString) {
-          auto p = ParseText(str_, false);
-          value = std::move(p.value);
-          mask = std::move(p.mask);
-        } else if (new_type == ScanValueType::kWString) {
-          auto p = ParseText(str_, true);
-          value = std::move(p.value);
-          mask = std::move(p.mask);
-        } else {
-          value = ParseStringByType(str_, new_type, base);
+            // Auto-select "Exact Value" for String/AOB types as other modes
+            // don't usually make sense for a first scan.
+            if (new_type == ScanValueType::kString ||
+                new_type == ScanValueType::kWString ||
+                new_type == ScanValueType::kArrayOfBytes) {
+              selected_comparison_index_ = 1;  // "Exact Value"
+              EmitSetComparisonSelected();
+            }
+          }
+          if (is_selected) {
+            ImGui::SetItemDefaultFocus();
+          }
         }
-
-        parsed_preview_ = value;
-        parse_error_ = value.empty() && !str_.empty();
-        signals_.target_value_selected.publish(value, mask);
-
-        // Auto-select "Exact Value" for String/AOB types as other modes don't
-        // usually make sense for a first scan.
-        if (new_type == ScanValueType::kString ||
-            new_type == ScanValueType::kWString ||
-            new_type == ScanValueType::kArrayOfBytes) {
-          selected_comparison_index_ = 1;  // "Exact Value"
-          EmitSetComparisonSelected();
-        }
+        ImGui::EndCombo();
       }
     });
 
     draw_row("Comparison:", [this]() {
-      if (ImGui::Combo("##ScanComparison",
-                       &selected_comparison_index_,
-                       kScanComparisonLabels.data(),
-                       static_cast<int>(kScanComparisonLabels.size()))) {
-        EmitSetComparisonSelected();
+      if (ImGui::BeginCombo(
+              "##ScanComparison",
+              ValueFormatter::GetLabel(
+                  kAllScanComparisons[selected_comparison_index_]))) {
+        for (size_t i = 0; i < kAllScanComparisons.size(); i++) {
+          const bool is_selected = (selected_comparison_index_ == i);
+          if (ImGui::Selectable(
+                  ValueFormatter::GetLabel(kAllScanComparisons[i]),
+                  is_selected)) {
+            selected_comparison_index_ = static_cast<int>(i);
+            EmitSetComparisonSelected();
+          }
+          if (is_selected) {
+            ImGui::SetItemDefaultFocus();
+          }
+        }
+        ImGui::EndCombo();
       }
     });
 
     draw_row("Value:", [this]() {
       if (ImGui::InputText("##Input", &str_)) {
-        const int base = is_hex_input_ ? 16 : 10;
-        const auto type = kScanValueTypeByIndex.at(current_type_index_);
-
-        std::vector<std::byte> value;
-        std::vector<std::byte> mask;
-
-        if (type == ScanValueType::kArrayOfBytes) {
-          auto p = ParseAob(str_);
-          value = std::move(p.value);
-          mask = std::move(p.mask);
-        } else if (type == ScanValueType::kString) {
-          auto p = ParseText(str_, false);
-          value = std::move(p.value);
-          mask = std::move(p.mask);
-        } else if (type == ScanValueType::kWString) {
-          auto p = ParseText(str_, true);
-          value = std::move(p.value);
-          mask = std::move(p.mask);
-        } else {
-          value = ParseStringByType(str_, type, base);
-        }
-
-        parsed_preview_ = value;
-        parse_error_ = value.empty() && !str_.empty();
-        signals_.target_value_selected.publish(value, mask);
+        UpdateParsedValue();
       }
     });
 
@@ -220,7 +120,7 @@ void ScannerWidget::Render(const ScanStorage& entries,
     if (!parsed_preview_.empty()) {
       ImGui::TableNextRow();
       ImGui::TableSetColumnIndex(1);
-      const auto type = kScanValueTypeByIndex.at(current_type_index_);
+      const auto type = kAllScanValueTypes.at(current_type_index_);
       std::string label = "Preview: ";
       if (type == ScanValueType::kString) {
         label = "Preview (UTF-8): ";
@@ -353,7 +253,18 @@ void ScannerWidget::Render(const ScanStorage& entries,
 
 void ScannerWidget::EmitSetComparisonSelected() const {
   signals_.scan_comparison_selected.publish(
-      kScanComparisonByIndex[selected_comparison_index_]);
+      kAllScanComparisons[selected_comparison_index_]);
+}
+
+void ScannerWidget::UpdateParsedValue() {
+  const int base = is_hex_input_ ? 16 : 10;
+  const auto type = kAllScanValueTypes.at(current_type_index_);
+
+  auto pattern = ParsePatternByType(str_, type, base);
+
+  parsed_preview_ = pattern.value;
+  parse_error_ = pattern.value.empty() && !str_.empty();
+  signals_.target_value_selected.publish(pattern.value, pattern.mask);
 }
 
 }  // namespace maia

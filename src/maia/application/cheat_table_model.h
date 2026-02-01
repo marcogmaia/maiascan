@@ -3,6 +3,8 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -10,6 +12,7 @@
 #include <vector>
 
 #include <entt/signal/sigh.hpp>
+#include <nlohmann/json.hpp>
 
 #include "maia/core/i_process.h"
 #include "maia/core/scan_types.h"
@@ -47,15 +50,23 @@ class CheatTableEntryData {
   /// \brief Returns a copy of the value to be held when frozen.
   std::vector<std::byte> GetFrozenValue() const;
 
+  /// \brief Returns a copy of the previous value (before the last update).
+  std::vector<std::byte> GetPrevValue() const;
+
   /// \brief Updates the internal value from a process read result.
   /// \details Performs a comparison and only updates if the value has changed.
   void UpdateFromProcess(const std::span<const std::byte>& new_value);
 
+  /// \brief Returns the time point when the value last changed.
+  std::chrono::steady_clock::time_point GetLastChangeTime() const;
+
  private:
   mutable std::mutex mutex_;
   std::vector<std::byte> value_;
+  std::vector<std::byte> prev_value_;
   std::vector<std::byte> frozen_value_;
   bool is_frozen_{false};
+  std::chrono::steady_clock::time_point last_change_time_;
 };
 
 /// \brief Represents an entry in the cheat table.
@@ -145,6 +156,12 @@ class CheatTableModel {
 
   /// \brief Manually sets the value of an entry and writes it to the process.
   void SetValue(size_t index, const std::string& value_str);
+
+  /// \brief Saves the cheat table to a file.
+  bool Save(const std::filesystem::path& path) const;
+
+  /// \brief Loads the cheat table from a file.
+  bool Load(const std::filesystem::path& path);
 
   /// \brief Periodically called to synchronize values with the target process.
   /// \details Reads current values and reapplies frozen values.
