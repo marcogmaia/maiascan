@@ -14,6 +14,7 @@ target_sources(
         widgets/pointer_scanner_view.h
         widgets/process_selector_view.h
         widgets/results_table.h
+        widgets/results_table_logic.h
         widgets/scanner_view.h
   PRIVATE
     imgui_extensions.cpp
@@ -22,6 +23,7 @@ target_sources(
     widgets/pointer_scanner_view.cpp
     widgets/process_selector_view.cpp
     widgets/results_table.cpp
+    widgets/results_table_logic.cpp
     widgets/scanner_view.cpp
 )
 
@@ -36,3 +38,14 @@ target_link_libraries(
 )
 
 target_compile_definitions(gui PUBLIC GLFW_INCLUDE_NONE)
+
+add_executable(gui_test widgets/results_table_logic_test.cpp)
+
+target_link_libraries(
+  gui_test
+  PRIVATE
+    gui
+    GTest::gmock_main
+)
+
+gtest_discover_tests(gui_test DISCOVERY_TIMEOUT 60)
