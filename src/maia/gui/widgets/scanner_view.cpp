@@ -237,13 +237,15 @@ void ScannerWidget::Render(const ScanStorage& entries,
     const auto type = entries.value_type;
     bool double_clicked = false;
     ScanValueType new_type = type;
-    table_renderer.Render(entries,
-                          formatter,
-                          type,
-                          show_hex_results_,
-                          selected_index_,
-                          double_clicked,
-                          &new_type);
+
+    ResultsTableState state{
+        .selected_idx = selected_index_,
+        .double_clicked = double_clicked,
+        .out_new_type = &new_type,
+        .out_is_hex = &show_hex_results_,
+    };
+
+    table_renderer.Render(entries, formatter, type, show_hex_results_, state);
 
     if (new_type != type) {
       signals_.reinterpret_type_requested.publish(new_type);

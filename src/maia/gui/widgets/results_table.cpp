@@ -14,12 +14,23 @@
 #include "maia/core/address_formatter.h"
 #include "maia/core/scan_types.h"
 #include "maia/core/value_formatter.h"
+#include "maia/gui/widgets/results_table_logic.h"
 
 namespace maia {
 
+struct ResultsTable::Context {
+  const ScanStorage& data;
+  const AddressFormatter& formatter;
+  ScanValueType value_type;
+  bool is_hex;
+  ResultsTableState& state;
+
+  const std::byte* curr_ptr = nullptr;
+  const std::byte* prev_ptr = nullptr;
+};
+
 namespace {
 
-// Helper to draw formatted values with optional color
 void DrawFormattedValue(std::span<const std::byte> data,
                         ScanValueType type,
                         bool is_hex,
@@ -38,17 +49,22 @@ void ResultsTable::Render(const ScanStorage& data,
                           const AddressFormatter& formatter,
                           ScanValueType value_type,
                           bool is_hex,
-                          int& selected_idx,
-                          bool& double_clicked,
-                          ScanValueType* out_new_type) {
-  // Here we use the clipper because the list may contain millions of results.
-  ImGuiListClipper clipper;
-  clipper.Begin(static_cast<int>(data.addresses.size()));
+                          ResultsTableState& state) {
+  Context ctx{
+      .data = data,
+      .formatter = formatter,
+      .value_type = value_type,
+      .is_hex = is_hex,
+      .state = state,
+      .curr_ptr = data.curr_raw.data(),
+  };
 
-  double_clicked = false;
-  if (out_new_type) {
-    *out_new_type = value_type;
+  if (!data.prev_raw.empty() &&
+      data.prev_raw.size() >= data.addresses.size() * data.stride) {
+    ctx.prev_ptr = data.prev_raw.data();
   }
+
+  state.double_clicked = false;
 
   constexpr int kNumCols = 3;
   if (ImGui::BeginTable("ScanResults",
@@ -60,83 +76,112 @@ void ResultsTable::Render(const ScanStorage& data,
     ImGui::TableSetupColumn("Current");
     ImGui::TableHeadersRow();
 
-    const std::byte* curr_ptr = data.curr_raw.data();
-    const std::byte* prev_ptr = nullptr;
+    RenderContextMenu(ctx);
+    RenderRows(ctx);
 
-    // Validate previous buffer existence/size.
-    if (!data.prev_raw.empty() &&
-        data.prev_raw.size() >= data.addresses.size() * data.stride) {
-      prev_ptr = data.prev_raw.data();
-    }
-
-    // Context Menu for the table
-    if (ImGui::BeginPopupContextWindow("ResultsTableContext")) {
-      if (ImGui::BeginMenu("Reinterpret Results As")) {
-        // ... (type menu)
-        ImGui::EndMenu();
-      }
-      if (ImGui::MenuItem("Show Values as Hex", nullptr, is_hex)) {
-      }
-      ImGui::EndPopup();
-    }
-
-    // Render ONLY visible rows.
-    while (clipper.Step()) {
-      for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-        ImGui::TableNextRow();
-
-        size_t offset = i * data.stride;
-
-        // Address.
-        ImGui::TableSetColumnIndex(0);
-        auto formatted_addr = formatter.Format(data.addresses[i]);
-
-        if (formatted_addr.is_relative) {
-          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-        }
-
-        if (ImGui::Selectable(formatted_addr.text.c_str(),
-                              selected_idx == i,
-                              ImGuiSelectableFlags_SpanAllColumns |
-                                  ImGuiSelectableFlags_AllowDoubleClick)) {
-          selected_idx = i;
-          if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-            double_clicked = true;
-          }
-        }
-
-        if (formatted_addr.is_relative) {
-          ImGui::PopStyleColor();
-        }
-
-        // Previous Value.
-        ImGui::TableSetColumnIndex(1);
-        std::span<const std::byte> prev_span;
-        if (prev_ptr) {
-          prev_span =
-              std::span<const std::byte>(prev_ptr + offset, data.stride);
-          DrawFormattedValue(prev_span, value_type, is_hex);
-        } else {
-          ImGui::TextDisabled("-");
-        }
-
-        // Current Value.
-        ImGui::TableSetColumnIndex(2);
-        if (offset + data.stride <= data.curr_raw.size()) {
-          std::span<const std::byte> curr_span(curr_ptr + offset, data.stride);
-
-          std::optional<ImVec4> val_color;
-          if (!prev_span.empty() && !std::ranges::equal(curr_span, prev_span)) {
-            val_color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);  // Red
-          }
-
-          DrawFormattedValue(curr_span, value_type, is_hex, val_color);
-        }
-      }
-    }
     ImGui::EndTable();
   }
+}
+
+void ResultsTable::RenderContextMenu(Context& ctx) {
+  if (!ImGui::BeginPopupContextWindow("ResultsTableContext")) {
+    return;
+  }
+
+  RenderReinterpretMenu(ctx);
+  RenderHexToggle(ctx);
+
+  ImGui::EndPopup();
+}
+
+void ResultsTable::RenderReinterpretMenu(Context& ctx) {
+  if (!ImGui::BeginMenu("Reinterpret Results As")) {
+    return;
+  }
+
+  for (const auto type : kAllScanValueTypes) {
+    const bool selected = (type == ctx.value_type);
+    if (ImGui::MenuItem(ValueFormatter::GetLabel(type), nullptr, selected)) {
+      if (ctx.state.out_new_type) {
+        *ctx.state.out_new_type = type;
+      }
+    }
+  }
+  ImGui::EndMenu();
+}
+
+void ResultsTable::RenderHexToggle(Context& ctx) {
+  if (ImGui::MenuItem("Show Values as Hex", nullptr, ctx.is_hex)) {
+    if (ctx.state.out_is_hex) {
+      *ctx.state.out_is_hex = !ctx.is_hex;
+    }
+  }
+}
+
+void ResultsTable::RenderRows(Context& ctx) {
+  ImGuiListClipper clipper;
+  clipper.Begin(static_cast<int>(ctx.data.addresses.size()));
+
+  while (clipper.Step()) {
+    for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+      RenderSingleRow(i, ctx);
+    }
+  }
   clipper.End();
+}
+
+void ResultsTable::RenderSingleRow(int i, Context& ctx) {
+  ImGui::TableNextRow();
+
+  const size_t offset = i * ctx.data.stride;
+  const uintptr_t address = ctx.data.addresses[i];
+
+  // Address Column
+  ImGui::TableSetColumnIndex(0);
+  const auto formatted = ctx.formatter.Format(address);
+
+  if (formatted.is_relative) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+  }
+
+  const bool is_selected = (ctx.state.selected_idx == i);
+  if (ImGui::Selectable(formatted.text.c_str(),
+                        is_selected,
+                        ImGuiSelectableFlags_SpanAllColumns |
+                            ImGuiSelectableFlags_AllowDoubleClick)) {
+    ctx.state.selected_idx = i;
+    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+      ctx.state.double_clicked = true;
+    }
+  }
+
+  if (formatted.is_relative) {
+    ImGui::PopStyleColor();
+  }
+
+  // Previous Column
+  ImGui::TableSetColumnIndex(1);
+  std::span<const std::byte> prev_span;
+  if (ctx.prev_ptr) {
+    prev_span = {ctx.prev_ptr + offset, ctx.data.stride};
+    DrawFormattedValue(prev_span, ctx.value_type, ctx.is_hex);
+  } else {
+    ImGui::TextDisabled("-");
+  }
+
+  // Current Column
+  ImGui::TableSetColumnIndex(2);
+  if (offset + ctx.data.stride <= ctx.data.curr_raw.size()) {
+    std::span<const std::byte> curr_span{ctx.curr_ptr + offset,
+                                         ctx.data.stride};
+
+    std::optional<ImVec4> val_color;
+    if (ResultsTableLogic::ShouldHighlightValue(curr_span, prev_span)) {
+      val_color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+    DrawFormattedValue(curr_span, ctx.value_type, ctx.is_hex, val_color);
+  }
 }
 
 }  // namespace maia
