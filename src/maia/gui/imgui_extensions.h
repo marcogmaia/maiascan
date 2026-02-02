@@ -16,6 +16,9 @@ class GuiSystem {
   // Sets up GLFW, creates a window, initializes OpenGL loader, and configures
   // ImGui style and backends. Check IsValid() after construction to ensure
   // success.
+  //
+  // If icon_resource_id is provided (> 0), it will be set as the window icon
+  // on supported platforms (Windows).
   GuiSystem();
 
   // Shuts down the windowing system and ImGui context.
@@ -57,6 +60,9 @@ class GuiSystem {
   // b: Blue component (0.0 - 1.0)
   // a: Alpha component (0.0 - 1.0)
   void ClearWindow(float r, float g, float b, float a = 1.0f);
+
+  // Sets the window icon from a Windows Resource ID (Win32 only).
+  void SetWindowIcon(int resource_id);
 
   // Gets the raw window handle.
   // Returns void* pointer to the underlying window handle (GLFWwindow*).

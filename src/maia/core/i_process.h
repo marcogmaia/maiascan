@@ -1,5 +1,30 @@
 // Copyright (c) Maia
 
+/// \file i_process.h
+/// \brief Interface abstraction for a target process.
+///
+/// \details
+/// **Role**: Defines the contract for interacting with a target process,
+/// decoupling core business logic (like scanning) from OS-specific
+/// implementations.
+///
+/// **Architecture**:
+///    - **Strategy Pattern**: Allows swapping the underlying process access
+///    mechanism
+///      (e.g., local Windows process, remote network process, mock for testing)
+///      without changing the scanning logic.
+///
+/// **Thread Safety**:
+///    - Implementations must ensure that `ReadMemory` and constant getters are
+///    thread-safe.
+///    - State-modifying methods (`Suspend`, `Resume`, `WriteMemory`) should be
+///    synchronized by the caller if needed.
+///
+/// **Key Interactions**:
+///    - Implemented by `maia::Process` (Standard) and `maia::FakeProcess`
+///    (Tests).
+///    - Consumed by `Scanner`, `CheatTableModel`, and `PointerScannerModel`.
+
 #pragma once
 
 #include <cstdint>

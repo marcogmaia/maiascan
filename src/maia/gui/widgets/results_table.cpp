@@ -3,9 +3,7 @@
 #include "maia/gui/widgets/results_table.h"
 
 #include <algorithm>
-#include <concepts>
 #include <cstring>
-#include <format>
 #include <optional>
 #include <span>
 #include <string>
@@ -37,17 +35,20 @@ void DrawFormattedValue(std::span<const std::byte> data,
 }  // namespace
 
 void ResultsTable::Render(const ScanStorage& data,
-
                           const AddressFormatter& formatter,
                           ScanValueType value_type,
                           bool is_hex,
                           int& selected_idx,
-                          bool& double_clicked) {
+                          bool& double_clicked,
+                          ScanValueType* out_new_type) {
   // Here we use the clipper because the list may contain millions of results.
   ImGuiListClipper clipper;
   clipper.Begin(static_cast<int>(data.addresses.size()));
 
   double_clicked = false;
+  if (out_new_type) {
+    *out_new_type = value_type;
+  }
 
   constexpr int kNumCols = 3;
   if (ImGui::BeginTable("ScanResults",
@@ -66,6 +67,17 @@ void ResultsTable::Render(const ScanStorage& data,
     if (!data.prev_raw.empty() &&
         data.prev_raw.size() >= data.addresses.size() * data.stride) {
       prev_ptr = data.prev_raw.data();
+    }
+
+    // Context Menu for the table
+    if (ImGui::BeginPopupContextWindow("ResultsTableContext")) {
+      if (ImGui::BeginMenu("Reinterpret Results As")) {
+        // ... (type menu)
+        ImGui::EndMenu();
+      }
+      if (ImGui::MenuItem("Show Values as Hex", nullptr, is_hex)) {
+      }
+      ImGui::EndPopup();
     }
 
     // Render ONLY visible rows.

@@ -72,6 +72,30 @@ class ScanSession {
     storage_.stride = 0;
   }
 
+  /// \brief Reinterprets current results with a new data type.
+  /// \details This updates the storage metadata. Values must be refreshed
+  /// separately.
+  void ChangeType(ScanValueType new_type, size_t new_stride) {
+    std::unique_lock lock(mutex_);
+    storage_.value_type = new_type;
+    storage_.stride = new_stride;
+
+    // Ensure buffers are the correct size for the new type to avoid OOB
+    // access in the scanner.
+    const size_t new_size = storage_.addresses.size() * new_stride;
+    storage_.curr_raw.assign(new_size, std::byte{0});
+    storage_.prev_raw.assign(new_size, std::byte{0});
+
+    config_.value_type = new_type;
+  }
+
+  /// \brief Overwrites previous values with current values.
+  /// \details Resets the baseline for relative comparisons (Changed/Unchanged).
+  void ResetPreviousToCurrent() {
+    std::unique_lock lock(mutex_);
+    storage_.prev_raw = storage_.curr_raw;
+  }
+
   /// \brief Returns the number of results in the session.
   [[nodiscard]] size_t GetResultCount() const {
     std::shared_lock lock(mutex_);

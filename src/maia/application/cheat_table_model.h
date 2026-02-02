@@ -1,5 +1,29 @@
 // Copyright (c) Maia
 
+/// \file cheat_table_model.h
+/// \brief Manages the persistent state of user-created cheat entries.
+///
+/// \details
+/// **Role**: The persistent data store for addresses the user wants to keep
+/// track of. Handles freezing (locking) values and saving/loading tables.
+///
+/// **Architecture**:
+///    - **Copy-On-Write (COW)**: The list of entries is stored in a
+///    `std::atomic<std::shared_ptr>>`.
+///      This allows the UI to render a snapshot while the background thread
+///      updates values without lock contention or race conditions.
+///    - **Background Worker**: Runs a dedicated thread to periodically refresh
+///    values
+///      from the process and re-apply "frozen" values.
+///
+/// **Thread Safety**:
+///    - Thread-safe by design using COW and internal mutexes for individual
+///    entry data.
+///
+/// **Key Interactions**:
+///    - Consumed by `CheatTablePresenter`.
+///    - Listens to `ProcessModel`.
+
 #pragma once
 
 #include <atomic>
@@ -60,6 +84,12 @@ class CheatTableEntryData {
   /// \brief Returns the time point when the value last changed.
   std::chrono::steady_clock::time_point GetLastChangeTime() const;
 
+  /// \brief Returns the last resolved address for this entry.
+  MemoryAddress GetResolvedAddress() const;
+
+  /// \brief Sets the last resolved address for this entry.
+  void SetResolvedAddress(MemoryAddress address);
+
  private:
   mutable std::mutex mutex_;
   std::vector<std::byte> value_;
@@ -67,6 +97,7 @@ class CheatTableEntryData {
   std::vector<std::byte> frozen_value_;
   bool is_frozen_{false};
   std::chrono::steady_clock::time_point last_change_time_;
+  MemoryAddress resolved_address_{0};
 };
 
 /// \brief Represents an entry in the cheat table.
@@ -74,27 +105,30 @@ struct CheatTableEntry {
   // For static addresses: direct memory address
   MemoryAddress address;
 
-  // For pointer chains: base address of the chain (e.g., module base + offset)
+  // For dynamic addresses: base address of the chain (e.g., module base +
+  // offset)
   MemoryAddress pointer_base = 0;
 
-  // For pointer chains: module name if base is relative to a module
+  // For dynamic addresses: module name if base is relative to a module
   std::string pointer_module;
 
-  // For pointer chains: offset from module base to the base address
+  // For dynamic addresses: offset from module base to the base address
   uint64_t pointer_module_offset = 0;
 
-  // For pointer chains: offsets to follow from base to final address
+  // For dynamic addresses: offsets to follow from base to final address
   // Example: [0x10, 0x48] means [[base]+0x10]+0x48
   std::vector<int64_t> pointer_offsets;
 
   // Type and metadata
   ScanValueType type;
   std::string description;
+  bool show_as_hex = false;
   std::shared_ptr<CheatTableEntryData> data;
 
-  /// \brief Check if this entry represents a pointer chain.
-  [[nodiscard]] bool IsPointerChain() const {
-    return pointer_base != 0 || !pointer_offsets.empty();
+  /// \brief Check if this entry requires dynamic resolution.
+  [[nodiscard]] bool IsDynamicAddress() const {
+    return !pointer_module.empty() || pointer_base != 0 ||
+           !pointer_offsets.empty();
   }
 };
 
@@ -148,6 +182,12 @@ class CheatTableModel {
   /// \brief Updates the description of an entry.
   void UpdateEntryDescription(size_t index, const std::string& description);
 
+  /// \brief Toggles the hex display mode of an entry.
+  void SetShowAsHex(size_t index, bool show_as_hex);
+
+  /// \brief Changes the type of an entry and resizes its data buffer.
+  void ChangeEntryType(size_t index, ScanValueType new_type);
+
   /// \brief Toggles the frozen state of an entry.
   void ToggleFreeze(size_t index);
 
@@ -186,17 +226,17 @@ class CheatTableModel {
   void AutoUpdateLoop(std::stop_token stop_token);
   void WriteMemory(size_t index, const std::vector<std::byte>& data);
 
-  /// \brief Resolves a pointer chain to get the final memory address.
-  /// \param entry The cheat table entry containing the pointer chain.
+  /// \brief Resolves a dynamic entry to get the final memory address.
+  /// \param entry The cheat table entry containing the address info.
   /// \return The resolved address, or 0 if resolution failed.
-  [[nodiscard]] MemoryAddress ResolvePointerChain(
+  [[nodiscard]] MemoryAddress ResolveAddress(
       const CheatTableEntry& entry) const;
 
-  /// \brief Reads memory for an entry, handling both static and pointer chain.
+  /// \brief Reads memory for an entry, handling both static and dynamic.
   [[nodiscard]] bool ReadEntryValue(const CheatTableEntry& entry,
                                     std::span<std::byte> out_buffer);
 
-  /// \brief Writes memory for an entry, handling both static and pointer chain.
+  /// \brief Writes memory for an entry, handling both static and dynamic.
   [[nodiscard]] bool WriteEntryValue(const CheatTableEntry& entry,
                                      std::span<const std::byte> data);
 

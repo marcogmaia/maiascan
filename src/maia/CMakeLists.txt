@@ -30,7 +30,22 @@ target_link_libraries(
     libassert::assert
 )
 
-add_executable(maiascan main.cpp)
+if(MSVC)
+  target_compile_definitions(
+    base
+    PUBLIC
+      WIN32_LEAN_AND_MEAN
+      NOMINMAX
+  )
+endif()
+
+add_executable(maiascan)
+target_sources(
+  maiascan
+  PRIVATE
+    main.cpp
+    assets/maiascan.rc
+)
 target_link_libraries(
   maiascan
   PRIVATE

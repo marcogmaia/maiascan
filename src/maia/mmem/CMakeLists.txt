@@ -13,6 +13,4 @@ target_sources(
     process_utils.cpp
 )
 
-target_link_libraries(mmem PUBLIC base)
-
 target_compile_definitions(mmem PUBLIC NOMINMAX)

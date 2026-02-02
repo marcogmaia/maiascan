@@ -54,6 +54,7 @@ target_link_libraries(
 add_executable(
   core_test
   address_formatter_test.cpp
+  formatter_test.cpp
   pattern_parser_test.cpp
   pointer_map_test.cpp
   pointer_scanner_test.cpp
