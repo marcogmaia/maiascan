@@ -40,7 +40,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CheatTableEntry,
                                    pointer_module_offset,
                                    pointer_offsets,
                                    type,
-                                   description)
+                                   description,
+                                   show_as_hex)
 
 void CheatTableEntryData::Resize(size_t size) {
   std::scoped_lock lock(mutex_);
@@ -111,6 +112,16 @@ std::chrono::steady_clock::time_point CheatTableEntryData::GetLastChangeTime()
   return last_change_time_;
 }
 
+MemoryAddress CheatTableEntryData::GetResolvedAddress() const {
+  std::scoped_lock lock(mutex_);
+  return resolved_address_;
+}
+
+void CheatTableEntryData::SetResolvedAddress(MemoryAddress address) {
+  std::scoped_lock lock(mutex_);
+  resolved_address_ = address;
+}
+
 CheatTableModel::CheatTableModel(std::unique_ptr<core::ITaskRunner> task_runner)
     : entries_(std::make_shared<std::vector<CheatTableEntry>>()),
       task_runner_(std::move(task_runner)) {
@@ -176,7 +187,7 @@ void CheatTableModel::AddPointerChainEntry(MemoryAddress base_address,
       std::make_shared<std::vector<CheatTableEntry>>(*current_snapshot);
 
   CheatTableEntry entry;
-  // For pointer chains, address is 0 (will be resolved dynamically)
+  // For dynamic addresses, address is 0 (will be resolved dynamically)
   entry.address = 0;
   entry.pointer_base = base_address;
   entry.pointer_offsets = offsets;
@@ -189,7 +200,7 @@ void CheatTableModel::AddPointerChainEntry(MemoryAddress base_address,
   const size_t entry_size = size > 0 ? size : GetSizeForType(type);
   entry.data->Resize(entry_size);
 
-  // Initial read - resolve the pointer chain
+  // Initial read - resolve the dynamic address
   if (active_process_) {
     std::vector<std::byte> initial_value(entry_size);
     if (ReadEntryValue(entry, initial_value)) {
@@ -225,6 +236,51 @@ void CheatTableModel::UpdateEntryDescription(size_t index,
     (*new_entries)[index].description = description;
     entries_.store(std::move(new_entries));
   }
+}
+
+void CheatTableModel::SetShowAsHex(size_t index, bool show_as_hex) {
+  std::scoped_lock lock(mutex_);
+  auto current_snapshot = entries_.load();
+  if (index < current_snapshot->size()) {
+    auto new_entries =
+        std::make_shared<std::vector<CheatTableEntry>>(*current_snapshot);
+    (*new_entries)[index].show_as_hex = show_as_hex;
+    entries_.store(std::move(new_entries));
+    signals_.table_changed.publish();
+  }
+}
+
+void CheatTableModel::ChangeEntryType(size_t index, ScanValueType new_type) {
+  std::scoped_lock lock(mutex_);
+  auto current_snapshot = entries_.load();
+  if (index >= current_snapshot->size()) {
+    return;
+  }
+
+  if ((*current_snapshot)[index].type == new_type) {
+    return;
+  }
+
+  auto new_entries =
+      std::make_shared<std::vector<CheatTableEntry>>(*current_snapshot);
+  auto& entry = (*new_entries)[index];
+
+  entry.type = new_type;
+  const size_t new_size = GetSizeForType(new_type);
+  if (new_size > 0) {
+    entry.data->Resize(new_size);
+
+    // Immediate re-read to populate new size
+    if (active_process_) {
+      std::vector<std::byte> buffer(new_size);
+      if (ReadEntryValue(entry, buffer)) {
+        entry.data->UpdateFromProcess(buffer);
+      }
+    }
+  }
+
+  entries_.store(std::move(new_entries));
+  signals_.table_changed.publish();
 }
 
 void CheatTableModel::ToggleFreeze(size_t index) {
@@ -396,7 +452,7 @@ void CheatTableModel::UpdateValues() {
         entry.data->UpdateFromProcess(frozen_val);
       } else {
         MemoryAddress addr =
-            entry.IsPointerChain() ? ResolvePointerChain(entry) : entry.address;
+            entry.IsDynamicAddress() ? ResolveAddress(entry) : entry.address;
         LogWarning("Failed to write frozen value to 0x{:X}", addr);
       }
     } else {
@@ -420,7 +476,7 @@ void CheatTableModel::AutoUpdateLoop(std::stop_token stop_token) {
   }
 }
 
-MemoryAddress CheatTableModel::ResolvePointerChain(
+MemoryAddress CheatTableModel::ResolveAddress(
     const CheatTableEntry& entry) const {
   if (!active_process_ || !active_process_->IsProcessValid()) {
     return 0;
@@ -482,13 +538,15 @@ bool CheatTableModel::ReadEntryValue(const CheatTableEntry& entry,
   }
 
   MemoryAddress addr;
-  if (entry.IsPointerChain()) {
-    addr = ResolvePointerChain(entry);
+  if (entry.IsDynamicAddress()) {
+    addr = ResolveAddress(entry);
+    entry.data->SetResolvedAddress(addr);
     if (addr == 0) {
-      return false;  // Failed to resolve pointer chain
+      return false;  // Failed to resolve dynamic address
     }
   } else {
     addr = entry.address;
+    entry.data->SetResolvedAddress(addr);
   }
 
   return active_process_->ReadMemory({&addr, 1}, out_buffer.size(), out_buffer);
@@ -501,13 +559,15 @@ bool CheatTableModel::WriteEntryValue(const CheatTableEntry& entry,
   }
 
   MemoryAddress addr;
-  if (entry.IsPointerChain()) {
-    addr = ResolvePointerChain(entry);
+  if (entry.IsDynamicAddress()) {
+    addr = ResolveAddress(entry);
+    entry.data->SetResolvedAddress(addr);
     if (addr == 0) {
-      return false;  // Failed to resolve pointer chain
+      return false;  // Failed to resolve dynamic address
     }
   } else {
     addr = entry.address;
+    entry.data->SetResolvedAddress(addr);
   }
 
   return active_process_->WriteMemory(addr, data);

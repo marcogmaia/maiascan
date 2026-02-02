@@ -1,5 +1,27 @@
 // Copyright (c) Maia
 
+/// \file process_model.h
+/// \brief Manages the lifecycle of the active target process.
+///
+/// \details
+/// **Role**: The single source of truth for "which process is currently being
+/// hacked."
+///
+/// **Architecture**:
+///    - **Event Hub**: Centralizes process attachment/detachment logic.
+///    - **Observer Pattern**: Emits the `ActiveProcessChanged` signal via EnTT.
+///
+/// **Thread Safety**:
+///    - Not inherently thread-safe. Should primarily be accessed from the
+///    main/UI thread.
+///
+/// **Key Interactions**:
+///    - **Driven by**: `ProcessSelectorPresenter`.
+///    - **Listened to by**: `ScanResultModel`, `CheatTableModel`,
+///    `PointerScannerModel`.
+///      When this model changes the active process, all other models reset
+///      their state.
+
 #pragma once
 
 #include "maia/core/process.h"

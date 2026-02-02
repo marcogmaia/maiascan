@@ -1,5 +1,31 @@
 // Copyright (c) Maia
 
+/// \file mmem.h
+/// \brief Low-level functional API for cross-platform memory manipulation.
+///
+/// \details
+/// **Role**: Serves as the Hardware Abstraction Layer (HAL) for memory
+/// operations. It provides a unified, functional interface for OS-specific
+/// tasks like process enumeration, virtual memory reading/writing, and module
+/// inspection.
+///
+/// **Architecture**:
+///    - **Facade**: Hides platform-specific implementations (WinAPI, ptrace)
+///    behind a common C-style API.
+///    - **Stateless**: Functions are pure or operate on explicit descriptors;
+///    no global state is maintained.
+///
+/// **Thread Safety**:
+///    - Functions are generally thread-safe unless they modify shared process
+///    state (e.g., Suspend/Resume).
+///    - Read/Write operations on foreign processes are thread-safe at the OS
+///    handle level.
+///
+/// **Key Interactions**:
+///    - Used by `maia::Process` (implementation of `IProcess`) to execute
+///    syscalls.
+///    - Used by `ProcessSelectorPresenter` for process enumeration.
+
 #pragma once
 
 #include <cstddef>

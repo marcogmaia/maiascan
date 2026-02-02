@@ -17,6 +17,8 @@ class CheatTablePresenter {
   void OnTableChanged();
   void OnFreezeToggled(size_t index);
   void OnDescriptionChanged(size_t index, std::string new_desc);
+  void OnHexDisplayToggled(size_t index, bool show_as_hex);
+  void OnTypeChangeRequested(size_t index, ScanValueType new_type);
   void OnValueChanged(size_t index, std::string new_val);
   void OnDeleteRequested(size_t index);
   void OnSaveRequested();

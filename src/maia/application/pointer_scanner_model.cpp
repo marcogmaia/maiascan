@@ -3,7 +3,6 @@
 #include "maia/application/pointer_scanner_model.h"
 
 #include <chrono>
-#include <thread>
 
 #include "maia/logging.h"
 
@@ -400,7 +399,7 @@ void PointerScannerModel::ApplyPendingResult() {
 
         std::scoped_lock lock(mutex_);
         if (map) {
-          pointer_map_ = std::move(*map);
+          pointer_map_ = std::move(map);
           LogInfo("Pointer map generated: {} entries",
                   pointer_map_->GetEntryCount());
           signals_.map_generated.publish(true, pointer_map_->GetEntryCount());
@@ -418,9 +417,15 @@ void PointerScannerModel::ApplyPendingResult() {
         progress_ = 1.0f;
         scan_progress_ = 1.0f;
 
+        // Publish result first so listeners receive the paths before we move
+        // them
+        signals_.scan_complete.publish(result);
+        signals_.paths_updated.publish();
+        signals_.progress_updated.publish(1.0f, current_operation_);
+
         {
           std::scoped_lock lock(mutex_);
-          paths_ = std::move(result.paths);
+          paths_ = std::move(result).paths;
         }
 
         if (result.success) {
@@ -430,10 +435,6 @@ void PointerScannerModel::ApplyPendingResult() {
         } else {
           LogWarning("Pointer scan failed: {}", result.error_message);
         }
-
-        signals_.scan_complete.publish(result);
-        signals_.paths_updated.publish();
-        signals_.progress_updated.publish(1.0f, current_operation_);
       });
 
   // Handle validation result

@@ -24,6 +24,8 @@ CheatTablePresenter::CheatTablePresenter(CheatTableModel& model,
   // View signals -> Presenter handlers
   Connect(connections_, view_.sinks().FreezeToggled(),      this, Slot<&CheatTablePresenter::OnFreezeToggled>);
   Connect(connections_, view_.sinks().DescriptionChanged(), this, Slot<&CheatTablePresenter::OnDescriptionChanged>);
+  Connect(connections_, view_.sinks().HexDisplayToggled(),  this, Slot<&CheatTablePresenter::OnHexDisplayToggled>);
+  Connect(connections_, view_.sinks().TypeChangeRequested(), this, Slot<&CheatTablePresenter::OnTypeChangeRequested>);
   Connect(connections_, view_.sinks().ValueChanged(),       this, Slot<&CheatTablePresenter::OnValueChanged>);
   Connect(connections_, view_.sinks().DeleteRequested(),    this, Slot<&CheatTablePresenter::OnDeleteRequested>);
   Connect(connections_, view_.sinks().SaveRequested(),      this, Slot<&CheatTablePresenter::OnSaveRequested>);
@@ -48,6 +50,15 @@ void CheatTablePresenter::OnFreezeToggled(size_t index) {
 void CheatTablePresenter::OnDescriptionChanged(size_t index,
                                                std::string new_desc) {
   model_.UpdateEntryDescription(index, new_desc);
+}
+
+void CheatTablePresenter::OnHexDisplayToggled(size_t index, bool show_as_hex) {
+  model_.SetShowAsHex(index, show_as_hex);
+}
+
+void CheatTablePresenter::OnTypeChangeRequested(size_t index,
+                                                ScanValueType new_type) {
+  model_.ChangeEntryType(index, new_type);
 }
 
 void CheatTablePresenter::OnValueChanged(size_t index, std::string new_val) {

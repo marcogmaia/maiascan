@@ -2,6 +2,10 @@
 
 #include "maia/gui/imgui_extensions.h"
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 #include <expected>
 
 #include <GLFW/glfw3.h>
@@ -10,6 +14,12 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#ifdef _WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
+
+#include "maia/assets/resource.h"
 #include "maia/logging.h"
 
 namespace maia {
@@ -21,6 +31,10 @@ void glfw_error_callback(int error, const char* description) {
 }
 
 std::expected<GLFWwindow*, int> InitGlfw() {
+#ifdef _WIN32
+  SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+#endif
+
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit()) {
     return std::unexpected(1);
@@ -69,6 +83,8 @@ GuiSystem::GuiSystem() {
   }
   window_handle_ = *res;
   GLFWwindow* window = static_cast<GLFWwindow*>(window_handle_);
+
+  SetWindowIcon(IDI_APP_ICON);
 
   // Setup Dear ImGui context
   IMGUI_CHECKVERSION();
@@ -165,6 +181,33 @@ void GuiSystem::SwapBuffers() {
   if (IsValid()) {
     glfwSwapBuffers(static_cast<GLFWwindow*>(window_handle_));
   }
+}
+
+void GuiSystem::SetWindowIcon(int resource_id) {
+#ifdef _WIN32
+  if (!IsValid()) {
+    return;
+  }
+  HWND hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window_handle_));
+  HINSTANCE hInst = GetModuleHandle(nullptr);
+
+  // Load the icon for both big and small sizes
+  HICON hIconBig = (HICON)LoadImage(
+      hInst, MAKEINTRESOURCE(resource_id), IMAGE_ICON, 32, 32, LR_SHARED);
+  HICON hIconSmall = (HICON)LoadImage(
+      hInst, MAKEINTRESOURCE(resource_id), IMAGE_ICON, 16, 16, LR_SHARED);
+
+  if (hIconBig) {
+    SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+  }
+  if (hIconSmall) {
+    SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+  }
+
+  if (!hIconBig && !hIconSmall) {
+    LogWarning("Failed to load icon from resource ID {}", resource_id);
+  }
+#endif
 }
 
 void GuiSystem::ClearWindow(float r, float g, float b, float a) {

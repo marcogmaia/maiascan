@@ -67,6 +67,11 @@ class ScannerWidget {
     /// \param type The value type of the clicked entry.
     entt::sigh<void(int, ScanValueType)> entry_double_clicked;
 
+    /// \brief Emitted when the user requests to reinterpret the current scan
+    /// results as a different type.
+    /// \param new_type The target value type.
+    entt::sigh<void(ScanValueType)> reinterpret_type_requested;
+
     /// \brief Emitted when the user clicks the "Cancel" button.
     entt::sigh<void()> cancel_scan_pressed;
   };
@@ -83,6 +88,7 @@ class ScannerWidget {
     auto PauseWhileScanningChanged() {return entt::sink(view.signals_.pause_while_scanning_changed);}
     auto FastScanChanged() {return entt::sink(view.signals_.fast_scan_changed);}
     auto EntryDoubleClicked() {return entt::sink(view.signals_.entry_double_clicked);}
+    auto ReinterpretTypeRequested() {return entt::sink(view.signals_.reinterpret_type_requested);}
     auto CancelScanPressed() {return entt::sink(view.signals_.cancel_scan_pressed);}
   };
 
@@ -100,6 +106,7 @@ class ScannerWidget {
 
   int selected_index_ = 0;
   bool is_hex_input_ = false;
+  bool show_hex_results_ = false;
   bool auto_update_enabled_ = false;
   bool pause_while_scanning_enabled_ = false;
   bool fast_scan_enabled_ = true;

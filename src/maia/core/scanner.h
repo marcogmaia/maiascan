@@ -1,5 +1,28 @@
 // Copyright (c) Maia
 
+/// \file scanner.h
+/// \brief Stateless memory scanning engine.
+///
+/// \details
+/// **Role**: The core computational engine that searches memory. It takes a
+/// process and a configuration, performs the search, and returns results.
+///
+/// **Architecture**:
+///    - **Stateless Service**: Does not retain state between calls. Each
+///    `FirstScan`
+///      or `NextScan` is an independent operation.
+///    - **Functional**: Designed to be easily wrapped in async tasks or used
+///    directly.
+///
+/// **Thread Safety**:
+///    - The class itself is immutable and thread-safe.
+///    - Can be instantiated on any thread.
+///
+/// **Key Interactions**:
+///    - Orchestrated by `ScanResultModel`.
+///    - Uses `IProcess` to read memory.
+///    - Uses `SimdScanner` (internal) for optimized SIMD pattern matching.
+
 #pragma once
 
 #include <cstddef>

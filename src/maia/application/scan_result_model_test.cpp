@@ -517,5 +517,23 @@ TEST_F(ScanResultModelTest, CommittedConfigMatchesScanTimeSettings) {
          "value changed mid-scan (99)";
 }
 
+TEST_F(ScanResultModelTest, NextScanAfterChangeTypeShouldNotCrash) {
+  WriteValue<uint32_t>(100, 42);
+  PerformFirstScan<uint32_t>(ScanComparison::kExactValue, 42);
+  VerifyAddressCount(1);
+
+  // Change type to uint16
+  model_->ChangeResultType(ScanValueType::kUInt16);
+  model_->SetTargetScanValue(
+      {});  // Avoid validation failure due to old 4-byte value
+
+  // This next scan uses previous values. If the previous values buffer
+  // wasn't resized correctly during ChangeResultType, this will crash.
+  PerformNextScan<uint16_t>(ScanComparison::kChanged);
+
+  // Implicit success if we reach here without crash
+  SUCCEED();
+}
+
 }  // namespace
 }  // namespace maia

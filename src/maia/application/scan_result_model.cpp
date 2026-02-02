@@ -186,6 +186,27 @@ void ScanResultModel::UpdateCurrentValues() {
   signals_.memory_changed.publish(session_->GetStorageUnsafe());
 }
 
+void ScanResultModel::ChangeResultType(ScanValueType new_type) {
+  if (is_scanning_.load()) {
+    return;
+  }
+
+  size_t new_stride = GetSizeForType(new_type);
+  if (new_stride == 0) {
+    new_stride = 1;
+  }
+
+  session_->ChangeType(new_type, new_stride);
+  scan_value_type_ = new_type;
+
+  // Repopulate with new values immediately
+  UpdateCurrentValues();
+
+  // Reset the previous baseline so relative scans (Changed/Unchanged)
+  // start from this point.
+  session_->ResetPreviousToCurrent();
+}
+
 void ScanResultModel::SetActiveProcess(IProcess* process) {
   std::scoped_lock lock(mutex_);
   if (!CanScan(process)) {

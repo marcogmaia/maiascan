@@ -1,5 +1,32 @@
 // Copyright (c) Maia
 
+/// \file pointer_scanner_model.h
+/// \brief Manages the multi-stage pointer scanning workflow.
+///
+/// \details
+/// **Role**: Controls the complex workflow of finding static pointer paths to a
+/// dynamic address.
+///
+/// **Workflow**:
+///    1. **Pointer Map Generation**: Snapshots the entire process memory
+///    layout.
+///    2. **Path Finding**: Searches the graph for paths from static bases to
+///    the target.
+///    3. **Validation**: verifies paths against current process state.
+///
+/// **Architecture**:
+///    - **Async State Machine**: Tracks multiple states (Generating, Scanning,
+///    Validating).
+///    - **Heavy Computation**: Most operations are offloaded to `std::async` or
+///    `std::jthread`.
+///
+/// **Thread Safety**:
+///    - Uses atomic progress indicators and mutex-protected result storage.
+///
+/// **Key Interactions**:
+///    - Uses `core::PointerScanner` and `core::PointerMap`.
+///    - Consumed by `PointerScannerPresenter`.
+
 #pragma once
 
 #include <atomic>

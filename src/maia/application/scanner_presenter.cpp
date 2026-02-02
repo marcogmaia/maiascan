@@ -40,11 +40,12 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
   Connect(connections_, scanner_widget_.sinks().ScanComparisonSelected(), &scan_result_model_, Slot<&ScanResultModel::SetScanComparison>);
   Connect(connections_, scanner_widget_.sinks().TargetValueSelected(), &scan_result_model_, Slot<&ScanResultModel::SetTargetScanPattern>);
   Connect(connections_, scanner_widget_.sinks().CancelScanPressed(), &scan_result_model_, Slot<&ScanResultModel::CancelScan>);
-  Connect(connections_, scanner_widget_.sinks().ValueTypeSelected(), &scan_result_model_, Slot<&ScanResultModel::SetScanValueType>);
+  Connect(connections_, scanner_widget_.sinks().ValueTypeSelected(), &scan_result_model_, Slot<&ScanResultModel::ChangeResultType>);
   Connect(connections_, scanner_widget_.sinks().AutoUpdateChanged(), this, Slot<&ScannerPresenter::OnAutoUpdateChanged>);
   Connect(connections_, scanner_widget_.sinks().PauseWhileScanningChanged(), this, Slot<&ScannerPresenter::OnPauseWhileScanningChanged>);
   Connect(connections_, scanner_widget_.sinks().FastScanChanged(), this, Slot<&ScannerPresenter::OnFastScanChanged>);
   Connect(connections_, scanner_widget_.sinks().EntryDoubleClicked(), this, Slot<&ScannerPresenter::OnEntryDoubleClicked>);
+  Connect(connections_, scanner_widget_.sinks().ReinterpretTypeRequested(), &scan_result_model_, Slot<&ScanResultModel::ChangeResultType>);
 
   // Register Global Hotkeys using cross-platform API
   using Key = KeyCode;

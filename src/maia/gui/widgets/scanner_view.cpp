@@ -236,12 +236,25 @@ void ScannerWidget::Render(const ScanStorage& entries,
     ResultsTable table_renderer;
     const auto type = entries.value_type;
     bool double_clicked = false;
+    ScanValueType new_type = type;
     table_renderer.Render(entries,
                           formatter,
                           type,
-                          is_hex_input_,
+                          show_hex_results_,
                           selected_index_,
-                          double_clicked);
+                          double_clicked,
+                          &new_type);
+
+    if (new_type != type) {
+      signals_.reinterpret_type_requested.publish(new_type);
+      // Synchronize the combo box index
+      for (size_t i = 0; i < kAllScanValueTypes.size(); ++i) {
+        if (kAllScanValueTypes[i] == new_type) {
+          current_type_index_ = static_cast<int>(i);
+          break;
+        }
+      }
+    }
 
     if (double_clicked) {
       signals_.entry_double_clicked.publish(selected_index_, type);

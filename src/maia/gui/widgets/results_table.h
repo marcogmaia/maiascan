@@ -18,7 +18,8 @@ class ResultsTable {
               ScanValueType value_type,
               bool is_hex,
               int& selected_idx,
-              bool& double_clicked);
+              bool& double_clicked,
+              ScanValueType* out_new_type = nullptr);
 };
 
 }  // namespace maia
