@@ -397,7 +397,15 @@ ScanResult Scanner::NextScan(IProcess& process,
   }
 
   const size_t count = previous_results.addresses.size();
-  const size_t stride = previous_results.stride;
+  const size_t prev_stride = previous_results.stride;
+
+  // For exact value scans, use the new value's size as the stride if provided.
+  // This allows string/AoB scans to change length between scans.
+  const size_t stride = (config.comparison == ScanComparison::kExactValue &&
+                         !config.value.empty())
+                            ? config.value.size()
+                            : prev_stride;
+
   constexpr size_t kBatchSize = 65536;
 
   ScanStorage filtered_storage;
@@ -442,8 +450,8 @@ ScanResult Scanner::NextScan(IProcess& process,
     }
 
     std::span<const std::byte> prev_span(
-        previous_results.prev_raw.data() + (batch_start * stride),
-        batch_count * stride);
+        previous_results.prev_raw.data() + (batch_start * prev_stride),
+        batch_count * prev_stride);
 
     const auto check_condition = [&](std::span<const std::byte> curr,
                                      std::span<const std::byte> prev,
@@ -538,7 +546,7 @@ ScanResult Scanner::NextScan(IProcess& process,
 
       for (size_t i = 0; i < batch_count; ++i) {
         std::span<const std::byte> val_curr(curr_ptr, stride);
-        std::span<const std::byte> val_prev(prev_ptr, stride);
+        std::span<const std::byte> val_prev(prev_ptr, prev_stride);
 
         if (check_condition(val_curr, val_prev, i)) {
           filtered_storage.addresses.emplace_back(
@@ -546,13 +554,14 @@ ScanResult Scanner::NextScan(IProcess& process,
           filtered_storage.curr_raw.insert(filtered_storage.curr_raw.end(),
                                            val_curr.begin(),
                                            val_curr.end());
+          // Update previous value to current for next scan
           filtered_storage.prev_raw.insert(filtered_storage.prev_raw.end(),
                                            val_curr.begin(),
                                            val_curr.end());
         }
 
         curr_ptr += stride;
-        prev_ptr += stride;
+        prev_ptr += prev_stride;
       }
     }
 

@@ -33,7 +33,7 @@ python scripts/build.py
 To run only the tests using the configured presets:
 
 ```bash
-ctest --preset windows-debug
+ctest --preset windows-release
 ```
 
 ## Usage

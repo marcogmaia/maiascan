@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime
 
 # --- Configuration ---
-DEFAULT_PRESET = "windows-debug" if os.name == "nt" else "linux-debug"
+DEFAULT_PRESET = "windows-release" if os.name == "nt" else "linux-debug"
 
 
 class ProjectContext:
