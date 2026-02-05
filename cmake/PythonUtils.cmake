@@ -53,8 +53,6 @@ function(create_python_venv PYTHON_VERSION)
   # # Set hints for FindPython
   # set(Python_ROOT_DIR "${VENV_DIR}" CACHE PATH "" FORCE)
 
-  # 1. Tell CMake explicitly to use THIS interpreter
-  # FindPython will use this to query sys.base_prefix and find the real headers automatically.
   set(
     Python_EXECUTABLE
     "${PYTHON_VENV_EXECUTABLE}"
@@ -63,11 +61,7 @@ function(create_python_venv PYTHON_VERSION)
     FORCE
   )
 
-  # 2. DO NOT set Python_ROOT_DIR to the venv.
-  # We must allow CMake to "escape" the venv to find the system headers.
-  # If a previous run set this, we unset it to be safe.
   unset(Python_ROOT_DIR CACHE)
-
   set(ENV{VIRTUAL_ENV} "${VENV_DIR}")
 
   # Re-run CMake if pyproject.toml changes
