@@ -1,10 +1,10 @@
 # Copyright (c) Maia
 
 add_subdirectory(application)
-add_subdirectory(console)
 add_subdirectory(core)
 add_subdirectory(gui)
 add_subdirectory(mmem)
+add_subdirectory(python)
 add_subdirectory(tests)
 
 find_package(spdlog CONFIG REQUIRED)
@@ -40,12 +40,14 @@ if(MSVC)
 endif()
 
 add_executable(maiascan)
+
 target_sources(
   maiascan
   PRIVATE
     main.cpp
     assets/maiascan.rc
 )
+
 target_link_libraries(
   maiascan
   PRIVATE

@@ -10,3 +10,4 @@ __pycache__/
 .clangd
 CMakeUserPresets.json
 imgui.ini
+.env

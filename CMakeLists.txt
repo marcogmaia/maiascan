@@ -2,9 +2,10 @@
 
 cmake_minimum_required(VERSION 4.0)
 
-message(STATUS "VCPKG_ROOT: $ENV{VCPKG_ROOT}")
-message(STATUS "CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
-message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+include(PythonUtils)
+create_python_venv("3.12")
 
 project(
   maiascan
@@ -15,6 +16,7 @@ project(
 )
 
 # TODO: remove this from here. This is for sccache.
+
 set(
   CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
   "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"

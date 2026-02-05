@@ -33,7 +33,6 @@ target_link_libraries(
     base
     imgui::imgui
     glfw
-    console
     glad::glad
 )
 
