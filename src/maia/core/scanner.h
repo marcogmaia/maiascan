@@ -117,7 +117,8 @@ class Scanner {
   }
 
  private:
-  size_t chunk_size_ = 32 * 1024 * 1024;  // 32 MB default
+  static constexpr size_t k32Mb = 32z * 1 << 20;
+  size_t chunk_size_ = k32Mb;
 };
 
 }  // namespace maia::core

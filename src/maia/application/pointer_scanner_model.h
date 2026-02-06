@@ -172,12 +172,6 @@ class PointerScannerModel {
     return current_operation_;
   }
 
-  /// \brief Check if there's a pending scan result to apply.
-  [[nodiscard]] bool HasPendingResult() const;
-
-  /// \brief Apply the pending scan result (call from main thread).
-  void ApplyPendingResult();
-
   /// \brief Wait for any ongoing operation to complete.
   void WaitForOperation();
 

@@ -8,14 +8,14 @@ namespace maia {
 
 namespace {
 
-enum GlobalHotkeyId {
+enum class GlobalHotkeyId {
   kHotkeyChanged = 1,
   kHotkeyUnchanged,
   kHotkeyIncreased,
   kHotkeyDecreased,
   kHotkeyExact,
   kHotkeyNextScan,
-  kHotkeyNewScan
+  kHotkeyNewScan,
 };
 
 }  // namespace
@@ -46,28 +46,25 @@ ScannerPresenter::ScannerPresenter(ScanResultModel& scan_result_model,
   Connect(connections_, scanner_widget_.sinks().FastScanChanged(), this, Slot<&ScannerPresenter::OnFastScanChanged>);
   Connect(connections_, scanner_widget_.sinks().EntryDoubleClicked(), this, Slot<&ScannerPresenter::OnEntryDoubleClicked>);
   Connect(connections_, scanner_widget_.sinks().ReinterpretTypeRequested(), &scan_result_model_, Slot<&ScanResultModel::ChangeResultType>);
+  Connect(connections_, scanner_widget_.sinks().BrowseMemoryRequested(), this, Slot<&ScannerPresenter::OnBrowseMemoryRequested>);
 
   // Register Global Hotkeys using cross-platform API
   using Key = KeyCode;
   using Mod = KeyModifier;
   const auto ctrl_shift = Mod::kControl | Mod::kShift;
+
+  using enum GlobalHotkeyId;
   
   // Ctrl + Shift + C (Changed)
-  global_hotkey_manager_.Register(kHotkeyChanged, ctrl_shift, Key::kC);
-  // Ctrl + Shift + U (Unchanged)
-  global_hotkey_manager_.Register(kHotkeyUnchanged, ctrl_shift, Key::kU);
-  // Ctrl + Shift + + (Increased) - register both main keyboard and numpad
-  global_hotkey_manager_.Register(kHotkeyIncreased, ctrl_shift, Key::kPlus);
-  global_hotkey_manager_.Register(kHotkeyIncreased, ctrl_shift, Key::kNumpadAdd);
-  // Ctrl + Shift + - (Decreased) - register both main keyboard and numpad
-  global_hotkey_manager_.Register(kHotkeyDecreased, ctrl_shift, Key::kMinus);
-  global_hotkey_manager_.Register(kHotkeyDecreased, ctrl_shift, Key::kNumpadSubtract);
-  // Ctrl + Shift + E (Exact Value)
-  global_hotkey_manager_.Register(kHotkeyExact, ctrl_shift, Key::kE);
-  // Ctrl + Enter (Next Scan)
-  global_hotkey_manager_.Register(kHotkeyNextScan, Mod::kControl, Key::kReturn);
-  // Ctrl + N (New Scan)
-  global_hotkey_manager_.Register(kHotkeyNewScan, Mod::kControl, Key::kN);
+  global_hotkey_manager_.Register(static_cast<int>( kHotkeyChanged), ctrl_shift, Key::kC); // Ctrl + Shift + U (Unchanged)
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyUnchanged), ctrl_shift, Key::kU); // Ctrl + Shift + + (Increased) - register both main keyboard and numpad
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyIncreased), ctrl_shift, Key::kPlus);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyIncreased), ctrl_shift, Key::kNumpadAdd); // Ctrl + Shift + - (Decreased) - register both main keyboard and numpad
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyDecreased), ctrl_shift, Key::kMinus);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyDecreased), ctrl_shift, Key::kNumpadSubtract); // Ctrl + Shift + E (Exact Value)
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyExact), ctrl_shift, Key::kE); // Ctrl + Enter (Next Scan)
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyNextScan), Mod::kControl, Key::kReturn); // Ctrl + N (New Scan)
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyNewScan), Mod::kControl, Key::kN);
 
   Connect(connections_, global_hotkey_manager_.sinks().HotkeyTriggered(), this, Slot<&ScannerPresenter::OnGlobalHotkey>);
 
@@ -95,14 +92,20 @@ void ScannerPresenter::OnEntryDoubleClicked(int index, ScanValueType type) {
   const auto& results = scan_result_model_.entries();
   if (index >= 0 && static_cast<size_t>(index) < results.addresses.size()) {
     MemoryAddress address = results.addresses[index];
-    // TODO: Get more meaningful description?
+    // TODO(marco): Get more meaningful description?
     std::string description = "No description";
     cheat_table_model_.AddEntry(address, type, description, results.stride);
   }
 }
 
+void ScannerPresenter::OnBrowseMemoryRequested(uintptr_t address) const {
+  signals_.browse_memory_requested.publish(address);
+}
+
 void ScannerPresenter::OnGlobalHotkey(int id) {
-  switch (id) {
+  auto e = static_cast<GlobalHotkeyId>(id);
+  switch (e) {
+    using enum GlobalHotkeyId;
     case kHotkeyChanged:
       scan_result_model_.SetScanComparison(ScanComparison::kChanged);
       scan_result_model_.NextScan();

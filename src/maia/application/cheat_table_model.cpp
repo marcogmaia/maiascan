@@ -163,7 +163,7 @@ void CheatTableModel::AddEntry(MemoryAddress address,
   if (active_process_) {
     auto initial_value = entry.data->GetValue();
     active_process_->ReadMemory(
-        {&entry.address, 1}, initial_value.size(), initial_value);
+        {&entry.address, 1}, initial_value.size(), initial_value, nullptr);
     entry.data->UpdateFromProcess(initial_value);
   }
 
@@ -500,13 +500,13 @@ MemoryAddress CheatTableModel::ResolveAddress(
   MemoryAddress current = base_address;
 
   // Follow the chain of offsets
-  for (size_t i = 0; i < entry.pointer_offsets.size(); ++i) {
+  for (const auto pointer_offset : entry.pointer_offsets) {
     // Read pointer at current address
     std::array<std::byte, 8> ptr_buffer;
     const size_t ptr_size = active_process_->GetPointerSize();
 
     if (!active_process_->ReadMemory(
-            {&current, 1}, ptr_size, {ptr_buffer.data(), ptr_size})) {
+            {&current, 1}, ptr_size, {ptr_buffer.data(), ptr_size}, nullptr)) {
       return 0;  // Failed to read pointer
     }
 
@@ -525,7 +525,7 @@ MemoryAddress CheatTableModel::ResolveAddress(
     }
 
     // Apply offset (can be negative)
-    current = ptr_value + entry.pointer_offsets[i];
+    current = ptr_value + pointer_offset;
   }
 
   return current;
@@ -549,7 +549,8 @@ bool CheatTableModel::ReadEntryValue(const CheatTableEntry& entry,
     entry.data->SetResolvedAddress(addr);
   }
 
-  return active_process_->ReadMemory({&addr, 1}, out_buffer.size(), out_buffer);
+  return active_process_->ReadMemory(
+      {&addr, 1}, out_buffer.size(), out_buffer, nullptr);
 }
 
 bool CheatTableModel::WriteEntryValue(const CheatTableEntry& entry,

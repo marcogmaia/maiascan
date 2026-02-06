@@ -10,13 +10,16 @@
 #include "maia/application/cheat_table_model.h"
 #include "maia/application/cheat_table_presenter.h"
 #include "maia/application/global_hotkey_manager.h"
+#include "maia/application/hex_view_presenter.h"
 #include "maia/application/pointer_scanner_model.h"
 #include "maia/application/pointer_scanner_presenter.h"
 #include "maia/application/process_selector_presenter.h"
 #include "maia/application/scan_result_model.h"
 #include "maia/gui/imgui_extensions.h"
 #include "maia/gui/layout.h"
+#include "maia/gui/models/hex_view_model.h"
 #include "maia/gui/widgets/cheat_table_view.h"
+#include "maia/gui/widgets/hex_view.h"
 #include "maia/gui/widgets/pointer_scanner_view.h"
 #include "maia/gui/widgets/process_selector_view.h"
 #include "maia/gui/widgets/scanner_view.h"
@@ -105,6 +108,15 @@ int main() {
                                                 scan_result_model,
                                                 pointer_scanner_view};
 
+  maia::gui::HexViewModel hex_view_model{};
+  maia::gui::HexView hex_view{hex_view_model};
+  maia::HexViewPresenter hex_presenter{process_model, hex_view_model, hex_view};
+
+  // Wire scanner to hex view
+  scanner.sinks()
+      .BrowseMemoryRequested()
+      .connect<&maia::HexViewPresenter::GoToAddress>(hex_presenter);
+
   while (!gui_system.WindowShouldClose()) {
     gui_system.PollEvents();
 
@@ -122,6 +134,11 @@ int main() {
         if (ImGui::MenuItem("Pointer Scanner", "Ctrl+Shift+P", &is_open)) {
           pointer_scanner.SetVisible(is_open);
         }
+
+        bool hex_open = hex_presenter.IsVisible();
+        if (ImGui::MenuItem("Memory Viewer", "Ctrl+H", &hex_open)) {
+          hex_presenter.SetVisible(hex_open);
+        }
         ImGui::EndMenu();
       }
       ImGui::EndMainMenuBar();
@@ -132,6 +149,9 @@ int main() {
     if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_P)) {
       pointer_scanner.ToggleVisibility();
     }
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_H)) {
+      hex_presenter.ToggleVisibility();
+    }
 
     maia::CreateDockSpace();
 
@@ -139,6 +159,7 @@ int main() {
     scanner.Render();
     cheat_table.Render();
     pointer_scanner.Render();
+    hex_presenter.Render();
 
     gui_system.ClearWindow(clear_color.x * clear_color.w,
                            clear_color.y * clear_color.w,

@@ -20,6 +20,7 @@ target_sources(
         scanner_presenter.h
         scan_result_model.h
         global_hotkey_manager.h
+        hex_view_presenter.h
   PRIVATE
     cheat_table_model.cpp
     cheat_table_presenter.cpp
@@ -30,6 +31,7 @@ target_sources(
     process_selector_presenter.cpp
     scanner_presenter.cpp
     scan_result_model.cpp
+    hex_view_presenter.cpp
 )
 
 target_link_libraries(

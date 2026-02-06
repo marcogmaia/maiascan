@@ -4,13 +4,10 @@
 
 #include <gtest/gtest.h>
 #include <filesystem>
-#include <fstream>
 
 #include "maia/tests/fake_process.h"
 
 namespace maia {
-
-using namespace testing;
 
 // Test helper structs for signal testing (EnTT requires function pointers)
 struct MapGeneratedListener {
@@ -55,7 +52,7 @@ struct PathsUpdatedListener {
   }
 };
 
-class PointerScannerModelTest : public Test {
+class PointerScannerModelTest : public ::testing::Test {
  protected:
   void SetUp() override {
     model_ = std::make_unique<PointerScannerModel>();
@@ -78,7 +75,6 @@ TEST_F(PointerScannerModelTest, InitialState) {
   EXPECT_FALSE(model_->IsBusy());
   EXPECT_FLOAT_EQ(model_->GetProgress(), 0.0f);
   EXPECT_EQ(model_->GetCurrentOperation(), "");
-  EXPECT_FALSE(model_->HasPendingResult());
 }
 
 TEST_F(PointerScannerModelTest, SetTargetAddress) {

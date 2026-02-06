@@ -107,7 +107,7 @@ std::optional<PointerMap> PointerMap::Generate(
 
       // Read memory
       std::vector<uintptr_t> addr_vec = {region.base + offset};
-      if (!process.ReadMemory(addr_vec, read_size, buffer)) {
+      if (!process.ReadMemory(addr_vec, read_size, buffer, nullptr)) {
         // Failed to read chunk, skip it
         processed_bytes += read_size;
         if (progress_callback) {

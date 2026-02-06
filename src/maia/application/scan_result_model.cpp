@@ -13,7 +13,7 @@ namespace maia {
 namespace {
 
 bool CanScan(IProcess* process) {
-  return process && process->IsProcessValid();
+  return (process != nullptr) && process->IsProcessValid();
 }
 
 }  // namespace
@@ -178,7 +178,7 @@ void ScanResultModel::UpdateCurrentValues() {
   std::vector<std::byte> new_values(snapshot.addresses.size() *
                                     snapshot.stride);
   if (!active_process_->ReadMemory(
-          snapshot.addresses, snapshot.stride, new_values)) {
+          snapshot.addresses, snapshot.stride, new_values, nullptr)) {
     return;
   }
 
@@ -228,8 +228,15 @@ void ScanResultModel::StartAutoUpdate() {
     return;
   }
 
-  task_ = std::jthread(
-      [this](std::stop_token stop_token) { AutoUpdateLoop(stop_token); });
+  task_ = std::jthread([this](std::stop_token stop_token) {
+    try {
+      AutoUpdateLoop(stop_token);
+    } catch (const std::exception& e) {
+      LogError("Auto update loop failed: {}", e.what());
+    } catch (...) {
+      LogError("Auto update loop failed with unknown error");
+    }
+  });
 }
 
 void ScanResultModel::StopAutoUpdate() {

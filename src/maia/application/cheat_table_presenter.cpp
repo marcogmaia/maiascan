@@ -140,7 +140,7 @@ void CheatTablePresenter::OnAddManualRequested(std::string address_str,
                                                std::string description) {
   // Parse the address expression
   // For now, we need access to the active process to resolve module names
-  // TODO: Get the active process from somewhere (ProcessModel?)
+  // TODO(marco): Get the active process from somewhere (ProcessModel?)
   // For now, just parse as a simple number
 
   auto parsed = ParseAddressExpression(address_str, nullptr);

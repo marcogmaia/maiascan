@@ -46,18 +46,12 @@ class PointerScannerPresenter {
   void OnTargetFromCheatSelected(size_t index);
   void OnTargetFromScanSelected(size_t index);
   void OnGenerateMapPressed();
-  void OnSaveMapPressed();
-  void OnLoadMapPressed();
   void OnFindPathsPressed();
   void OnValidatePressed();
   void OnCancelPressed();
   void OnResultDoubleClicked(size_t index);
-  void OnShowAllPressed();
-  void OnTargetAddressInvalid();
 
   // Model signal handlers
-  void OnMapGenerated(bool success, size_t entry_count);
-  void OnScanComplete(const core::PointerScanResult& result);
   void OnProgressUpdated(float progress, const std::string& operation);
   void OnPathsUpdated();
   void OnValidationComplete(const std::vector<core::PointerPath>& valid_paths);

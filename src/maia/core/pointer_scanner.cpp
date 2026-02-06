@@ -48,7 +48,8 @@ std::optional<uint64_t> FollowPointerChain(
     // Read the pointer value at current_addr
     if (!process.ReadMemory(std::span<const uintptr_t>{&current_addr, 1},
                             ptr_size,
-                            std::as_writable_bytes(std::span{&ptr_val, 1}))) {
+                            std::as_writable_bytes(std::span{&ptr_val, 1}),
+                            nullptr)) {
       return std::nullopt;
     }
     // Mask to ensure only the valid pointer bytes are used.

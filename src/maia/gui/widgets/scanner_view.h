@@ -74,6 +74,11 @@ class ScannerWidget {
 
     /// \brief Emitted when the user clicks the "Cancel" button.
     entt::sigh<void()> cancel_scan_pressed;
+
+    /// \brief Emitted when the user requests to browse memory for a specific
+    /// address.
+    /// \param address The memory address to browse.
+    entt::sigh<void(uintptr_t)> browse_memory_requested;
   };
 
   // clang-format off
@@ -90,6 +95,7 @@ class ScannerWidget {
     auto EntryDoubleClicked() {return entt::sink(view.signals_.entry_double_clicked);}
     auto ReinterpretTypeRequested() {return entt::sink(view.signals_.reinterpret_type_requested);}
     auto CancelScanPressed() {return entt::sink(view.signals_.cancel_scan_pressed);}
+    auto BrowseMemoryRequested() {return entt::sink(view.signals_.browse_memory_requested);}
   };
 
   // clang-format on

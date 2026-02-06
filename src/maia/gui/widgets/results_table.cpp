@@ -7,6 +7,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <imgui.h>
@@ -86,6 +87,14 @@ void ResultsTable::Render(const ScanStorage& data,
 void ResultsTable::RenderContextMenu(Context& ctx) {
   if (!ImGui::BeginPopupContextWindow("ResultsTableContext")) {
     return;
+  }
+
+  if (ImGui::MenuItem("Browse Memory")) {
+    if (ctx.state.out_browse_address && ctx.state.selected_idx >= 0 &&
+        std::cmp_less(ctx.state.selected_idx, ctx.data.addresses.size())) {
+      *ctx.state.out_browse_address =
+          ctx.data.addresses[ctx.state.selected_idx];
+    }
   }
 
   RenderReinterpretMenu(ctx);

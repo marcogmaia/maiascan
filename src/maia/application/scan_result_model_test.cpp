@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <cstring>
 #include <vector>
 
@@ -16,7 +17,7 @@ namespace {
 class ScanResultModelTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    Init(1024, 32 * 1024 * 1024);
+    Init(1024, static_cast<size_t>(32 * 1024 * 1024));
   }
 
   void TearDown() override {
@@ -49,7 +50,7 @@ class ScanResultModelTest : public ::testing::Test {
     return b;
   }
 
-  std::vector<std::byte> StringToBytes(std::string_view str) {
+  static std::vector<std::byte> StringToBytes(std::string_view str) {
     std::vector<std::byte> result;
     for (char c : str) {
       result.push_back(static_cast<std::byte>(c));
@@ -140,7 +141,8 @@ class ScanResultModelLogicTest : public ScanResultModelTest {
 class ScanResultModelChunkedTest : public ScanResultModelTest {
  protected:
   void SetUp() override {
-    Init(40 * 1024 * 1024, 32 * 1024 * 1024);
+    Init(static_cast<size_t>(40 * 1024 * 1024),
+         static_cast<size_t>(32 * 1024 * 1024));
   }
 };
 
@@ -403,7 +405,7 @@ TEST_F(ScanResultModelLogicTest, UnknownScanSnapshotsAcrossChunks) {
 // --- Chunked Tests ---
 
 TEST_F(ScanResultModelChunkedTest, FindsMatchCrossingChunkBoundary) {
-  constexpr size_t kChunkSize = 32 * 1024 * 1024;
+  constexpr auto kChunkSize = static_cast<size_t>(32 * 1024 * 1024);
   const size_t near_boundary_offset = kChunkSize - 4;
   const uint32_t magic_value = 0xDEADBEEF;
 
@@ -468,7 +470,7 @@ TEST_F(ScanResultModelChunkedTest, ExactScanUnalignedOnlyFindsNothing) {
 }
 
 TEST_F(ScanResultModelChunkedTest, AlignmentAcrossChunkBoundary) {
-  constexpr size_t kChunkSize = 32 * 1024 * 1024;
+  constexpr auto kChunkSize = static_cast<size_t>(32 * 1024 * 1024);
   const uint32_t magic_value = 0xBEEFCAFE;
 
   WriteValue<uint32_t>(0, magic_value);

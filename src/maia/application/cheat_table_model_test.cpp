@@ -1,5 +1,6 @@
 // Copyright (c) Maia
 
+#include <algorithm>
 #include <span>
 
 #include <gmock/gmock.h>
@@ -226,7 +227,7 @@ TEST_F(CheatTableModelTest, UpdateValuesHandlesLargeEntries) {
                     size_t,
                     std::span<std::byte> out_buffer,
                     auto*) {
-        std::fill(out_buffer.begin(), out_buffer.end(), std::byte{0xFF});
+        std::ranges::fill(out_buffer, std::byte{0xFF});
         return true;
       });
 

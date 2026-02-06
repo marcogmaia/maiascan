@@ -28,6 +28,52 @@ void Connect(Storage& storage,
   storage.emplace_back(sink.template connect<Candidate>(instance));
 };
 
+/// \brief Connects a signal to a member function and manages connection
+/// lifetime.
+template <typename Storage, typename Sink, auto Candidate>
+void Connect(Storage& storage, Sink&& sink, SlotTag<Candidate>) {
+  storage.emplace_back(sink.template connect<Candidate>());
+};
+
+void OnTargetAddressInvalid() {
+  LogWarning("Invalid target address input");
+}
+
+void OnShowAllPressed() {
+  // The view handles the display logic, we just log it
+  LogDebug("User requested to show all pointer scan results");
+}
+
+void OnMapGenerated(bool success, size_t entry_count) {
+  if (success) {
+    LogInfo("Pointer map generated with {} entries", entry_count);
+  } else {
+    LogWarning("Pointer map generation failed");
+  }
+}
+
+void OnScanComplete(const core::PointerScanResult& result) {
+  if (result.success) {
+    LogInfo("Pointer scan complete: {} paths found (evaluated: {})",
+            result.paths.size(),
+            result.paths_evaluated);
+  } else {
+    LogWarning("Pointer scan failed: {}", result.error_message);
+  }
+}
+
+void OnSaveMapPressed() {
+  // TODO(marco): Implement file dialog for saving pointer map
+  // For now, log that the feature needs implementation
+  LogWarning("Save map feature requires file dialog implementation");
+}
+
+void OnLoadMapPressed() {
+  // TODO(marco): Implement file dialog for loading pointer map
+  // For now, log that the feature needs implementation
+  LogWarning("Load map feature requires file dialog implementation");
+}
+
 }  // namespace
 
 PointerScannerPresenter::PointerScannerPresenter(
@@ -51,18 +97,18 @@ PointerScannerPresenter::PointerScannerPresenter(
   Connect(connections_, pointer_scanner_view_.sinks().TargetFromCheatSelected(), this, Slot<&PointerScannerPresenter::OnTargetFromCheatSelected>);
   Connect(connections_, pointer_scanner_view_.sinks().TargetFromScanSelected(),  this, Slot<&PointerScannerPresenter::OnTargetFromScanSelected>);
   Connect(connections_, pointer_scanner_view_.sinks().GenerateMapPressed(),      this, Slot<&PointerScannerPresenter::OnGenerateMapPressed>);
-  Connect(connections_, pointer_scanner_view_.sinks().SaveMapPressed(),          this, Slot<&PointerScannerPresenter::OnSaveMapPressed>);
-  Connect(connections_, pointer_scanner_view_.sinks().LoadMapPressed(),          this, Slot<&PointerScannerPresenter::OnLoadMapPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().SaveMapPressed(),          Slot<OnSaveMapPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().LoadMapPressed(),          Slot<OnLoadMapPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().FindPathsPressed(),        this, Slot<&PointerScannerPresenter::OnFindPathsPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().ValidatePressed(),         this, Slot<&PointerScannerPresenter::OnValidatePressed>);
   Connect(connections_, pointer_scanner_view_.sinks().CancelPressed(),           this, Slot<&PointerScannerPresenter::OnCancelPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().ResultDoubleClicked(),     this, Slot<&PointerScannerPresenter::OnResultDoubleClicked>);
-  Connect(connections_, pointer_scanner_view_.sinks().ShowAllPressed(),          this, Slot<&PointerScannerPresenter::OnShowAllPressed>);
-  Connect(connections_, pointer_scanner_view_.sinks().TargetAddressInvalid(),    this, Slot<&PointerScannerPresenter::OnTargetAddressInvalid>);
+  Connect(connections_, pointer_scanner_view_.sinks().ShowAllPressed(),          Slot<OnShowAllPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().TargetAddressInvalid(),    Slot<OnTargetAddressInvalid>);
 
   // Connect model signals to presenter handlers
-  Connect(connections_, pointer_scanner_model_.sinks().MapGenerated(),       this, Slot<&PointerScannerPresenter::OnMapGenerated>);
-  Connect(connections_, pointer_scanner_model_.sinks().ScanComplete(),       this, Slot<&PointerScannerPresenter::OnScanComplete>);
+  Connect(connections_, pointer_scanner_model_.sinks().MapGenerated(),       Slot<&OnMapGenerated>);
+  Connect(connections_, pointer_scanner_model_.sinks().ScanComplete(),       Slot<&OnScanComplete>);
   Connect(connections_, pointer_scanner_model_.sinks().ProgressUpdated(),    this, Slot<&PointerScannerPresenter::OnProgressUpdated>);
   Connect(connections_, pointer_scanner_model_.sinks().PathsUpdated(),       this, Slot<&PointerScannerPresenter::OnPathsUpdated>);
   Connect(connections_, pointer_scanner_model_.sinks().ValidationComplete(), this, Slot<&PointerScannerPresenter::OnValidationComplete>);
@@ -73,11 +119,6 @@ void PointerScannerPresenter::Render() {
   // Handle pending process switch if not busy
   if (pending_process_switch_ && !pointer_scanner_model_.IsBusy()) {
     HandlePendingProcessSwitch();
-  }
-
-  // Apply any pending async results
-  if (pointer_scanner_model_.HasPendingResult()) {
-    pointer_scanner_model_.ApplyPendingResult();
   }
 
   // Get current data from models
@@ -124,18 +165,6 @@ void PointerScannerPresenter::OnGenerateMapPressed() {
   pointer_scanner_model_.GeneratePointerMap();
 }
 
-void PointerScannerPresenter::OnSaveMapPressed() {
-  // TODO: Implement file dialog for saving pointer map
-  // For now, log that the feature needs implementation
-  LogWarning("Save map feature requires file dialog implementation");
-}
-
-void PointerScannerPresenter::OnLoadMapPressed() {
-  // TODO: Implement file dialog for loading pointer map
-  // For now, log that the feature needs implementation
-  LogWarning("Load map feature requires file dialog implementation");
-}
-
 void PointerScannerPresenter::OnFindPathsPressed() {
   auto config = pointer_scanner_view_.GetScanConfig();
   pointer_scanner_model_.FindPaths(config);
@@ -152,40 +181,12 @@ void PointerScannerPresenter::OnValidationComplete(
   LogInfo("Validation complete: {} paths remain valid", valid_paths.size());
 }
 
-void PointerScannerPresenter::OnTargetAddressInvalid() {
-  LogWarning("Invalid target address input");
-}
-
 void PointerScannerPresenter::OnCancelPressed() {
   pointer_scanner_model_.CancelOperation();
 }
 
 void PointerScannerPresenter::OnResultDoubleClicked(size_t index) {
   AddPathToCheatTable(index);
-}
-
-void PointerScannerPresenter::OnShowAllPressed() {
-  // The view handles the display logic, we just log it
-  LogDebug("User requested to show all pointer scan results");
-}
-
-void PointerScannerPresenter::OnMapGenerated(bool success, size_t entry_count) {
-  if (success) {
-    LogInfo("Pointer map generated with {} entries", entry_count);
-  } else {
-    LogWarning("Pointer map generation failed");
-  }
-}
-
-void PointerScannerPresenter::OnScanComplete(
-    const core::PointerScanResult& result) {
-  if (result.success) {
-    LogInfo("Pointer scan complete: {} paths found (evaluated: {})",
-            result.paths.size(),
-            result.paths_evaluated);
-  } else {
-    LogWarning("Pointer scan failed: {}", result.error_message);
-  }
 }
 
 void PointerScannerPresenter::OnProgressUpdated(

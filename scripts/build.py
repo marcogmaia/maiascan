@@ -339,7 +339,7 @@ def main():
     if not args.skip_tests:
         print(f"\n>>> STAGE: TEST")
         res = run_command(
-            ["ctest", "--preset", args.preset, "--output-on-failure", "-j8"],
+            ["ctest", "--preset", args.preset, "--output-on-failure", "-j16"],
             env=env,
             check=False,
             quiet_tests=True,

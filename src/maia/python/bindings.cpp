@@ -17,10 +17,12 @@
 
 PYBIND11_MAKE_OPAQUE(std::vector<uintptr_t>);
 
-PYBIND11_MODULE(maiascan, m) {
-  // TODO: Review these
-  using namespace maia;
-  using namespace maia::core;
+namespace maia::core {
+
+namespace py = pybind11;
+
+void BindMaiascan(py::module_& m) {
+  // TODO(marco): Review these
   namespace py = pybind11;
 
   m.doc() = "MaiaScan Python Bindings";
@@ -168,10 +170,9 @@ PYBIND11_MODULE(maiascan, m) {
         if (self.success) {
           return "<maiascan.ScanResult success=True count=" +
                  std::to_string(self.storage.addresses.size()) + ">";
-        } else {
-          return "<maiascan.ScanResult success=False error='" +
-                 self.error_message + "'>";
         }
+        return "<maiascan.ScanResult success=False error='" +
+               self.error_message + "'>";
       });
 
   // Pointer Scanning Types
@@ -349,4 +350,10 @@ PYBIND11_MODULE(maiascan, m) {
       .def("Clear", &ScanSession::Clear)
       .def("GetResultCount", &ScanSession::GetResultCount)
       .def("HasResults", &ScanSession::HasResults);
+}
+
+}  // namespace maia::core
+
+PYBIND11_MODULE(maiascan, m) {
+  maia::core::BindMaiascan(m);
 }

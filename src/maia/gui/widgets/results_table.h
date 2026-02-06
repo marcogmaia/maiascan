@@ -15,6 +15,7 @@ struct ResultsTableState {
   bool& double_clicked;
   ScanValueType* out_new_type = nullptr;
   bool* out_is_hex = nullptr;
+  uintptr_t* out_browse_address = nullptr;
 };
 
 class ResultsTable {

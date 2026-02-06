@@ -191,9 +191,6 @@ class CheatTableModel {
   /// \brief Toggles the frozen state of an entry.
   void ToggleFreeze(size_t index);
 
-  // TODO: Refactor this interface to accept numbers instead of strings? Well,
-  // strings are flexible enough, think a little bit.
-
   /// \brief Manually sets the value of an entry and writes it to the process.
   void SetValue(size_t index, const std::string& value_str);
 

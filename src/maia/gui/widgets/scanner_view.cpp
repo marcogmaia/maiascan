@@ -237,12 +237,14 @@ void ScannerWidget::Render(const ScanStorage& entries,
     const auto type = entries.value_type;
     bool double_clicked = false;
     ScanValueType new_type = type;
+    uintptr_t browse_address = 0;
 
     ResultsTableState state{
         .selected_idx = selected_index_,
         .double_clicked = double_clicked,
         .out_new_type = &new_type,
         .out_is_hex = &show_hex_results_,
+        .out_browse_address = &browse_address,
     };
 
     table_renderer.Render(entries, formatter, type, show_hex_results_, state);
@@ -260,6 +262,10 @@ void ScannerWidget::Render(const ScanStorage& entries,
 
     if (double_clicked) {
       signals_.entry_double_clicked.publish(selected_index_, type);
+    }
+
+    if (browse_address != 0) {
+      signals_.browse_memory_requested.publish(browse_address);
     }
   }
   ImGui::EndChild();

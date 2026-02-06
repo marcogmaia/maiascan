@@ -268,7 +268,7 @@ ScanResult Scanner::FirstScan(IProcess& process,
 
       buffer.resize(task.read_size);
       MemoryAddress addr = task.base_address;
-      if (!process.ReadMemory({&addr, 1}, task.read_size, buffer)) {
+      if (!process.ReadMemory({&addr, 1}, task.read_size, buffer, nullptr)) {
         ++processed_tasks;
         if (progress_callback) {
           progress_callback(static_cast<float>(processed_tasks) /

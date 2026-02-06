@@ -94,8 +94,7 @@ TEST_F(SimdScannerTest, FindsPatternCrossingAvxBoundary) {
 }
 
 TEST_F(SimdScannerTest, FindsMatchAtVeryEnd) {
-  std::vector<std::byte> buffer(40);
-  std::fill(buffer.begin(), buffer.end(), std::byte{0});
+  std::vector<std::byte> buffer(40, std::byte{0});
 
   // Pattern at the very last byte
   buffer[39] = std::byte{0xCC};
