@@ -46,6 +46,8 @@ class PointerScannerPresenter {
   void OnTargetFromCheatSelected(size_t index);
   void OnTargetFromScanSelected(size_t index);
   void OnGenerateMapPressed();
+  void OnSaveMapPressed();
+  void OnLoadMapPressed();
   void OnFindPathsPressed();
   void OnValidatePressed();
   void OnCancelPressed();

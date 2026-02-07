@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 
+#include "maia/application/file_dialogs.h"
 #include "maia/logging.h"
 
 namespace maia {
@@ -62,18 +63,6 @@ void OnScanComplete(const core::PointerScanResult& result) {
   }
 }
 
-void OnSaveMapPressed() {
-  // TODO(marco): Implement file dialog for saving pointer map
-  // For now, log that the feature needs implementation
-  LogWarning("Save map feature requires file dialog implementation");
-}
-
-void OnLoadMapPressed() {
-  // TODO(marco): Implement file dialog for loading pointer map
-  // For now, log that the feature needs implementation
-  LogWarning("Load map feature requires file dialog implementation");
-}
-
 }  // namespace
 
 PointerScannerPresenter::PointerScannerPresenter(
@@ -98,8 +87,8 @@ PointerScannerPresenter::PointerScannerPresenter(
   Connect(connections_, pointer_scanner_view_.sinks().TargetFromCheatSelected(), this, Slot<&PointerScannerPresenter::OnTargetFromCheatSelected>);
   Connect(connections_, pointer_scanner_view_.sinks().TargetFromScanSelected(),  this, Slot<&PointerScannerPresenter::OnTargetFromScanSelected>);
   Connect(connections_, pointer_scanner_view_.sinks().GenerateMapPressed(),      this, Slot<&PointerScannerPresenter::OnGenerateMapPressed>);
-  Connect(connections_, pointer_scanner_view_.sinks().SaveMapPressed(),          Slot<OnSaveMapPressed>);
-  Connect(connections_, pointer_scanner_view_.sinks().LoadMapPressed(),          Slot<OnLoadMapPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().SaveMapPressed(),          this, Slot<&PointerScannerPresenter::OnSaveMapPressed>);
+  Connect(connections_, pointer_scanner_view_.sinks().LoadMapPressed(),          this, Slot<&PointerScannerPresenter::OnLoadMapPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().FindPathsPressed(),        this, Slot<&PointerScannerPresenter::OnFindPathsPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().ValidatePressed(),         this, Slot<&PointerScannerPresenter::OnValidatePressed>);
   Connect(connections_, pointer_scanner_view_.sinks().CancelPressed(),           this, Slot<&PointerScannerPresenter::OnCancelPressed>);
@@ -168,6 +157,52 @@ void PointerScannerPresenter::OnTargetFromScanSelected(size_t index) {
 
 void PointerScannerPresenter::OnGenerateMapPressed() {
   pointer_scanner_model_.GeneratePointerMap();
+}
+
+void PointerScannerPresenter::OnSaveMapPressed() {
+  using application::FileDialogs;
+  using application::FileFilter;
+
+  constexpr FileFilter kFilters[] = {
+      {"Pointer Map", "pmap"}
+  };
+
+  auto result =
+      FileDialogs::ShowSaveDialog(kFilters, std::nullopt, "pointer_map.pmap");
+  if (!result) {
+    return;
+  }
+
+  auto save_path = *result;
+  if (save_path.extension() != ".pmap") {
+    save_path += ".pmap";
+  }
+
+  if (pointer_scanner_model_.SaveMap(save_path)) {
+    LogInfo("Pointer map saved to {}", save_path.string());
+  } else {
+    LogError("Failed to save pointer map");
+  }
+}
+
+void PointerScannerPresenter::OnLoadMapPressed() {
+  using application::FileDialogs;
+  using application::FileFilter;
+
+  constexpr FileFilter kFilters[] = {
+      {"Pointer Map", "pmap"}
+  };
+
+  auto result = FileDialogs::ShowOpenDialog(kFilters);
+  if (!result) {
+    return;
+  }
+
+  if (pointer_scanner_model_.LoadMap(*result)) {
+    LogInfo("Pointer map loaded from {}", result->string());
+  } else {
+    LogError("Failed to load pointer map");
+  }
 }
 
 void PointerScannerPresenter::OnFindPathsPressed() {
