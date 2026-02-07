@@ -16,8 +16,15 @@ struct FileFilter {
 
 class FileDialogs {
  public:
-  static bool Init();
-  static void Quit();
+  FileDialogs();
+  ~FileDialogs();
+
+  FileDialogs(const FileDialogs&) = delete;
+  FileDialogs& operator=(const FileDialogs&) = delete;
+
+  [[nodiscard]] bool IsValid() const {
+    return initialized_;
+  }
 
   static std::optional<std::filesystem::path> ShowOpenDialog(
       std::span<const FileFilter> filters = {},
@@ -27,6 +34,9 @@ class FileDialogs {
       std::span<const FileFilter> filters = {},
       const std::optional<std::filesystem::path>& default_path = std::nullopt,
       const std::optional<std::string>& default_name = std::nullopt);
+
+ private:
+  bool initialized_ = false;
 };
 
 }  // namespace maia::application

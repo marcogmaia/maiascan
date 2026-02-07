@@ -8,16 +8,18 @@
 
 namespace maia::application {
 
-bool FileDialogs::Init() {
+FileDialogs::FileDialogs() {
   if (NFD_Init() != NFD_OKAY) {
     LogError("Failed to initialize NFD: {}", NFD_GetError());
-    return false;
+    return;
   }
-  return true;
+  initialized_ = true;
 }
 
-void FileDialogs::Quit() {
-  NFD_Quit();
+FileDialogs::~FileDialogs() {
+  if (initialized_) {
+    NFD_Quit();
+  }
 }
 
 std::optional<std::filesystem::path> FileDialogs::ShowOpenDialog(
