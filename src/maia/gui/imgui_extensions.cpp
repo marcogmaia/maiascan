@@ -30,7 +30,7 @@ void glfw_error_callback(int error, const char* description) {
   LogError("GLFW Error {}: {}", error, description);
 }
 
-std::expected<GLFWwindow*, int> InitGlfw() {
+std::expected<GLFWwindow*, int> InitGlfw(int width, int height) {
 #ifdef _WIN32
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
@@ -47,7 +47,8 @@ std::expected<GLFWwindow*, int> InitGlfw() {
   // glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
   // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
 
-  GLFWwindow* window = glfwCreateWindow(800, 600, "maiascan", nullptr, nullptr);
+  GLFWwindow* window =
+      glfwCreateWindow(width, height, "maiascan", nullptr, nullptr);
   if (window == nullptr) {
     return std::unexpected(1);
   }
@@ -76,8 +77,8 @@ void ImGuiProcessViewports() {
 
 }  // namespace
 
-GuiSystem::GuiSystem() {
-  auto res = InitGlfw();
+GuiSystem::GuiSystem(int width, int height) {
+  auto res = InitGlfw(width, height);
   if (!res) {
     return;
   }

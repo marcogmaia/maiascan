@@ -16,7 +16,7 @@ std::optional<ParsedAddress> ParseAddressExpression(std::string_view input,
   // Simple parser: supports "TERM + TERM + ..." or "TERM - TERM"
   // Currently we'll just handle addition for simplicity as that's the main
   // case.
-  // TODO: Full expression parser if needed.
+  // TODO(marco): Full expression parser if needed.
 
   auto parts = core::Split(input, '+');
   if (parts.empty()) {
@@ -42,9 +42,8 @@ std::optional<ParsedAddress> ParseAddressExpression(std::string_view input,
       auto modules = process->GetModules();
       std::string term_str(first_term);
       // Case insensitive comparison would be better, but exact match first
-      auto it = std::find_if(modules.begin(),
-                             modules.end(),
-                             [&](const auto& m) { return m.name == term_str; });
+      auto it = std::ranges::find_if(
+          modules, [&](const auto& m) { return m.name == term_str; });
 
       if (it != modules.end()) {
         first_is_module = true;

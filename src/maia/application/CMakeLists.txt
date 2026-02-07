@@ -48,6 +48,7 @@ target_sources(
     scan_result_model_test.cpp
     cheat_table_model_test.cpp
     pointer_scanner_model_test.cpp
+    process_model_test.cpp
 )
 target_link_libraries(
   application_test

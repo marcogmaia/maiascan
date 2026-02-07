@@ -90,6 +90,7 @@ PointerScannerPresenter::PointerScannerPresenter(
   // clang-format off
   // Connect process model signals to presenter handlers
   Connect(connections_, process_model_.sinks().ActiveProcessChanged(), this, Slot<&PointerScannerPresenter::OnActiveProcessChanged>);
+  Connect(connections_, process_model_.sinks().ProcessWillDetach(),    this, Slot<&PointerScannerPresenter::OnProcessWillDetach>);
 
   // Connect view signals to presenter handlers
   Connect(connections_, pointer_scanner_view_.sinks().TargetAddressChanged(),    this, Slot<&PointerScannerPresenter::OnTargetAddressChanged>);
@@ -116,6 +117,10 @@ PointerScannerPresenter::PointerScannerPresenter(
 }
 
 void PointerScannerPresenter::Render() {
+  // TODO(marco): Check if this is the right place to update the model.
+  // Update model to process pending async results
+  pointer_scanner_model_.Update();
+
   // Handle pending process switch if not busy
   if (pending_process_switch_ && !pointer_scanner_model_.IsBusy()) {
     HandlePendingProcessSwitch();
@@ -209,6 +214,11 @@ void PointerScannerPresenter::OnActiveProcessChanged(IProcess* process) {
     pending_process_switch_ = process;
     HandlePendingProcessSwitch();
   }
+}
+
+void PointerScannerPresenter::OnProcessWillDetach() {
+  pointer_scanner_model_.CancelOperation();
+  pointer_scanner_model_.WaitForOperation();
 }
 
 void PointerScannerPresenter::HandlePendingProcessSwitch() {

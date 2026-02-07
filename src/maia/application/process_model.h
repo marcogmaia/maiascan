@@ -34,22 +34,26 @@ class ProcessModel {
  public:
   struct Signals {
     entt::sigh<void(IProcess*)> active_process_changed;
+    entt::sigh<void()> process_will_detach;
   };
 
   struct Sinks {
     ProcessModel& model;
 
-    // clang-format off
-    auto ActiveProcessChanged() { return entt::sink(model.signals_.active_process_changed); };
+    auto ActiveProcessChanged() {
+      return entt::sink(model.signals_.active_process_changed);
+    }
 
-    // clang-format on
+    auto ProcessWillDetach() {
+      return entt::sink(model.signals_.process_will_detach);
+    }
   };
 
   Sinks sinks() {
     return Sinks{*this};
   }
 
-  // Return true in case the attach was successful.
+  /// \brief Return true in case the attach was successful.
   bool AttachToProcess(Pid pid) {
     auto proc = Process::Create(pid);
     if (!proc) {
@@ -61,9 +65,22 @@ class ProcessModel {
     return true;
   }
 
+  /// \brief Detaches from the current process and clears state.
   void Detach() {
+    signals_.process_will_detach.publish();
     active_process_.reset();
     signals_.active_process_changed.publish(nullptr);
+  }
+
+  /// \brief Returns a raw pointer to the active process.
+  IProcess* GetActiveProcess() const {
+    return active_process_.get();
+  }
+
+  /// \brief Explicitly sets the active process (primarily for testing).
+  void SetActiveProcess(std::unique_ptr<IProcess> process) {
+    active_process_ = std::move(process);
+    signals_.active_process_changed.publish(active_process_.get());
   }
 
   Signals& signals() {

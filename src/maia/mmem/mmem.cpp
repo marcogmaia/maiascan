@@ -394,7 +394,7 @@ bool IsProcessAlive(const ProcessDescriptor& process) {
   }
 
   DWORD exit_code;
-  bool alive = ::GetExitCodeProcess(h_process.get(), &exit_code) &&
+  bool alive = ::GetExitCodeProcess(h_process.get(), &exit_code) != FALSE &&
                exit_code == STILL_ACTIVE;
 
   return alive;
@@ -536,12 +536,12 @@ std::optional<ModuleDescriptor> FindModule(const ProcessDescriptor& process,
   return found;
 }
 
-bool LoadModule(std::string_view path, ModuleDescriptor* module_out) {
+bool LoadModule(const std::string& path, ModuleDescriptor* module_out) {
   return LoadModule(GetCurrentProcess(), path, module_out);
 }
 
 bool LoadModule(const ProcessDescriptor& process,
-                std::string_view path,
+                const std::string& path,
                 ModuleDescriptor* module_out) {
   ProcessHandle h_process = OpenProcessHandle(
       process.pid,
@@ -553,7 +553,7 @@ bool LoadModule(const ProcessDescriptor& process,
 
   // For simplicity, we'll use LoadLibrary for current process
   if (process.pid == GetCurrentProcessId()) {
-    HMODULE h_module = ::LoadLibraryA(path.data());
+    HMODULE h_module = ::LoadLibraryA(path.c_str());
     if (!h_module) {
       return false;
     }
@@ -582,7 +582,7 @@ bool UnloadModule(const ProcessDescriptor& process,
     return false;  // Not supported in this simplified implementation
   }
 
-  HMODULE h_module = std::bit_cast<HMODULE>(module.base);
+  auto* h_module = std::bit_cast<HMODULE>(module.base);
   return ::FreeLibrary(h_module) != FALSE;
 }
 

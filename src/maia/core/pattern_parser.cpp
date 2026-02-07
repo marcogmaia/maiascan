@@ -21,7 +21,7 @@ std::optional<uint8_t> HexToByte(char c) {
 }  // namespace
 
 Pattern ParseAob(std::string_view aob_str) {
-  // TODO: Expand ParseAob to support bit-level or nibble-level masking.
+  // TODO(marco): Expand ParseAob to support bit-level or nibble-level masking.
   // This would allow patterns like "B?" for nibble wildcards (Value 0xB0, Mask
   // 0xF0) or "C0/F8" for explicit bitmasks. The Pattern struct and scanners
   // already support this via the parallel mask vector.

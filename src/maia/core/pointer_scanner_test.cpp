@@ -267,6 +267,56 @@ TEST_F(PointerScannerTest, PointerSize32BitMaskingRegression) {
   }
 }
 
+TEST_F(PointerScannerTest, PerformanceSim) {
+  // Re-initialize process with enough memory for 100 modules.
+  // 100 modules starting at 0x1000000, each 0x10000 size, spaced by 0x100000.
+  const int kNumModules = 100;
+  const uintptr_t kBaseStart = 0x1000000;
+  const uintptr_t kBaseStep = 0x100000;
+
+  process_ = std::make_unique<test::FakeProcess>(
+      kBaseStart + kNumModules * kBaseStep, 8);
+
+  for (int i = 0; i < kNumModules; ++i) {
+    std::string name = "module_" + std::to_string(i) + ".dll";
+    uintptr_t base = kBaseStart + i * kBaseStep;
+    process_->AddModule(name, base, 0x10000);
+  }
+
+  // Target in the last module.
+  uintptr_t target_addr = kBaseStart + (kNumModules - 1) * kBaseStep + 0x500;
+  WriteAt<uint32_t>(*process_, target_addr, 42);
+
+  // Chain: module_0+0x100 -> heap_ptr -> Target
+  // We use a heap pointer so the scanner continues until it hits module_0.
+  uintptr_t m0_ptr = kBaseStart + 0x100;
+  uintptr_t heap_ptr = kBaseStart + 0x20000;  // Outside module_0 (size 0x10000)
+
+  WriteAt<uint64_t>(*process_, m0_ptr, heap_ptr);
+  WriteAt<uint64_t>(*process_, heap_ptr, target_addr);
+
+  auto map = PointerMap::Generate(*process_);
+  ASSERT_TRUE(map.has_value());
+
+  PointerScanner scanner;
+  PointerScanConfig config;
+  config.target_address = target_addr;
+  config.max_level = 3;
+  config.max_offset = 0x1000;
+
+  auto result = scanner.FindPaths(*map, config, process_->GetModules());
+  ASSERT_TRUE(result.success);
+
+  bool found_path = false;
+  for (const auto& path : result.paths) {
+    if (path.module_name == "module_0.dll" && path.offsets.size() == 2) {
+      found_path = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_path);
+}
+
 TEST_F(PointerScannerTest, LastOffsetsFilterSingleLevel) {
   // Test filtering by the last offset (Level 0).
   // Setup: game.exe+0x100 -> 0 -> 0x20 leads to target 0x100080

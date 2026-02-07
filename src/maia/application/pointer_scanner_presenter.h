@@ -62,6 +62,7 @@ class PointerScannerPresenter {
   void AddPathToCheatTable(size_t index);
   void HandlePendingProcessSwitch();
   void OnActiveProcessChanged(IProcess* process);
+  void OnProcessWillDetach();
 
   PointerScannerModel& pointer_scanner_model_;
   ProcessModel& process_model_;

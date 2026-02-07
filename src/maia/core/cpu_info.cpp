@@ -4,7 +4,7 @@
 
 #include <array>
 
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #include <intrin.h>
 #elif defined(__GNUC__) || defined(__clang__)
 #include <cpuid.h>

@@ -104,7 +104,7 @@ std::optional<uintptr_t> ScanSignature(const mmem::ProcessDescriptor& process,
 
   // Convert generic Pattern mask (0xFF/0x00) to simple 'x'/'?' string mask
   // required by ScanPattern implementation.
-  // TODO: Update ScanPattern to use maia::Pattern directly for bit-level
+  // TODO(marco): Update ScanPattern to use maia::Pattern directly for bit-level
   // masking.
   std::string string_mask;
   string_mask.reserve(pattern.mask.size());

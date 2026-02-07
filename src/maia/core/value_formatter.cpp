@@ -29,9 +29,8 @@ std::string FormatTypedValue(std::span<const std::byte> data, bool is_hex) {
     if (is_hex) {
       constexpr size_t kHexWidth = 2 * sizeof(T);
       return std::format("0x{:0{}x}", val, kHexWidth);
-    } else {
-      return std::format("{}", val);
     }
+    return std::format("{}", val);
   }
 }
 

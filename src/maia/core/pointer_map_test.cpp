@@ -73,7 +73,7 @@ TEST_F(PointerMapTest, FindPointersToRange) {
     EXPECT_EQ(entry.value, 0x100100);
     addresses.push_back(entry.address);
   }
-  std::sort(addresses.begin(), addresses.end());
+  std::ranges::sort(addresses);
   EXPECT_EQ(addresses[0], 0x100000);
   EXPECT_EQ(addresses[1], 0x100018);
 

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <fstream>
 #include <vector>
 
@@ -14,7 +15,8 @@ namespace maia::core {
 
 namespace {
 
-constexpr size_t kChunkSize = 64 * 1024 * 1024;  // 64 MB chunks
+constexpr size_t kChunkSize =
+    static_cast<const size_t>(64 * 1024 * 1024);  // 64 MB chunks
 
 // File header structure (must match design doc)
 struct FileHeader {
@@ -63,11 +65,9 @@ std::optional<PointerMap> PointerMap::Generate(
   auto regions = process.GetMemoryRegions();
 
   // Pre-sort regions for efficient validation
-  std::sort(regions.begin(),
-            regions.end(),
-            [](const MemoryRegion& a, const MemoryRegion& b) {
-              return a.base < b.base;
-            });
+  std::ranges::sort(regions, [](const MemoryRegion& a, const MemoryRegion& b) {
+    return a.base < b.base;
+  });
 
   // Calculate total size for progress reporting
   size_t total_bytes = 0;
@@ -264,7 +264,6 @@ std::span<const PointerMapEntry> PointerMap::FindPointersToRange(
                        [](const PointerMapEntry& entry, uint64_t val) {
                          return entry.value < val;
                        });
-
   // Binary search for the first entry with value > max_value
   auto it_end =
       std::upper_bound(it_begin,

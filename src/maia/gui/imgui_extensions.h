@@ -19,7 +19,7 @@ class GuiSystem {
   //
   // If icon_resource_id is provided (> 0), it will be set as the window icon
   // on supported platforms (Windows).
-  GuiSystem();
+  explicit GuiSystem(int width = 800, int height = 600);
 
   // Shuts down the windowing system and ImGui context.
   ~GuiSystem();

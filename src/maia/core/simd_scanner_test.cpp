@@ -23,8 +23,7 @@ class SimdScannerTest : public ::testing::Test {
 
 TEST_F(SimdScannerTest, ScalarFallbackUsedForShortBuffers) {
   // Buffer shorter than 32 bytes (AVX2 width)
-  std::vector<std::byte> buffer(10);
-  std::fill(buffer.begin(), buffer.end(), std::byte{0});
+  std::vector<std::byte> buffer(10, std::byte{0});
   buffer[5] = std::byte{0xFF};
 
   std::vector<std::byte> pattern;
@@ -38,8 +37,7 @@ TEST_F(SimdScannerTest, ScalarFallbackUsedForShortBuffers) {
 
 TEST_F(SimdScannerTest, FindsSingleMatchInLargeBuffer) {
   // 64 bytes buffer (2 x AVX2 width)
-  std::vector<std::byte> buffer(64);
-  std::fill(buffer.begin(), buffer.end(), std::byte{0});
+  std::vector<std::byte> buffer(64, std::byte{0});
   buffer[40] = std::byte{0xAA};  // Match in second 32-byte block
 
   std::vector<std::byte> pattern;
@@ -52,8 +50,7 @@ TEST_F(SimdScannerTest, FindsSingleMatchInLargeBuffer) {
 }
 
 TEST_F(SimdScannerTest, FindsMultipleMatches) {
-  std::vector<std::byte> buffer(100);
-  std::fill(buffer.begin(), buffer.end(), std::byte{0});
+  std::vector<std::byte> buffer(100, std::byte{0});
   buffer[10] = std::byte{0xBB};
   buffer[50] = std::byte{0xBB};
   buffer[90] = std::byte{0xBB};
@@ -73,8 +70,7 @@ TEST_F(SimdScannerTest, FindsPatternCrossingAvxBoundary) {
   // Buffer of 64 bytes.
   // Boundary is at index 32.
   // We place a 4-byte pattern at index 30: [30, 31, 32, 33]
-  std::vector<std::byte> buffer(64);
-  std::fill(buffer.begin(), buffer.end(), std::byte{0});
+  std::vector<std::byte> buffer(64, std::byte{0});
 
   std::vector<std::byte> pattern;
   pattern.push_back(std::byte{0x1});
@@ -109,8 +105,7 @@ TEST_F(SimdScannerTest, FindsMatchAtVeryEnd) {
 }
 
 TEST_F(SimdScannerTest, RespectsLongPattern) {
-  std::vector<std::byte> buffer(64);
-  std::fill(buffer.begin(), buffer.end(), std::byte{0});
+  std::vector<std::byte> buffer(64, std::byte{0});
 
   // "False positive" partial match
   buffer[10] = std::byte{0xAA};

@@ -69,7 +69,7 @@ void CreateDockSpace() {
 int main() {
   maia::LogInstallFormat();
 
-  maia::GuiSystem gui_system{};
+  maia::GuiSystem gui_system{1280, 768};
   if (!gui_system.IsValid()) {
     maia::LogError("Failed to initialize the windowing subsystem.");
     return EXIT_FAILURE;

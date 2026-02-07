@@ -12,7 +12,11 @@ TEST(AddressFormatterTest, FormatsAbsoluteAddressWhenNoModules) {
 
 TEST(AddressFormatterTest, FormatsRelativeAddressWithinModule) {
   std::vector<mmem::ModuleDescriptor> modules = {
-      {0x1000, 0x2000, 0x1000, "C:\\test.exe", "test.exe"}
+      {.base = 0x1000,
+       .end = 0x2000,
+       .size = 0x1000,
+       .path = "C:\\test.exe",
+       .name = "test.exe"}
   };
   AddressFormatter formatter(modules);
 
@@ -23,7 +27,11 @@ TEST(AddressFormatterTest, FormatsRelativeAddressWithinModule) {
 
 TEST(AddressFormatterTest, FormatsAbsoluteAddressOutsideModule) {
   std::vector<mmem::ModuleDescriptor> modules = {
-      {0x1000, 0x2000, 0x1000, "C:\\test.exe", "test.exe"}
+      {.base = 0x1000,
+       .end = 0x2000,
+       .size = 0x1000,
+       .path = "C:\\test.exe",
+       .name = "test.exe"}
   };
   AddressFormatter formatter(modules);
 
@@ -38,8 +46,16 @@ TEST(AddressFormatterTest, FormatsAbsoluteAddressOutsideModule) {
 
 TEST(AddressFormatterTest, HandlesMultipleModules) {
   std::vector<mmem::ModuleDescriptor> modules = {
-      {0x1000, 0x2000, 0x1000, "C:\\a.dll", "a.dll"},
-      {0x3000, 0x4000, 0x1000, "C:\\b.dll", "b.dll"}
+      {.base = 0x1000,
+       .end = 0x2000,
+       .size = 0x1000,
+       .path = "C:\\a.dll",
+       .name = "a.dll"},
+      {.base = 0x3000,
+       .end = 0x4000,
+       .size = 0x1000,
+       .path = "C:\\b.dll",
+       .name = "b.dll"}
   };
   AddressFormatter formatter(modules);
 
