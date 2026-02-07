@@ -5,8 +5,7 @@
 #include <filesystem>
 #include <string>
 
-#include <nfd.h>
-
+#include "maia/application/file_dialogs.h"
 #include "maia/core/address_parser.h"
 #include "maia/core/signal_utils.h"
 #include "maia/logging.h"
@@ -70,68 +69,63 @@ void CheatTablePresenter::OnDeleteRequested(size_t index) {
 }
 
 void CheatTablePresenter::OnSaveRequested() {
-  nfdu8char_t* out_path = nullptr;
-  nfdu8filteritem_t filters[] = {
+  using application::FileDialogs;
+  using application::FileFilter;
+
+  constexpr FileFilter kFilters[] = {
       {"JSON Files", "json"},
       { "All Files",    "*"}
   };
 
-  nfdresult_t result = NFD_SaveDialogU8(
-      &out_path,
-      filters,
-      2,
-      last_save_path_.empty() ? nullptr : last_save_path_.c_str(),
-      "cheat_table.json");
+  std::optional<std::filesystem::path> default_path;
+  if (!last_save_path_.empty()) {
+    default_path = std::filesystem::path(last_save_path_);
+  }
 
-  if (result == NFD_OKAY) {
-    std::filesystem::path save_path(out_path);
-    NFD_FreePathU8(out_path);
+  auto result =
+      FileDialogs::ShowSaveDialog(kFilters, default_path, "cheat_table.json");
+  if (!result) {
+    return;
+  }
 
-    // Ensure .json extension
-    if (save_path.extension() != ".json") {
-      save_path += ".json";
-    }
+  auto save_path = *result;
+  if (save_path.extension() != ".json") {
+    save_path += ".json";
+  }
 
-    if (model_.Save(save_path)) {
-      last_save_path_ = save_path.string();
-      LogInfo("Cheat table saved to {}", save_path.string());
-    } else {
-      LogError("Failed to save cheat table");
-    }
-  } else if (result == NFD_CANCEL) {
-    // User cancelled, no action needed
+  if (model_.Save(save_path)) {
+    last_save_path_ = save_path.string();
+    LogInfo("Cheat table saved to {}", save_path.string());
   } else {
-    LogError("Save dialog error: {}", NFD_GetError());
+    LogError("Failed to save cheat table");
   }
 }
 
 void CheatTablePresenter::OnLoadRequested() {
-  nfdu8char_t* out_path = nullptr;
-  nfdu8filteritem_t filters[] = {
+  using application::FileDialogs;
+  using application::FileFilter;
+
+  constexpr FileFilter kFilters[] = {
       {"JSON Files", "json"},
       { "All Files",    "*"}
   };
 
-  nfdresult_t result = NFD_OpenDialogU8(
-      &out_path,
-      filters,
-      2,
-      last_save_path_.empty() ? nullptr : last_save_path_.c_str());
+  std::optional<std::filesystem::path> default_path;
+  if (!last_save_path_.empty()) {
+    default_path = std::filesystem::path(last_save_path_);
+  }
 
-  if (result == NFD_OKAY) {
-    std::filesystem::path load_path(out_path);
-    NFD_FreePathU8(out_path);
+  auto result = FileDialogs::ShowOpenDialog(kFilters, default_path);
+  if (!result) {
+    return;
+  }
 
-    if (model_.Load(load_path)) {
-      last_save_path_ = load_path.string();
-      LogInfo("Cheat table loaded from {}", load_path.string());
-    } else {
-      LogError("Failed to load cheat table");
-    }
-  } else if (result == NFD_CANCEL) {
-    // User cancelled, no action needed
+  auto load_path = *result;
+  if (model_.Load(load_path)) {
+    last_save_path_ = load_path.string();
+    LogInfo("Cheat table loaded from {}", load_path.string());
   } else {
-    LogError("Open dialog error: {}", NFD_GetError());
+    LogError("Failed to load cheat table");
   }
 }
 
