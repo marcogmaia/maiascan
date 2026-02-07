@@ -22,7 +22,6 @@ namespace maia::core {
 namespace py = pybind11;
 
 void BindMaiascan(py::module_& m) {
-  // TODO(marco): Review these
   namespace py = pybind11;
 
   m.doc() = "MaiaScan Python Bindings";

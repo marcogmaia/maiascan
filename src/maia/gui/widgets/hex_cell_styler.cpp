@@ -27,7 +27,7 @@ HexCellStyles HexCellStyler::GetStyles(const HexCellState& state) {
 
     // Apply fade if changed recently and not edited/selected
     if (state.time_since_last_change < 2.0 && !state.is_selected) {
-      float t = static_cast<float>(state.time_since_last_change / 2.0);
+      auto t = static_cast<float>(state.time_since_last_change / 2.0);
       // Lerp from Red (1,0,0) to White (1,1,1)
       // Red: 1, 0, 0
       // Target: 1, 1, 1

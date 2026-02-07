@@ -142,8 +142,6 @@ class PointerScannerView {
                             bool is_scanning,
                             PathResolver path_resolver);
 
-  std::string FormatPointerPath(const core::PointerPath& path) const;
-
   Signals signals_;
 
   // UI State

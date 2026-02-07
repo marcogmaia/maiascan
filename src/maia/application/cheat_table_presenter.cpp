@@ -106,8 +106,8 @@ void CheatTablePresenter::OnLoadRequested() {
   using application::FileFilter;
 
   constexpr FileFilter kFilters[] = {
-      {"JSON Files", "json"},
-      { "All Files",    "*"}
+      {.name = "JSON Files", .spec = "json"},
+      { .name = "All Files",    .spec = "*"}
   };
 
   std::optional<std::filesystem::path> default_path;

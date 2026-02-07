@@ -9,7 +9,6 @@
 #include "application/scanner_presenter.h"
 #include "maia/application/cheat_table_model.h"
 #include "maia/application/cheat_table_presenter.h"
-#include "maia/application/file_dialogs.h"
 #include "maia/application/global_hotkey_manager.h"
 #include "maia/application/hex_view_presenter.h"
 #include "maia/application/pointer_scanner_model.h"
@@ -69,11 +68,6 @@ void CreateDockSpace() {
 
 int main() {
   maia::LogInstallFormat();
-  maia::application::FileDialogs file_dialogs;
-  if (!file_dialogs.IsValid()) {
-    maia::LogError("Failed to initialize file dialogs.");
-    return EXIT_FAILURE;
-  }
 
   maia::GuiSystem gui_system{1280, 768};
   if (!gui_system.IsValid()) {

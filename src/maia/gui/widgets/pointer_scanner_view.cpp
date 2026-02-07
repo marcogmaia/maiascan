@@ -3,7 +3,6 @@
 #include "maia/gui/widgets/pointer_scanner_view.h"
 
 #include <algorithm>
-#include <sstream>
 #include <unordered_set>
 
 #include <fmt/core.h>
@@ -11,6 +10,8 @@
 #include <imgui_stdlib.h>
 
 #include "maia/core/pointer_scanner.h"
+
+namespace maia {
 
 namespace {
 
@@ -96,9 +97,22 @@ void ShowHelpMarker(const char* desc) {
   }
 }
 
-}  // namespace
+std::string FormatPointerPath(const core::PointerPath& path) {
+  // Format: +off1+off2+off3 (Cheat Engine style)
+  std::string result;
 
-namespace maia {
+  for (const auto offset : path.offsets) {
+    if (offset >= 0) {
+      result += fmt::format("+{:X}", offset);
+    } else {
+      result += fmt::format("-{:X}", -offset);
+    }
+  }
+
+  return result;
+}
+
+}  // namespace
 
 PointerScannerView::PointerScannerView() = default;
 
@@ -632,22 +646,6 @@ void PointerScannerView::RenderResultsSection(
 
     ImGui::EndTable();
   }
-}
-
-std::string PointerScannerView::FormatPointerPath(
-    const core::PointerPath& path) const {
-  // Format: +off1+off2+off3 (Cheat Engine style)
-  std::string result;
-
-  for (size_t i = 0; i < path.offsets.size(); ++i) {
-    if (path.offsets[i] >= 0) {
-      result += fmt::format("+{:X}", path.offsets[i]);
-    } else {
-      result += fmt::format("-{:X}", -path.offsets[i]);
-    }
-  }
-
-  return result;
 }
 
 }  // namespace maia

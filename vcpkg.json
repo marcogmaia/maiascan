@@ -3,7 +3,10 @@
   "name": "maiascan",
   "version-string": "0.0.1",
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
-  "configuration": { "overlay-triplets": ["external/triplets"] },
+  "configuration": {
+    "overlay-triplets": ["external/triplets"],
+    "overlay-ports": ["external/ports"]
+  },
   "dependencies": [
     "atl",
     "cli11",

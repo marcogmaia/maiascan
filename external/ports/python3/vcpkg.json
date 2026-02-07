@@ -1,0 +1,11 @@
+{
+  "name": "python3",
+  "version": "3.12",
+  "description": "The Python programming language",
+  "homepage": "https://github.com/python/cpython",
+  "license": "Python-2.0",
+  "supports": "!uwp & !mingw",
+  "dependencies": [],
+  "default-features": [],
+  "features": {}
+}

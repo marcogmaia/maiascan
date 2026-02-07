@@ -164,7 +164,7 @@ void PointerScannerPresenter::OnSaveMapPressed() {
   using application::FileFilter;
 
   constexpr FileFilter kFilters[] = {
-      {"Pointer Map", "pmap"}
+      {.name = "Pointer Map", .spec = "pmap"}
   };
 
   auto result =
@@ -190,7 +190,7 @@ void PointerScannerPresenter::OnLoadMapPressed() {
   using application::FileFilter;
 
   constexpr FileFilter kFilters[] = {
-      {"Pointer Map", "pmap"}
+      {.name = "Pointer Map", .spec = "pmap"}
   };
 
   auto result = FileDialogs::ShowOpenDialog(kFilters);

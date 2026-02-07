@@ -1,42 +1,30 @@
-// Copyright (c) Maia
-
 #pragma once
 
 #include <filesystem>
 #include <optional>
 #include <span>
-#include <string>
+#include <string_view>
 
 namespace maia::application {
 
 struct FileFilter {
-  const char* name;
-  const char* spec;
+  std::string_view name;
+  std::string_view spec;
 };
 
 class FileDialogs {
  public:
-  FileDialogs();
-  ~FileDialogs();
+  // Static class - prevent instantiation
+  FileDialogs() = delete;
 
-  FileDialogs(const FileDialogs&) = delete;
-  FileDialogs& operator=(const FileDialogs&) = delete;
-
-  [[nodiscard]] bool IsValid() const {
-    return initialized_;
-  }
-
-  static std::optional<std::filesystem::path> ShowOpenDialog(
+  [[nodiscard]] static std::optional<std::filesystem::path> ShowOpenDialog(
       std::span<const FileFilter> filters = {},
       const std::optional<std::filesystem::path>& default_path = std::nullopt);
 
-  static std::optional<std::filesystem::path> ShowSaveDialog(
+  [[nodiscard]] static std::optional<std::filesystem::path> ShowSaveDialog(
       std::span<const FileFilter> filters = {},
       const std::optional<std::filesystem::path>& default_path = std::nullopt,
       const std::optional<std::string>& default_name = std::nullopt);
-
- private:
-  bool initialized_ = false;
 };
 
 }  // namespace maia::application
