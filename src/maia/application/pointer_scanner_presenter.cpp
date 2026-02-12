@@ -5,6 +5,7 @@
 #include <imgui.h>
 
 #include "maia/application/file_dialogs.h"
+#include "maia/core/memory_common.h"
 #include "maia/logging.h"
 
 namespace maia {
@@ -122,7 +123,12 @@ void PointerScannerPresenter::Render() {
   const auto& scan_results = scan_result_model_.entries();
   auto available_modules = pointer_scanner_model_.GetModuleNames();
 
-  // Render the view with path resolver
+  // Get active process and target type for value reading
+  IProcess* process = process_model_.GetActiveProcess();
+  ScanValueType target_type = pointer_scanner_model_.GetTargetType();
+  size_t value_size = GetSizeForType(target_type);
+
+  // Render the view with path resolver and value reader
   pointer_scanner_view_.Render(
       &is_visible_,
       paths,
@@ -136,7 +142,21 @@ void PointerScannerPresenter::Render() {
       available_modules,
       [this](const core::PointerPath& path) {
         return pointer_scanner_model_.ResolvePath(path);
-      });
+      },
+      [process,
+       value_size](uint64_t address) -> std::optional<std::vector<std::byte>> {
+        if (!process || value_size == 0) {
+          return std::nullopt;
+        }
+        std::vector<std::byte> buffer(value_size);
+        std::vector<MemoryAddress> addresses = {
+            static_cast<MemoryAddress>(address)};
+        if (process->ReadMemory(addresses, value_size, buffer, nullptr)) {
+          return buffer;
+        }
+        return std::nullopt;
+      },
+      target_type);
 }
 
 void PointerScannerPresenter::OnTargetAddressChanged(uint64_t address) {
@@ -268,20 +288,24 @@ void PointerScannerPresenter::HandlePendingProcessSwitch() {
 
 void PointerScannerPresenter::UpdateTargetFromCheatTable(size_t index) {
   auto entries_ptr = cheat_table_model_.entries();
-  const auto& entries = *entries_ptr;
+  const std::vector<CheatTableEntry>& entries = *entries_ptr;
 
   if (index >= entries.size()) {
     LogWarning("Invalid cheat table index: {}", index);
     return;
   }
 
-  uint64_t address = entries[index].address;
-  pointer_scanner_model_.SetTargetAddress(address);
+  const auto& selected_entry = entries.at(index);
+  const uint64_t resolved_address =
+      cheat_table_model_.ResolveAddress(selected_entry);
+
+  pointer_scanner_model_.SetTargetAddress(resolved_address);
   pointer_scanner_model_.SetTargetType(entries[index].type);
+  pointer_scanner_view_.SetTargetAddress(resolved_address);
   pointer_scanner_view_.SetSelectedType(entries[index].type);
 
   LogInfo("Target address set from cheat table: 0x{:X} ({})",
-          address,
+          resolved_address,
           entries[index].description);
 }
 

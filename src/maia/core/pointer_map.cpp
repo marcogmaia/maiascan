@@ -141,7 +141,9 @@ std::optional<PointerMap> PointerMap::Generate(
     }
   }
 
-  // Sort by value to enable binary search
+  // TODO(marco): Maybe we should encapsulate this in a class to enforce this
+  // binary-searchable invariance.
+  // Sort by value to enable binary search.
   std::sort(map.entries_.begin(), map.entries_.end());
 
   return map;
@@ -256,28 +258,16 @@ bool PointerMap::Save(std::ostream& stream) const {
 
 std::span<const PointerMapEntry> PointerMap::FindPointersToRange(
     uint64_t min_value, uint64_t max_value) const {
-  // Binary search for the first entry with value >= min_value
-  auto it_begin =
-      std::lower_bound(entries_.begin(),
-                       entries_.end(),
-                       min_value,
-                       [](const PointerMapEntry& entry, uint64_t val) {
-                         return entry.value < val;
-                       });
-  // Binary search for the first entry with value > max_value
-  auto it_end =
-      std::upper_bound(it_begin,
-                       entries_.end(),
-                       max_value,
-                       [](uint64_t val, const PointerMapEntry& entry) {
-                         return val < entry.value;
-                       });
+  // Projection: "&PointerMapEntry::value" tells the algorithm to look at that
+  // member.
+  const auto it_begin = std::ranges::lower_bound(
+      entries_, min_value, {}, &PointerMapEntry::value);
 
-  if (it_begin >= it_end) {
-    return {};
-  }
+  // Optimization: Start the second search from 'it_begin' (narrower range).
+  const auto it_end = std::ranges::upper_bound(
+      it_begin, entries_.end(), max_value, {}, &PointerMapEntry::value);
 
-  return std::span<const PointerMapEntry>(it_begin, it_end);
+  return {it_begin, it_end};
 }
 
 }  // namespace maia::core

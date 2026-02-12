@@ -13,6 +13,17 @@
 
 namespace maia::gui {
 
+namespace {
+
+void RenderAddress(uintptr_t address) {
+  ImGui::PushStyleColor(ImGuiCol_Text,
+                        ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+  ImGui::Text("%016llX", static_cast<unsigned long long>(address));
+  ImGui::PopStyleColor();
+}
+
+}  // namespace
+
 HexView::HexView(HexViewModel& model)
     : model_(model),
       data_inspector_(model) {}
@@ -178,13 +189,6 @@ void HexView::RenderGrid() {
     clipper.End();
     ImGui::EndTable();
   }
-}
-
-void HexView::RenderAddress(uintptr_t address) {
-  ImGui::PushStyleColor(ImGuiCol_Text,
-                        ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-  ImGui::Text("%016llX", static_cast<unsigned long long>(address));
-  ImGui::PopStyleColor();
 }
 
 void HexView::RenderHexBytes(uintptr_t start_address,
@@ -414,8 +418,9 @@ void HexView::HandleInput() {
     for (int n = 0; n < 16; n++) {
       char c = (n < 10) ? ('0' + n) : ('A' + n - 10);
       char c2 = (n < 10) ? ('0' + n) : ('a' + n - 10);
-      if (ImGui::IsKeyPressed((ImGuiKey)(ImGuiKey_0 + n)) ||
-          (n >= 10 && (ImGui::IsKeyPressed((ImGuiKey)(ImGuiKey_A + n - 10))))) {
+      if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_0 + n)) ||
+          (n >= 10 &&
+           (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_A + n - 10))))) {
         if (pending_nibble_ < 0) {
           pending_nibble_ = n;
           pending_nibble_addr_ = selection.start;

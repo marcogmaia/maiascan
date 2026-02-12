@@ -53,8 +53,17 @@ ProcessSelectorPresenter::ProcessSelectorPresenter(
 }
 
 void ProcessSelectorPresenter::Render() {
-  process_selector_view_.Render(
-      nullptr, process_list_, selected_process_name_, selected_pid_);
+  if (show_selector_window_) {
+    process_selector_view_.Render(&show_selector_window_,
+                                  process_list_,
+                                  selected_process_name_,
+                                  selected_pid_);
+  }
+}
+
+void ProcessSelectorPresenter::RenderToolbar() {
+  process_selector_view_.RenderToolbar(
+      selected_process_name_, selected_pid_, &show_selector_window_);
 }
 
 void ProcessSelectorPresenter::RefreshProcessList() {

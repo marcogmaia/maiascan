@@ -44,7 +44,7 @@ void CreateDockSpace() {
   host_window_flags |= ImGuiWindowFlags_NoNavFocus;
   host_window_flags |= ImGuiWindowFlags_NoBackground;  // Make it transparent
 
-  // We must push style vars to remove padding/borders
+  // We must push style vars to remove padding/borders.
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -56,7 +56,7 @@ void CreateDockSpace() {
   // Create the dockspace.
   ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
 
-  // Apply default layout if needed
+  // Apply default layout if needed.
   gui::MakeDefaultLayout(dockspace_id);
   ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
   ImGui::End();
@@ -69,7 +69,7 @@ void CreateDockSpace() {
 int main() {
   maia::LogInstallFormat();
 
-  maia::GuiSystem gui_system{1280, 768};
+  maia::GuiSystem gui_system{1440, 900};
   if (!gui_system.IsValid()) {
     maia::LogError("Failed to initialize the windowing subsystem.");
     return EXIT_FAILURE;
@@ -85,7 +85,7 @@ int main() {
   maia::ScanResultModel scan_result_model{};
   maia::CheatTableModel cheat_table_model{};
 
-  // Create global hotkey manager
+  // Create global hotkey manager.
   auto hotkey_manager =
       maia::GlobalHotkeyManager::Create(gui_system.window_handle());
 
@@ -99,7 +99,7 @@ int main() {
   maia::CheatTableView cheat_table_view{};
   maia::CheatTablePresenter cheat_table{cheat_table_model, cheat_table_view};
 
-  // Pointer Scanner
+  // Pointer Scanner.
   maia::PointerScannerModel pointer_scanner_model{};
   maia::PointerScannerView pointer_scanner_view{};
   maia::PointerScannerPresenter pointer_scanner{pointer_scanner_model,
@@ -112,7 +112,7 @@ int main() {
   maia::gui::HexView hex_view{hex_view_model};
   maia::HexViewPresenter hex_presenter{process_model, hex_view_model, hex_view};
 
-  // Wire scanner to hex view
+  // Wire scanner to hex view.
   scanner.sinks()
       .BrowseMemoryRequested()
       .connect<&maia::HexViewPresenter::GoToAddress>(hex_presenter);
@@ -120,14 +120,14 @@ int main() {
   while (!gui_system.WindowShouldClose()) {
     gui_system.PollEvents();
 
-    // Poll global hotkeys
+    // Poll global hotkeys.
     if (hotkey_manager) {
       hotkey_manager->Poll();
     }
 
     gui_system.BeginFrame();
 
-    // Main menu bar
+    // Main menu bar.
     if (ImGui::BeginMainMenuBar()) {
       if (ImGui::BeginMenu("Tools")) {
         bool is_open = pointer_scanner.IsVisible();
@@ -141,6 +141,14 @@ int main() {
         }
         ImGui::EndMenu();
       }
+
+      // TODO(marco): This is a little unorganized, find a way to draw the
+      // entire toolbar in an orderly manner.
+      //
+      // Process selector in the menu bar
+      ImGui::Separator();
+      process_selector.RenderToolbar();
+
       ImGui::EndMainMenuBar();
     }
 

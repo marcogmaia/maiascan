@@ -270,9 +270,9 @@ TEST_F(PointerScannerTest, PointerSize32BitMaskingRegression) {
 TEST_F(PointerScannerTest, PerformanceSim) {
   // Re-initialize process with enough memory for 100 modules.
   // 100 modules starting at 0x1000000, each 0x10000 size, spaced by 0x100000.
-  const int kNumModules = 100;
-  const uintptr_t kBaseStart = 0x1000000;
-  const uintptr_t kBaseStep = 0x100000;
+  constexpr int kNumModules = 100;
+  constexpr uintptr_t kBaseStart = 0x1000000;
+  constexpr uintptr_t kBaseStep = 0x100000;
 
   process_ = std::make_unique<test::FakeProcess>(
       kBaseStart + kNumModules * kBaseStep, 8);

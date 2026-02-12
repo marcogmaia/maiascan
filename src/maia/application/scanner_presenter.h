@@ -24,10 +24,11 @@ class ScannerPresenter {
       scan_result_model_.ApplyPendingResult();
     }
 
-    scanner_widget_.Render(scan_result_model_.entries(),
-                           AddressFormatter(scan_result_model_.GetModules()),
-                           scan_result_model_.GetProgress(),
-                           scan_result_model_.IsScanning());
+    scanner_widget_.RenderControls(scan_result_model_.GetProgress(),
+                                   scan_result_model_.IsScanning());
+    scanner_widget_.RenderResults(
+        scan_result_model_.entries(),
+        AddressFormatter(scan_result_model_.GetModules()));
   }
 
   auto sinks() {

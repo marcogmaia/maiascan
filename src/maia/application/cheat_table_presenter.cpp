@@ -120,7 +120,7 @@ void CheatTablePresenter::OnLoadRequested() {
     return;
   }
 
-  auto load_path = *result;
+  const auto& load_path = *result;
   if (model_.Load(load_path)) {
     last_save_path_ = load_path.string();
     LogInfo("Cheat table loaded from {}", load_path.string());

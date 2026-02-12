@@ -207,6 +207,12 @@ class CheatTableModel {
   /// \brief Sets the target process for memory operations.
   void SetActiveProcess(IProcess* process);
 
+  /// \brief Resolves a dynamic entry to get the final memory address.
+  /// \param entry The cheat table entry containing the address info.
+  /// \return The resolved address, or 0 if resolution failed.
+  [[nodiscard]] MemoryAddress ResolveAddress(
+      const CheatTableEntry& entry) const;
+
  private:
   struct Signals {
     entt::sigh<void()> table_changed;
@@ -222,12 +228,6 @@ class CheatTableModel {
 
   void AutoUpdateLoop(std::stop_token stop_token);
   void WriteMemory(size_t index, const std::vector<std::byte>& data);
-
-  /// \brief Resolves a dynamic entry to get the final memory address.
-  /// \param entry The cheat table entry containing the address info.
-  /// \return The resolved address, or 0 if resolution failed.
-  [[nodiscard]] MemoryAddress ResolveAddress(
-      const CheatTableEntry& entry) const;
 
   /// \brief Reads memory for an entry, handling both static and dynamic.
   [[nodiscard]] bool ReadEntryValue(const CheatTableEntry& entry,

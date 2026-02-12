@@ -376,8 +376,6 @@ void PointerScannerModel::ValidatePathsAsync() {
     ApplyPendingResult();
   }
 
-  std::scoped_lock lock(mutex_);
-
   // CRITICAL: Check if any operation is busy before starting
   if (auto blocking = GetBlockingOperation(state_.load())) {
     if (*blocking == OperationType::kValidate) {

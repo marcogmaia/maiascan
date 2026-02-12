@@ -25,15 +25,6 @@ class ResultsTable {
               ScanValueType value_type,
               bool is_hex,
               ResultsTableState& state);
-
- private:
-  struct Context;
-
-  void RenderContextMenu(Context& ctx);
-  void RenderReinterpretMenu(Context& ctx);
-  void RenderHexToggle(Context& ctx);
-  void RenderRows(Context& ctx);
-  void RenderSingleRow(int index, Context& ctx);
 };
 
 }  // namespace maia

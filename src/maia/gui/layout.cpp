@@ -22,19 +22,20 @@ void MakeDefaultLayout(ImGuiID dockspace_id) {
 
   // --- Define Layout ---
   // We want:
-  // [ Scanner  | Selector  ]  <- Scanner, Process Selector
-  // [ Cheat Table (Bottom) ]  <- Cheat Table (30% height)
+  // [ Scanner (Left) | Results (Center) ]
+  // [ Cheat Table (Bottom)              ]  <- Cheat Table (30% height)
+  // Process Selector is in the menu bar, not docked.
 
   ImGuiID dock_main_id = dockspace_id;
   ImGuiID dock_down_id = ImGui::DockBuilderSplitNode(
       dock_main_id, ImGuiDir_Down, 0.3f, nullptr, &dock_main_id);
 
   ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(
-      dock_main_id, ImGuiDir_Left, 0.5f, nullptr, &dock_main_id);
+      dock_main_id, ImGuiDir_Left, 0.25f, nullptr, &dock_main_id);
 
   // --- Assign Windows to Regions ---
   ImGui::DockBuilderDockWindow("Scanner", dock_left_id);
-  ImGui::DockBuilderDockWindow("Process Selector", dock_main_id);
+  ImGui::DockBuilderDockWindow("Results", dock_main_id);
   ImGui::DockBuilderDockWindow("Cheat Table", dock_down_id);
 
   // Finalize

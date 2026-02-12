@@ -2,7 +2,6 @@
 
 #include "maia/gui/widgets/results_table.h"
 
-#include <algorithm>
 #include <cstring>
 #include <optional>
 #include <span>
@@ -19,7 +18,9 @@
 
 namespace maia {
 
-struct ResultsTable::Context {
+namespace {
+
+struct Context {
   const ScanStorage& data;
   const AddressFormatter& formatter;
   ScanValueType value_type;
@@ -29,8 +30,6 @@ struct ResultsTable::Context {
   const std::byte* curr_ptr = nullptr;
   const std::byte* prev_ptr = nullptr;
 };
-
-namespace {
 
 void DrawFormattedValue(std::span<const std::byte> data,
                         ScanValueType type,
@@ -44,47 +43,31 @@ void DrawFormattedValue(std::span<const std::byte> data,
   }
 }
 
-}  // namespace
-
-void ResultsTable::Render(const ScanStorage& data,
-                          const AddressFormatter& formatter,
-                          ScanValueType value_type,
-                          bool is_hex,
-                          ResultsTableState& state) {
-  Context ctx{
-      .data = data,
-      .formatter = formatter,
-      .value_type = value_type,
-      .is_hex = is_hex,
-      .state = state,
-      .curr_ptr = data.curr_raw.data(),
-  };
-
-  if (!data.prev_raw.empty() &&
-      data.prev_raw.size() >= data.addresses.size() * data.stride) {
-    ctx.prev_ptr = data.prev_raw.data();
+void RenderReinterpretMenu(Context& ctx) {
+  if (!ImGui::BeginMenu("Reinterpret Results As")) {
+    return;
   }
 
-  state.double_clicked = false;
+  for (const auto type : kAllScanValueTypes) {
+    const bool selected = (type == ctx.value_type);
+    if (ImGui::MenuItem(ValueFormatter::GetLabel(type), nullptr, selected)) {
+      if (ctx.state.out_new_type) {
+        *ctx.state.out_new_type = type;
+      }
+    }
+  }
+  ImGui::EndMenu();
+}
 
-  constexpr int kNumCols = 3;
-  if (ImGui::BeginTable("ScanResults",
-                        kNumCols,
-                        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                            ImGuiTableFlags_ScrollY)) {
-    ImGui::TableSetupColumn("Address");
-    ImGui::TableSetupColumn("Previous");
-    ImGui::TableSetupColumn("Current");
-    ImGui::TableHeadersRow();
-
-    RenderContextMenu(ctx);
-    RenderRows(ctx);
-
-    ImGui::EndTable();
+void RenderHexToggle(Context& ctx) {
+  if (ImGui::MenuItem("Show Values as Hex", nullptr, ctx.is_hex)) {
+    if (ctx.state.out_is_hex) {
+      *ctx.state.out_is_hex = !ctx.is_hex;
+    }
   }
 }
 
-void ResultsTable::RenderContextMenu(Context& ctx) {
+void RenderContextMenu(Context& ctx) {
   if (!ImGui::BeginPopupContextWindow("ResultsTableContext")) {
     return;
   }
@@ -103,43 +86,7 @@ void ResultsTable::RenderContextMenu(Context& ctx) {
   ImGui::EndPopup();
 }
 
-void ResultsTable::RenderReinterpretMenu(Context& ctx) {
-  if (!ImGui::BeginMenu("Reinterpret Results As")) {
-    return;
-  }
-
-  for (const auto type : kAllScanValueTypes) {
-    const bool selected = (type == ctx.value_type);
-    if (ImGui::MenuItem(ValueFormatter::GetLabel(type), nullptr, selected)) {
-      if (ctx.state.out_new_type) {
-        *ctx.state.out_new_type = type;
-      }
-    }
-  }
-  ImGui::EndMenu();
-}
-
-void ResultsTable::RenderHexToggle(Context& ctx) {
-  if (ImGui::MenuItem("Show Values as Hex", nullptr, ctx.is_hex)) {
-    if (ctx.state.out_is_hex) {
-      *ctx.state.out_is_hex = !ctx.is_hex;
-    }
-  }
-}
-
-void ResultsTable::RenderRows(Context& ctx) {
-  ImGuiListClipper clipper;
-  clipper.Begin(static_cast<int>(ctx.data.addresses.size()));
-
-  while (clipper.Step()) {
-    for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-      RenderSingleRow(i, ctx);
-    }
-  }
-  clipper.End();
-}
-
-void ResultsTable::RenderSingleRow(int i, Context& ctx) {
+void RenderSingleRow(int i, Context& ctx) {
   ImGui::TableNextRow();
 
   const size_t offset = i * ctx.data.stride;
@@ -190,6 +137,58 @@ void ResultsTable::RenderSingleRow(int i, Context& ctx) {
     }
 
     DrawFormattedValue(curr_span, ctx.value_type, ctx.is_hex, val_color);
+  }
+}
+
+void RenderRows(Context& ctx) {
+  ImGuiListClipper clipper;
+  clipper.Begin(static_cast<int>(ctx.data.addresses.size()));
+
+  while (clipper.Step()) {
+    for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+      RenderSingleRow(i, ctx);
+    }
+  }
+  clipper.End();
+}
+
+}  // namespace
+
+void ResultsTable::Render(const ScanStorage& data,
+                          const AddressFormatter& formatter,
+                          ScanValueType value_type,
+                          bool is_hex,
+                          ResultsTableState& state) {
+  Context ctx{
+      .data = data,
+      .formatter = formatter,
+      .value_type = value_type,
+      .is_hex = is_hex,
+      .state = state,
+      .curr_ptr = data.curr_raw.data(),
+  };
+
+  if (!data.prev_raw.empty() &&
+      data.prev_raw.size() >= data.addresses.size() * data.stride) {
+    ctx.prev_ptr = data.prev_raw.data();
+  }
+
+  state.double_clicked = false;
+
+  constexpr int kNumCols = 3;
+  if (ImGui::BeginTable("ScanResults",
+                        kNumCols,
+                        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                            ImGuiTableFlags_ScrollY)) {
+    ImGui::TableSetupColumn("Address");
+    ImGui::TableSetupColumn("Previous");
+    ImGui::TableSetupColumn("Current");
+    ImGui::TableHeadersRow();
+
+    RenderContextMenu(ctx);
+    RenderRows(ctx);
+
+    ImGui::EndTable();
   }
 }
 

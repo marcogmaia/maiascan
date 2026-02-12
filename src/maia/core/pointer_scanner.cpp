@@ -7,6 +7,8 @@
 #include <ranges>
 #include <unordered_set>
 
+#include <fmt/format.h>
+
 namespace maia::core {
 
 namespace {
@@ -56,6 +58,24 @@ std::optional<uint64_t> FollowPointerChain(
 
 }  // namespace
 
+std::string FormatPointerPathKey(const PointerPath& path) {
+  // Format: "module:offset:+off1+off2..." or "0xbase:+off1+off2..."
+  // Creates a unique, stable key for each path (survives scrolling)
+  std::string key =
+      path.module_name.empty()
+          ? fmt::format("0x{:X}", path.base_address)
+          : fmt::format("{}:{:X}", path.module_name, path.module_offset);
+
+  for (const auto offset : path.offsets) {
+    if (offset >= 0) {
+      key += fmt::format("+{:X}", offset);
+    } else {
+      key += fmt::format("-{:X}", -offset);
+    }
+  }
+  return key;
+}
+
 PointerScanResult PointerScanner::FindPaths(
     const PointerMap& map,
     const PointerScanConfig& config,
@@ -63,14 +83,15 @@ PointerScanResult PointerScanner::FindPaths(
     std::stop_token stop_token,
     ProgressCallback progress_callback) const {
   PointerScanResult result;
-  result.success = true;  // Assume success unless error occurs
+  // Assume success unless error occurs.
+  result.success = true;
 
-  // BFS Queue: (CurrentAddress, OffsetsSoFar, Level)
-  std::deque<SearchNode> queue;
-  queue.push_back(
-      {.address = config.target_address, .offsets = {}, .level = 0});
+  // BFS Queue: (CurrentAddress, OffsetsSoFar, Level).
+  std::deque<SearchNode> queue{
+      SearchNode{.address = config.target_address, .offsets = {}, .level = 0}
+  };
 
-  // Visited set to prevent loops and redundant work
+  // Visited set to prevent loops and redundant work.
   std::unordered_set<uint64_t> visited;
   // Heuristic: Reserve memory to avoid frequent reallocations.
   // Assuming we might visit ~10% of total pointers in a deep scan.
@@ -122,7 +143,7 @@ PointerScanResult PointerScanner::FindPaths(
     // If we only allow positive offsets: V <= CurrentAddress, so V in
     // [CurrentAddress - MaxOffset, CurrentAddress].
 
-    uint64_t min_val = (current.address > config.max_offset)
+    uint64_t min_val = current.address > config.max_offset
                            ? current.address - config.max_offset
                            : 0;
     uint64_t max_val = current.address;

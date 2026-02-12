@@ -19,13 +19,12 @@ class HexView {
   void RenderGrid();
   void HandleInput();
   void HandleSelection(uintptr_t address);
-  void RenderAddress(uintptr_t address);
   void RenderHexBytes(uintptr_t start_address,
-                      const std::vector<std::byte>& row_data,
-                      size_t row_index);
+                      const std::vector<std::byte>& data,
+                      size_t data_offset);
   void RenderAscii(uintptr_t start_address,
-                   const std::vector<std::byte>& row_data,
-                   size_t row_index);
+                   const std::vector<std::byte>& data,
+                   size_t data_offset);
 
   HexViewModel& model_;
   DataInspectorView data_inspector_;

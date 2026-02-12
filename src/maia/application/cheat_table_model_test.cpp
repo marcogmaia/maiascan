@@ -56,7 +56,7 @@ class CheatTableModelTest : public ::testing::Test {
   testing::NiceMock<MockProcess> mock_process_;
   CheatTableModel model_{std::make_unique<test::NoOpTaskRunner>()};
 
-  void CallWriteMemory(size_t index, const std::vector<std::byte>& data) {
+  void CallWriteMemory(size_t index, const std::vector<std::byte>& /*data*/) {
     // We use "1" here because our entry is kInt32.
     // kInt32 will parse "1" into {0x01, 0x00, 0x00, 0x00}.
     // The test mock expects data of size 4 if we use ReadMemory size... wait.

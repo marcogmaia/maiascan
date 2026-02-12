@@ -14,10 +14,12 @@ namespace maia {
 
 class ScannerWidget {
  public:
-  void Render(const ScanStorage& entries,
-              const AddressFormatter& formatter,
-              float progress,
-              bool is_scanning);
+  // Renders the scanner controls window (inputs, buttons, options).
+  void RenderControls(float progress, bool is_scanning);
+
+  // Renders the results window (found count, results table).
+  void RenderResults(const ScanStorage& entries,
+                     const AddressFormatter& formatter);
 
   auto sinks() {
     return Sinks{*this};

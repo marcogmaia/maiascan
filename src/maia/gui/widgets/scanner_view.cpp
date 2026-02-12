@@ -21,21 +21,14 @@ namespace maia {
 
 namespace {}  // namespace
 
-void ScannerWidget::Render(const ScanStorage& entries,
-                           const AddressFormatter& formatter,
-                           float progress,
-                           bool is_scanning) {
+void ScannerWidget::RenderControls(float progress, bool is_scanning) {
   if (!ImGui::Begin("Scanner")) {
     ImGui::End();
     return;
   }
 
   // Render Search Configuration (Type, Comparison, Input).
-  const auto render_search_options = [this, is_scanning]() {
-    if (!ImGui::BeginTable("InputTable", 2)) {
-      return;
-    }
-
+  if (ImGui::BeginTable("InputTable", 2)) {
     ImGui::TableSetupColumn("Labels", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
 
@@ -144,66 +137,76 @@ void ScannerWidget::Render(const ScanStorage& entries,
       ImGui::TextDisabled("%s", hex_str.c_str());
     }
 
-    draw_row("Options:", [this]() {
-      ImGui::Checkbox("Hex Input", &is_hex_input_);
-      ImGui::SameLine();
-      if (ImGui::Checkbox("Auto Update", &auto_update_enabled_)) {
-        signals_.auto_update_changed.publish(auto_update_enabled_);
-      }
-      ImGui::SameLine();
-      if (ImGui::Checkbox("Pause while scanning",
-                          &pause_while_scanning_enabled_)) {
-        signals_.pause_while_scanning_changed.publish(
-            pause_while_scanning_enabled_);
-      }
-      ImGui::SameLine();
-      if (ImGui::Checkbox("Fast Scan", &fast_scan_enabled_)) {
-        signals_.fast_scan_changed.publish(fast_scan_enabled_);
-      }
-    });
-
     ImGui::EndDisabled();
-
     ImGui::EndTable();
-  };
+  }
 
-  // Render Action Buttons.
-  const auto render_actions = [this, is_scanning]() {
-    ImGui::Separator();
-
+  if (ImGui::CollapsingHeader("Options")) {
     ImGui::BeginDisabled(is_scanning);
-    if (ImGui::Button("First Scan")) {
-      signals_.new_scan_pressed.publish();
+    ImGui::Checkbox("Hex Input", &is_hex_input_);
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Auto Update", &auto_update_enabled_)) {
+      signals_.auto_update_changed.publish(auto_update_enabled_);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Next Scan")) {
-      signals_.next_scan_pressed.publish();
+    if (ImGui::Checkbox("Pause while scanning",
+                        &pause_while_scanning_enabled_)) {
+      signals_.pause_while_scanning_changed.publish(
+          pause_while_scanning_enabled_);
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Fast Scan", &fast_scan_enabled_)) {
+      signals_.fast_scan_changed.publish(fast_scan_enabled_);
     }
     ImGui::EndDisabled();
+  }
 
-    if (is_scanning) {
-      ImGui::SameLine();
-      if (ImGui::Button("Cancel")) {
-        signals_.cancel_scan_pressed.publish();
-      }
+  // Render Action Buttons.
+  ImGui::Separator();
+
+  ImGui::BeginDisabled(is_scanning);
+  if (ImGui::Button("First Scan")) {
+    signals_.new_scan_pressed.publish();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Next Scan")) {
+    signals_.next_scan_pressed.publish();
+  }
+  ImGui::EndDisabled();
+
+  if (is_scanning) {
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      signals_.cancel_scan_pressed.publish();
     }
+  }
 
-    ImGui::Separator();
-  };
+  ImGui::Separator();
 
   // Render Progress Bar when scanning.
-  const auto render_progress = [progress, is_scanning]() {
-    if (!is_scanning) {
-      return;
-    }
+  if (is_scanning) {
     ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0), "Scanning...");
     ImGui::Spacing();
-  };
+  }
 
-  // Execution Flow.
-  render_search_options();
-  render_actions();
-  render_progress();
+  // Shortcut hints
+  if (ImGui::TreeNode("Shortcuts")) {
+    ImGui::TextDisabled("Next Scan: Ctrl+Enter | New Scan: Ctrl+N");
+    ImGui::TextDisabled(
+        "Ctrl+Shift+C=Changed | U=Unchanged | +=Increased | -=Decreased | "
+        "E=Exact");
+    ImGui::TreePop();
+  }
+
+  ImGui::End();
+}
+
+void ScannerWidget::RenderResults(const ScanStorage& entries,
+                                  const AddressFormatter& formatter) {
+  if (!ImGui::Begin("Results")) {
+    ImGui::End();
+    return;
+  }
 
   // Render the number of results found.
   const size_t total_count = entries.addresses.size();
@@ -218,15 +221,6 @@ void ScannerWidget::Render(const ScanStorage& entries,
     ImGui::Spacing();
   } else {
     ImGui::TextDisabled("No results.");
-  }
-
-  // Shortcut hints
-  if (ImGui::TreeNode("Shortcuts")) {
-    ImGui::TextDisabled("Next Scan: Ctrl+Enter | New Scan: Ctrl+N");
-    ImGui::TextDisabled(
-        "Ctrl+Shift+C=Changed | U=Unchanged | +=Increased | -=Decreased | "
-        "E=Exact");
-    ImGui::TreePop();
   }
 
   ImGui::Separator();

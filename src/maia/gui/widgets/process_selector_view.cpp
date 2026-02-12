@@ -89,4 +89,20 @@ void ProcessSelectorView::Render(bool* p_open,
   ImGui::End();
 }
 
+void ProcessSelectorView::RenderToolbar(
+    const std::string& attached_process_name,
+    Pid attached_pid,
+    bool* show_window) {
+  if (attached_pid != 0) {
+    ImGui::Text(
+        "Process: %s (PID: %u)", attached_process_name.c_str(), attached_pid);
+  } else {
+    ImGui::TextDisabled("No Process");
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Select...")) {
+    *show_window = true;
+  }
+}
+
 }  // namespace maia

@@ -51,6 +51,11 @@ class ProcessSelectorView {
               const std::string& attached_process_name,
               Pid attached_pid);
 
+  // Renders a compact toolbar version of the process selector.
+  void RenderToolbar(const std::string& attached_process_name,
+                     Pid attached_pid,
+                     bool* show_window);
+
   Signals& signals() {
     return signals_;
   }

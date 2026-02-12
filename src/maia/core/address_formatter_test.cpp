@@ -1,4 +1,7 @@
+// Copyright (c) Maia
+
 #include "maia/core/address_formatter.h"
+
 #include <gtest/gtest.h>
 
 namespace maia {

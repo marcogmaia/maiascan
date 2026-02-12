@@ -17,6 +17,7 @@ class ProcessSelectorPresenter {
                            ProcessSelectorView& process_selector_view);
 
   void Render();
+  void RenderToolbar();
 
  private:
   void OnProcessPickRequested();
@@ -29,6 +30,7 @@ class ProcessSelectorPresenter {
   std::vector<ProcessInfo> process_list_;
   std::string selected_process_name_ = "N/A";
   Pid selected_pid_ = 0;
+  bool show_selector_window_ = false;
 
   std::vector<entt::scoped_connection> connections_;
 };
