@@ -7,7 +7,6 @@
 
 #include "maia/core/i_process.h"
 #include "maia/core/string_utils.h"
-#include "maia/core/value_parser.h"
 
 namespace maia {
 
@@ -16,7 +15,7 @@ std::optional<ParsedAddress> ParseAddressExpression(std::string_view input,
   // Simple parser: supports "TERM + TERM + ..." or "TERM - TERM"
   // Currently we'll just handle addition for simplicity as that's the main
   // case.
-  // TODO: Full expression parser if needed.
+  // TODO(marco): Full expression parser if needed.
 
   auto parts = core::Split(input, '+');
   if (parts.empty()) {
@@ -42,9 +41,8 @@ std::optional<ParsedAddress> ParseAddressExpression(std::string_view input,
       auto modules = process->GetModules();
       std::string term_str(first_term);
       // Case insensitive comparison would be better, but exact match first
-      auto it = std::find_if(modules.begin(),
-                             modules.end(),
-                             [&](const auto& m) { return m.name == term_str; });
+      auto it = std::ranges::find_if(
+          modules, [&](const auto& m) { return m.name == term_str; });
 
       if (it != modules.end()) {
         first_is_module = true;
@@ -55,7 +53,7 @@ std::optional<ParsedAddress> ParseAddressExpression(std::string_view input,
 
     // If we didn't find it in process (or no process), but it looks like a
     // module (contains dot), assume it is one.
-    if (!first_is_module && first_term.find('.') != std::string_view::npos) {
+    if (!first_is_module && first_term.contains('.')) {
       first_is_module = true;
       result.module_name = std::string(first_term);
       base_addr = 0;  // Can't resolve yet

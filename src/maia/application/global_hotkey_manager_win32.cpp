@@ -1,3 +1,5 @@
+// Copyright (c) Maia
+
 #include "maia/application/global_hotkey_manager.h"
 
 #include <Windows.h>
@@ -236,7 +238,8 @@ class Win32GlobalHotkeyManager : public GlobalHotkeyManager {
     SetPropW(hwnd_, kHotkeyManagerProp, reinterpret_cast<HANDLE>(this));
 
     // Subclass the window procedure
-    WNDPROC original_proc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
+    // NOLINTNEXTLINE
+    auto original_proc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
         hwnd_, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(HotkeyWindowProc)));
 
     // Store the original procedure for later restoration
@@ -253,7 +256,7 @@ class Win32GlobalHotkeyManager : public GlobalHotkeyManager {
     }
 
     // Restore original window procedure
-    WNDPROC original_proc =
+    auto original_proc =
         reinterpret_cast<WNDPROC>(GetPropW(hwnd_, L"OriginalWndProc"));
     if (original_proc) {
       SetWindowLongPtrW(
@@ -309,13 +312,12 @@ LRESULT CALLBACK HotkeyWindowProc(HWND hwnd,
                                   WPARAM wparam,
                                   LPARAM lparam) {
   // Get the original window procedure
-  WNDPROC original_proc =
+  auto original_proc =
       reinterpret_cast<WNDPROC>(GetPropW(hwnd, L"OriginalWndProc"));
 
   // Get the manager instance
-  Win32GlobalHotkeyManager* manager =
-      reinterpret_cast<Win32GlobalHotkeyManager*>(
-          GetPropW(hwnd, kHotkeyManagerProp));
+  auto* manager = reinterpret_cast<Win32GlobalHotkeyManager*>(
+      GetPropW(hwnd, kHotkeyManagerProp));
 
   if (msg == WM_HOTKEY && manager) {
     int hotkey_id = static_cast<int>(wparam);
@@ -336,7 +338,7 @@ LRESULT CALLBACK HotkeyWindowProc(HWND hwnd,
 }  // namespace
 
 // Factory function implementation for Windows
-std::unique_ptr<GlobalHotkeyManager> CreateWin32HotkeyManager(
+extern std::unique_ptr<GlobalHotkeyManager> CreateWin32HotkeyManager(
     void* glfw_window_handle) {
   return std::make_unique<Win32GlobalHotkeyManager>(glfw_window_handle);
 }

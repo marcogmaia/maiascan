@@ -8,7 +8,8 @@ target_sources(
   core
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS "${MAIA_BASE_DIR}"
+      BASE_DIRS
+        "${MAIA_BASE_DIR}"
       FILES
         address_formatter.h
         address_parser.h

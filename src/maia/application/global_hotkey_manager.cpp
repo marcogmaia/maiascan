@@ -1,3 +1,5 @@
+// Copyright (c) Maia
+
 #include "maia/application/global_hotkey_manager.h"
 
 namespace maia {

@@ -11,7 +11,7 @@ namespace maia {
 namespace {
 
 bool CanScan(IProcess* process) {
-  return process && process->IsProcessValid();
+  return (process != nullptr) && process->IsProcessValid();
 }
 
 /// \brief Operation types that can conflict with each other.
@@ -22,37 +22,37 @@ enum class OperationType {
 };
 
 /// \brief Checks if any operation is blocking a new operation from starting.
-/// \param generating_map Whether map generation is in progress.
-/// \param scanning Whether scanning is in progress.
-/// \param validating Whether validation is in progress.
+/// \param state Current scanner state.
 /// \return The blocking operation type, or nullopt if none.
-std::optional<OperationType> GetBlockingOperation(bool generating_map,
-                                                  bool scanning,
-                                                  bool validating) {
-  if (generating_map) {
-    return OperationType::kGenerateMap;
+std::optional<OperationType> GetBlockingOperation(ScannerState state) {
+  switch (state) {
+    case ScannerState::kGeneratingMap:
+      return OperationType::kGenerateMap;
+    case ScannerState::kScanning:
+      return OperationType::kScan;
+    case ScannerState::kValidating:
+      return OperationType::kValidate;
+    case ScannerState::kCancelling:
+      // While cancelling, we treat it as if the operation is still blocking
+      // To keep it simple and safe, we'll map it to kScan as a generic busy
+      return OperationType::kScan;
+    default:
+      return std::nullopt;
   }
-  if (scanning) {
-    return OperationType::kScan;
-  }
-  if (validating) {
-    return OperationType::kValidate;
-  }
-  return std::nullopt;
 }
 
 /// \brief Template helper to handle pending async result processing.
 /// \tparam T The result type stored in the future.
 /// \tparam Handler Callable type for processing the result.
-/// \param is_active Atomic flag indicating if operation is active.
+/// \param state Atomic state of the scanner.
 /// \param future The future containing the result.
 /// \param handler Callback to process the result when ready.
 /// \return True if a result was processed, false otherwise.
 template <typename T, typename Handler>
-bool ProcessPendingResult(std::atomic<bool>& is_active,
+bool ProcessPendingResult(std::atomic<ScannerState>& state,
                           std::future<T>& future,
                           Handler&& handler) {
-  if (!is_active.load() || !future.valid()) {
+  if (!future.valid()) {
     return false;
   }
 
@@ -61,7 +61,7 @@ bool ProcessPendingResult(std::atomic<bool>& is_active,
   }
 
   auto result = future.get();
-  is_active = false;
+  state = ScannerState::kIdle;
   handler(std::move(result));
   return true;
 }
@@ -81,11 +81,97 @@ const char* GetOperationName(OperationType op) {
 
 }  // namespace
 
+struct MapResultHandler {
+  PointerScannerModel& model;
+
+  void operator()(std::optional<core::PointerMap>&& map) const {
+    model.progress_ = 1.0f;
+    model.map_progress_ = 1.0f;
+
+    std::string operation;
+    {
+      std::scoped_lock lock(model.mutex_);
+      operation = model.current_operation_;
+      if (map) {
+        model.pointer_map_ = std::move(map);
+        LogInfo("Pointer map generated: {} entries",
+                model.pointer_map_->GetEntryCount());
+        model.signals_.map_generated.publish(
+            true, model.pointer_map_->GetEntryCount());
+      } else {
+        LogWarning("Pointer map generation failed or was cancelled.");
+        model.signals_.map_generated.publish(false, 0);
+      }
+    }
+    model.signals_.progress_updated.publish(1.0f, operation);
+  }
+};
+
+struct ScanResultHandler {
+  PointerScannerModel& model;
+
+  void operator()(core::PointerScanResult&& result) const {
+    model.progress_ = 1.0f;
+    model.scan_progress_ = 1.0f;
+
+    const bool success = result.success;
+    const size_t paths_evaluated = result.paths_evaluated;
+    const std::string error_message = result.error_message;
+
+    size_t path_count = 0;
+    std::string operation;
+
+    {
+      std::scoped_lock lock(model.mutex_);
+      model.paths_ = result.paths;
+      path_count = model.paths_.size();
+      operation = model.current_operation_;
+    }
+
+    model.signals_.scan_complete.publish(std::move(result));
+    model.signals_.paths_updated.publish();
+    model.signals_.progress_updated.publish(1.0f, operation);
+
+    if (success) {
+      LogInfo("Pointer scan complete: {} paths found (evaluated: {})",
+              path_count,
+              paths_evaluated);
+    } else {
+      LogWarning("Pointer scan failed: {}", error_message);
+    }
+  }
+};
+
+struct ValidationResultHandler {
+  PointerScannerModel& model;
+
+  void operator()(std::vector<core::PointerPath>&& valid_paths) const {
+    size_t path_count = 0;
+    std::vector<core::PointerPath> paths_copy;
+    {
+      std::scoped_lock lock(model.mutex_);
+      model.paths_ = std::move(valid_paths);
+      path_count = model.paths_.size();
+      paths_copy = model.paths_;
+    }
+
+    LogInfo("Validation applied: {} valid paths remaining.", path_count);
+    model.signals_.validation_complete.publish(paths_copy);
+    model.signals_.paths_updated.publish();
+  }
+};
+
 PointerScannerModel::PointerScannerModel() = default;
 
 PointerScannerModel::~PointerScannerModel() {
-  CancelOperation();
-  WaitForOperation();
+  try {
+    CancelOperation();
+    WaitForOperation();
+  } catch (const std::exception& e) {
+    LogError("PointerScannerModel destructor failed: {}", e.what());
+  } catch (...) {
+    LogError("PointerScannerModel destructor failed with unknown error");
+  }
 }
 
 void PointerScannerModel::SetTargetAddress(uint64_t address) {
@@ -119,7 +205,7 @@ void PointerScannerModel::SetActiveProcess(IProcess* process) {
 }
 
 void PointerScannerModel::GeneratePointerMap() {
-  // Apply any pending result first to avoid blocking on future assignment
+  // Apply any pending result first
   if (HasPendingResult()) {
     ApplyPendingResult();
   }
@@ -127,9 +213,7 @@ void PointerScannerModel::GeneratePointerMap() {
   std::scoped_lock lock(mutex_);
 
   // CRITICAL: Check if any operation is busy before starting
-  if (auto blocking = GetBlockingOperation(is_generating_map_.load(),
-                                           is_scanning_.load(),
-                                           is_validating_.load())) {
+  if (auto blocking = GetBlockingOperation(state_.load())) {
     if (*blocking == OperationType::kGenerateMap) {
       LogWarning("Already generating pointer map.");
     } else {
@@ -146,15 +230,14 @@ void PointerScannerModel::GeneratePointerMap() {
     return;
   }
 
-  is_generating_map_ = true;
+  state_ = ScannerState::kGeneratingMap;
 
   LogInfo("Starting pointer map generation...");
   progress_ = 0.0f;
   map_progress_ = 0.0f;
   current_operation_ = "Generating Pointer Map";
   stop_source_ = std::stop_source{};
-  this->cancelled_ = false;
-  this->is_cancelling_ = false;
+  cancelled_ = false;
 
   pending_map_ = std::async(
       std::launch::async,
@@ -162,15 +245,14 @@ void PointerScannerModel::GeneratePointerMap() {
        process = active_process_,
        stop_token = stop_source_.get_token()]() {
         // Check if cancelled immediately
-        if (this->cancelled_.load()) {
-          this->is_cancelling_ = false;
+        if (cancelled_.load()) {
+          state_ = ScannerState::kIdle;
           return std::optional<core::PointerMap>{};
         }
         auto result =
             core::PointerMap::Generate(*process, stop_token, [this](float p) {
               map_progress_ = p * 0.9f;  // Reserve 10% for finalization
             });
-        this->is_cancelling_ = false;
         return result;
       });
 }
@@ -187,7 +269,7 @@ bool PointerScannerModel::SaveMap(const std::filesystem::path& path) const {
 bool PointerScannerModel::LoadMap(const std::filesystem::path& path) {
   std::scoped_lock lock(mutex_);
 
-  if (is_generating_map_.load() || is_scanning_.load()) {
+  if (IsBusy()) {
     LogWarning("Cannot load map while operation in progress.");
     return false;
   }
@@ -207,7 +289,7 @@ bool PointerScannerModel::LoadMap(const std::filesystem::path& path) {
 }
 
 void PointerScannerModel::FindPaths(const core::PointerScanConfig& config) {
-  // Apply any pending result first to avoid blocking on future assignment
+  // Apply any pending result first
   if (HasPendingResult()) {
     ApplyPendingResult();
   }
@@ -215,9 +297,7 @@ void PointerScannerModel::FindPaths(const core::PointerScanConfig& config) {
   std::scoped_lock lock(mutex_);
 
   // CRITICAL: Check if any operation is busy before starting
-  if (auto blocking = GetBlockingOperation(is_generating_map_.load(),
-                                           is_scanning_.load(),
-                                           is_validating_.load())) {
+  if (auto blocking = GetBlockingOperation(state_.load())) {
     if (*blocking == OperationType::kScan) {
       LogWarning("Already scanning for paths.");
     } else {
@@ -246,15 +326,14 @@ void PointerScannerModel::FindPaths(const core::PointerScanConfig& config) {
     return;
   }
 
-  is_scanning_ = true;
+  state_ = ScannerState::kScanning;
 
   LogInfo("Starting pointer scan for target: 0x{:X}...", config.target_address);
   progress_ = 0.0f;
   scan_progress_ = 0.0f;
   current_operation_ = "Finding Pointer Paths";
   stop_source_ = std::stop_source{};
-  this->cancelled_ = false;
-  this->is_cancelling_ = false;
+  cancelled_ = false;
 
   core::PointerScanner scanner;
   pending_scan_ = scanner.FindPathsAsync(
@@ -292,17 +371,13 @@ std::vector<core::PointerPath> PointerScannerModel::ValidatePaths() const {
 }
 
 void PointerScannerModel::ValidatePathsAsync() {
-  // Apply any pending result first to avoid blocking on future assignment
+  // Apply any pending result first
   if (HasPendingResult()) {
     ApplyPendingResult();
   }
 
-  std::scoped_lock lock(mutex_);
-
   // CRITICAL: Check if any operation is busy before starting
-  if (auto blocking = GetBlockingOperation(is_generating_map_.load(),
-                                           is_scanning_.load(),
-                                           is_validating_.load())) {
+  if (auto blocking = GetBlockingOperation(state_.load())) {
     if (*blocking == OperationType::kValidate) {
       LogWarning("Already validating paths.");
     } else {
@@ -325,14 +400,13 @@ void PointerScannerModel::ValidatePathsAsync() {
     return;
   }
 
-  is_validating_ = true;
+  state_ = ScannerState::kValidating;
 
   // Capture necessary state under the lock
   IProcess* process = active_process_;
   std::vector<core::PointerPath> paths_to_validate = paths_;
   const uint64_t target = target_address_.load();
-  this->cancelled_ = false;
-  this->is_cancelling_ = false;
+  cancelled_ = false;
 
   LogInfo("Starting async validation of {} paths...", paths_to_validate.size());
 
@@ -340,119 +414,57 @@ void PointerScannerModel::ValidatePathsAsync() {
       std::launch::async,
       [this, process, paths = std::move(paths_to_validate), target]() {
         // Check if cancelled immediately
-        if (this->cancelled_.load()) {
-          this->is_cancelling_ = false;
+        if (cancelled_.load()) {
+          state_ = ScannerState::kIdle;
           return std::vector<core::PointerPath>{};
         }
         // CRITICAL FIX: Check process validity RIGHT BEFORE using it
         // to prevent use-after-free if process was destroyed
         if (!process || !process->IsProcessValid()) {
           LogWarning("Validation cancelled: process invalid or destroyed.");
-          this->is_cancelling_ = false;
+          state_ = ScannerState::kIdle;
           return std::vector<core::PointerPath>{};
         }
         core::PointerScanner scanner;
         auto result = scanner.FilterPaths(*process, paths, target);
-        this->is_cancelling_ = false;
         return result;
       });
 }
 
 void PointerScannerModel::CancelOperation() {
-  if (is_generating_map_.load() || is_scanning_.load() ||
-      is_validating_.load()) {
+  if (IsBusy()) {
     LogInfo("Cancelling pointer scanner operation...");
-    this->cancelled_ = true;
-    this->is_cancelling_ = true;
+    cancelled_ = true;
+    state_ = ScannerState::kCancelling;
     stop_source_.request_stop();
   }
 }
 
 bool PointerScannerModel::HasPendingResult() const {
-  if (is_generating_map_.load() && pending_map_.valid()) {
-    return pending_map_.wait_for(std::chrono::seconds(0)) ==
-           std::future_status::ready;
+  if (pending_map_.valid() && pending_map_.wait_for(std::chrono::seconds(0)) ==
+                                  std::future_status::ready) {
+    return true;
   }
 
-  if (is_scanning_.load() && pending_scan_.valid()) {
-    return pending_scan_.wait_for(std::chrono::seconds(0)) ==
-           std::future_status::ready;
+  if (pending_scan_.valid() && pending_scan_.wait_for(std::chrono::seconds(
+                                   0)) == std::future_status::ready) {
+    return true;
   }
 
-  if (is_validating_.load() && pending_validation_.valid()) {
-    return pending_validation_.wait_for(std::chrono::seconds(0)) ==
-           std::future_status::ready;
+  if (pending_validation_.valid() &&
+      pending_validation_.wait_for(std::chrono::seconds(0)) ==
+          std::future_status::ready) {
+    return true;
   }
 
   return false;
 }
 
 void PointerScannerModel::ApplyPendingResult() {
-  // Handle map generation result
+  ProcessPendingResult(state_, pending_map_, MapResultHandler{*this});
+  ProcessPendingResult(state_, pending_scan_, ScanResultHandler{*this});
   ProcessPendingResult(
-      is_generating_map_,
-      pending_map_,
-      [this](std::optional<core::PointerMap>&& map) {
-        this->is_cancelling_ = false;
-        progress_ = 1.0f;
-        map_progress_ = 1.0f;
-
-        std::scoped_lock lock(mutex_);
-        if (map) {
-          pointer_map_ = std::move(map);
-          LogInfo("Pointer map generated: {} entries",
-                  pointer_map_->GetEntryCount());
-          signals_.map_generated.publish(true, pointer_map_->GetEntryCount());
-        } else {
-          LogWarning("Pointer map generation failed or was cancelled.");
-          signals_.map_generated.publish(false, 0);
-        }
-        signals_.progress_updated.publish(1.0f, current_operation_);
-      });
-
-  // Handle scan result
-  ProcessPendingResult(
-      is_scanning_, pending_scan_, [this](core::PointerScanResult&& result) {
-        this->is_cancelling_ = false;
-        progress_ = 1.0f;
-        scan_progress_ = 1.0f;
-
-        // Publish result first so listeners receive the paths before we move
-        // them
-        signals_.scan_complete.publish(result);
-        signals_.paths_updated.publish();
-        signals_.progress_updated.publish(1.0f, current_operation_);
-
-        {
-          std::scoped_lock lock(mutex_);
-          paths_ = std::move(result).paths;
-        }
-
-        if (result.success) {
-          LogInfo("Pointer scan complete: {} paths found (evaluated: {})",
-                  paths_.size(),
-                  result.paths_evaluated);
-        } else {
-          LogWarning("Pointer scan failed: {}", result.error_message);
-        }
-      });
-
-  // Handle validation result
-  ProcessPendingResult(
-      is_validating_,
-      pending_validation_,
-      [this](std::vector<core::PointerPath>&& valid_paths) {
-        this->is_cancelling_ = false;
-
-        {
-          std::scoped_lock lock(mutex_);
-          paths_ = std::move(valid_paths);
-        }
-
-        LogInfo("Validation applied: {} valid paths remaining.", paths_.size());
-        signals_.validation_complete.publish(paths_);
-        signals_.paths_updated.publish();
-      });
+      state_, pending_validation_, ValidationResultHandler{*this});
 }
 
 void PointerScannerModel::WaitForOperation() {
@@ -501,6 +513,12 @@ std::optional<uint64_t> PointerScannerModel::ResolvePath(
 
   core::PointerScanner scanner;
   return scanner.ResolvePath(*active_process_, path, modules_);
+}
+
+void PointerScannerModel::Update() {
+  if (HasPendingResult()) {
+    ApplyPendingResult();
+  }
 }
 
 }  // namespace maia

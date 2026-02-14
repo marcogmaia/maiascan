@@ -1,9 +1,9 @@
+// Copyright (c) Maia
+
 #pragma once
 
 #include <entt/signal/sigh.hpp>
-#include <functional>
 #include <memory>
-#include <vector>
 
 namespace maia {
 
@@ -50,8 +50,8 @@ enum class KeyCode : uint32_t {
   kX = 'X',
   kY = 'Y',
   kZ = 'Z',
-  k0 = '0',
-  k1 = '1',
+  k0 = '0',  // NOLINT
+  k1 = '1',  // NOLINT
   k2 = '2',
   k3 = '3',
   k4 = '4',

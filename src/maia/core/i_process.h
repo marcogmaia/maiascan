@@ -58,7 +58,7 @@ class IProcess {
   virtual bool ReadMemory(std::span<const MemoryAddress> addresses,
                           size_t bytes_per_address,
                           std::span<std::byte> out_buffer,
-                          std::vector<uint8_t>* success_mask = nullptr) = 0;
+                          std::vector<uint8_t>* success_mask) = 0;
 
   /// \brief Writes a block of memory to the process.
   /// \param address The base address to write to.

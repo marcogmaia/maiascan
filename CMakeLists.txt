@@ -15,8 +15,6 @@ project(
     CXX
 )
 
-# TODO: remove this from here. This is for sccache.
-
 set(
   CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
   "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"

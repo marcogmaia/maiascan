@@ -34,8 +34,7 @@ target_link_libraries(
 # Register the module in the venv by creating a .pth file
 # We use a config-specific filename to support multi-config generators (like VS)
 file(
-  GENERATE OUTPUT
-  "${PYTHON_SITE_PACKAGES}/maiascan-$<CONFIG>.pth"
+  GENERATE OUTPUT "${PYTHON_SITE_PACKAGES}/maiascan-$<CONFIG>.pth"
   CONTENT "$<TARGET_FILE_DIR:py_maiascan>"
 )
 

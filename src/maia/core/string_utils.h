@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <charconv>
+#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -105,6 +106,17 @@ std::string ToHexString(T value, bool uppercase = false) {
     }
   }
   return result;
+}
+
+/// \brief Formats an address as hex with adaptive padding (8 or 16 digits).
+/// \details Uses 8 digits for addresses <= UINT32_MAX, 16 digits otherwise.
+/// \param address The address to format.
+/// \return Formatted string like "0x12345678" or "0x00007FF123456789".
+[[nodiscard]] inline std::string FormatAddressHex(uint64_t address) {
+  if (address <= std::numeric_limits<uint32_t>::max()) {
+    return std::format("0x{:08X}", address);
+  }
+  return std::format("0x{:016X}", address);
 }
 
 }  // namespace maia::core

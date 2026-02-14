@@ -7,6 +7,8 @@
 #include <ranges>
 #include <unordered_set>
 
+#include <fmt/format.h>
+
 namespace maia::core {
 
 namespace {
@@ -16,16 +18,6 @@ struct SearchNode {
   std::vector<int64_t> offsets;
   uint32_t level;
 };
-
-// Helper to check if an address is static (inside a module)
-// Returns module descriptor if found, nullopt otherwise.
-std::optional<mmem::ModuleDescriptor> FindModuleForAddress(
-    uint64_t address, const std::vector<mmem::ModuleDescriptor>& modules) {
-  auto it = std::ranges::find_if(modules, [address](const auto& mod) {
-    return address >= mod.base && address < mod.end;
-  });
-  return (it != modules.end()) ? std::make_optional(*it) : std::nullopt;
-}
 
 // Helper to find a module by name.
 std::optional<mmem::ModuleDescriptor> FindModuleByName(
@@ -48,7 +40,8 @@ std::optional<uint64_t> FollowPointerChain(
     // Read the pointer value at current_addr
     if (!process.ReadMemory(std::span<const uintptr_t>{&current_addr, 1},
                             ptr_size,
-                            std::as_writable_bytes(std::span{&ptr_val, 1}))) {
+                            std::as_writable_bytes(std::span{&ptr_val, 1}),
+                            nullptr)) {
       return std::nullopt;
     }
     // Mask to ensure only the valid pointer bytes are used.
@@ -65,6 +58,24 @@ std::optional<uint64_t> FollowPointerChain(
 
 }  // namespace
 
+std::string FormatPointerPathKey(const PointerPath& path) {
+  // Format: "module:offset:+off1+off2..." or "0xbase:+off1+off2..."
+  // Creates a unique, stable key for each path (survives scrolling)
+  std::string key =
+      path.module_name.empty()
+          ? fmt::format("0x{:X}", path.base_address)
+          : fmt::format("{}:{:X}", path.module_name, path.module_offset);
+
+  for (const auto offset : path.offsets) {
+    if (offset >= 0) {
+      key += fmt::format("+{:X}", offset);
+    } else {
+      key += fmt::format("-{:X}", -offset);
+    }
+  }
+  return key;
+}
+
 PointerScanResult PointerScanner::FindPaths(
     const PointerMap& map,
     const PointerScanConfig& config,
@@ -72,19 +83,31 @@ PointerScanResult PointerScanner::FindPaths(
     std::stop_token stop_token,
     ProgressCallback progress_callback) const {
   PointerScanResult result;
-  result.success = true;  // Assume success unless error occurs
+  // Assume success unless error occurs.
+  result.success = true;
 
-  // BFS Queue: (CurrentAddress, OffsetsSoFar, Level)
-  std::deque<SearchNode> queue;
-  queue.push_back(
-      {.address = config.target_address, .offsets = {}, .level = 0});
+  // BFS Queue: (CurrentAddress, OffsetsSoFar, Level).
+  std::deque<SearchNode> queue{
+      SearchNode{.address = config.target_address, .offsets = {}, .level = 0}
+  };
 
-  // Visited set to prevent loops and redundant work
+  // Visited set to prevent loops and redundant work.
   std::unordered_set<uint64_t> visited;
+  // Heuristic: Reserve memory to avoid frequent reallocations.
+  // Assuming we might visit ~10% of total pointers in a deep scan.
+  visited.reserve(map.GetEntryCount() / 10);
   visited.insert(config.target_address);
 
   uint64_t paths_evaluated = 0;
   uint32_t last_reported_level = 0xFFFFFFFF;
+
+  // Create sorted index of modules for fast binary search module lookup.
+  std::vector<const mmem::ModuleDescriptor*> sorted_modules;
+  sorted_modules.reserve(modules.size());
+  for (const auto& mod : modules) {
+    sorted_modules.push_back(&mod);
+  }
+  std::ranges::sort(sorted_modules, {}, &mmem::ModuleDescriptor::base);
 
   // We process level by level to respect max_level.
   while (!queue.empty()) {
@@ -120,7 +143,7 @@ PointerScanResult PointerScanner::FindPaths(
     // If we only allow positive offsets: V <= CurrentAddress, so V in
     // [CurrentAddress - MaxOffset, CurrentAddress].
 
-    uint64_t min_val = (current.address > config.max_offset)
+    uint64_t min_val = current.address > config.max_offset
                            ? current.address - config.max_offset
                            : 0;
     uint64_t max_val = current.address;
@@ -162,8 +185,18 @@ PointerScanResult PointerScanner::FindPaths(
       std::vector<int64_t> next_offsets = current.offsets;
       next_offsets.push_back(offset);
 
-      // Check if this pointer is a Static Address
-      const auto mod = FindModuleForAddress(entry.address, modules);
+      // Check if this pointer is a Static Address using binary search.
+      const mmem::ModuleDescriptor* mod = nullptr;
+      auto it = std::ranges::upper_bound(
+          sorted_modules, entry.address, {}, &mmem::ModuleDescriptor::base);
+
+      if (it != sorted_modules.begin()) {
+        const auto* candidate = *(--it);
+        if (entry.address >= candidate->base &&
+            entry.address < candidate->end) {
+          mod = candidate;
+        }
+      }
 
       if (!mod) {
         // Not static, continue search if level permits
@@ -192,7 +225,7 @@ PointerScanResult PointerScanner::FindPaths(
       path.module_name = mod->name;
       path.module_offset = entry.address - mod->base;
       path.offsets = std::move(next_offsets);
-      std::reverse(path.offsets.begin(), path.offsets.end());
+      std::ranges::reverse(path.offsets);
 
       result.paths.push_back(std::move(path));
     }

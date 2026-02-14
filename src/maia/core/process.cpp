@@ -3,6 +3,7 @@
 #include "maia/core/process.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <optional>
 
 #include "maia/core/memory_common.h"
@@ -172,7 +173,7 @@ bool Process::ReadMemory(std::span<const MemoryAddress> addresses,
     return true;
   }
 
-  constexpr size_t kMaxBatchSize = 64 * 1024;
+  constexpr size_t kMaxBatchSize = 64z * 1024z;
   constexpr size_t kMaxGapBytes = 256;
 
   auto indexed_addresses = CreateIndexedAddresses(addresses);

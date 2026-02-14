@@ -47,6 +47,15 @@
 
 namespace maia {
 
+/// \brief Current state of the pointer scanner.
+enum class ScannerState {
+  kIdle,
+  kGeneratingMap,
+  kScanning,
+  kValidating,
+  kCancelling
+};
+
 /// \brief Manages pointer scanning operations and state.
 /// \details Coordinates pointer map generation, pointer path discovery,
 /// and result management for the pointer scanner UI.
@@ -128,27 +137,27 @@ class PointerScannerModel {
 
   /// \brief Check if currently generating a map.
   [[nodiscard]] bool IsGeneratingMap() const {
-    return is_generating_map_.load();
+    return state_.load() == ScannerState::kGeneratingMap;
   }
 
   /// \brief Check if currently scanning for paths.
   [[nodiscard]] bool IsScanning() const {
-    return is_scanning_.load();
+    return state_.load() == ScannerState::kScanning;
   }
 
   /// \brief Check if currently validating paths.
   [[nodiscard]] bool IsValidating() const {
-    return is_validating_.load();
+    return state_.load() == ScannerState::kValidating;
   }
 
   /// \brief Check if any operation is in progress.
   [[nodiscard]] bool IsBusy() const {
-    return IsGeneratingMap() || IsScanning() || IsValidating();
+    return state_.load() != ScannerState::kIdle;
   }
 
   /// \brief Check if an operation is currently being cancelled.
   [[nodiscard]] bool IsCancelling() const {
-    return is_cancelling_.load();
+    return state_.load() == ScannerState::kCancelling;
   }
 
   /// \brief Get current operation progress (0.0 to 1.0).
@@ -193,7 +202,16 @@ class PointerScannerModel {
   [[nodiscard]] std::optional<uint64_t> ResolvePath(
       const core::PointerPath& path) const;
 
+  /// \brief Update the model (apply pending results).
+  /// \details This should be called once per frame from the main thread.
+  void Update();
+
  private:
+  // TODO(marco): Review these.
+  friend struct MapResultHandler;
+  friend struct ScanResultHandler;
+  friend struct ValidationResultHandler;
+
   struct Signals {
     /// \brief Emitted when pointer map generation completes.
     /// \param success Whether generation succeeded.
@@ -265,11 +283,8 @@ class PointerScannerModel {
   std::vector<core::PointerPath> paths_;
 
   // Async operation state
-  std::atomic<bool> is_generating_map_{false};
-  std::atomic<bool> is_scanning_{false};
-  std::atomic<bool> is_validating_{false};
-  std::atomic<bool> is_cancelling_{false};  // True while cancelling
-  std::atomic<bool> cancelled_{false};      // Set to abort operations
+  std::atomic<ScannerState> state_{ScannerState::kIdle};
+  std::atomic<bool> cancelled_{false};  // Set to abort operations
   std::atomic<float> progress_{0.0f};
   std::atomic<float> map_progress_{0.0f};
   std::atomic<float> scan_progress_{0.0f};

@@ -1,7 +1,7 @@
+// Copyright (c) Maia
+
 #pragma once
 
-#include <optional>
-#include <span>
 #include <string>
 #include <vector>
 

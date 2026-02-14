@@ -10,7 +10,7 @@
 #include "maia/logging.h"
 
 // Platform-specific headers for SIMD
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #include <intrin.h>
 #elif defined(__GNUC__) || defined(__clang__)
 #include <immintrin.h>
@@ -105,7 +105,7 @@ MAIA_TARGET_AVX2 void ScanBufferAvx2_Impl(
     __m256i v_data =
         _mm256_loadu_si256(reinterpret_cast<const __m256i*>(buf_ptr + i));
     __m256i v_cmp = _mm256_cmpeq_epi8(v_data, v_first);
-    unsigned int mask = static_cast<unsigned int>(_mm256_movemask_epi8(v_cmp));
+    auto mask = static_cast<unsigned int>(_mm256_movemask_epi8(v_cmp));
 
     // Apply alignment filter: only keep bits at aligned offsets.
     mask &= alignment_mask;
@@ -190,8 +190,7 @@ MAIA_TARGET_AVX2 void ScanBufferMaskedAvx2_Impl(
       __m256i v_data =
           _mm256_loadu_si256(reinterpret_cast<const __m256i*>(buf_ptr + i));
       __m256i v_cmp = _mm256_cmpeq_epi8(v_data, v_first);
-      unsigned int match_mask =
-          static_cast<unsigned int>(_mm256_movemask_epi8(v_cmp));
+      auto match_mask = static_cast<unsigned int>(_mm256_movemask_epi8(v_cmp));
 
       while (match_mask != 0) {
         int bit_index = std::countr_zero(match_mask);
@@ -204,7 +203,7 @@ MAIA_TARGET_AVX2 void ScanBufferMaskedAvx2_Impl(
             __m256i v_candidate_masked = _mm256_and_si256(v_candidate, v_mask);
             __m256i v_final_cmp =
                 _mm256_cmpeq_epi8(v_candidate_masked, v_pat_masked);
-            unsigned int final_mask =
+            auto final_mask =
                 static_cast<unsigned int>(_mm256_movemask_epi8(v_final_cmp));
             unsigned int needed_bits =
                 (pattern_size == 32) ? 0xFFFFFFFFu : ((1u << pattern_size) - 1);
@@ -275,7 +274,7 @@ MAIA_TARGET_AVX2 void ScanMemCmpAvx2_Impl(
     __m256i v2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p2 + i));
 
     __m256i v_eq = _mm256_cmpeq_epi8(v1, v2);
-    unsigned int mask = static_cast<unsigned int>(_mm256_movemask_epi8(v_eq));
+    auto mask = static_cast<unsigned int>(_mm256_movemask_epi8(v_eq));
 
     if (find_equal) {
       if (mask == 0xFFFFFFFF) {
@@ -340,7 +339,7 @@ MAIA_TARGET_AVX2 void ScanMemCompareGreaterAvx2_Int32_Impl(
     __m256i v2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p2 + i));
 
     __m256i v_cmp = _mm256_cmpgt_epi32(v1, v2);
-    unsigned int mask = static_cast<unsigned int>(
+    auto mask = static_cast<unsigned int>(
         _mm256_movemask_ps(_mm256_castsi256_ps(v_cmp)));
 
     while (mask != 0) {
@@ -381,7 +380,7 @@ MAIA_TARGET_AVX2 void ScanMemCompareGreaterAvx2_Float_Impl(
     __m256 v2 = _mm256_loadu_ps(reinterpret_cast<const float*>(p2 + i));
 
     __m256 v_cmp = _mm256_cmp_ps(v1, v2, _CMP_GT_OQ);
-    unsigned int mask = static_cast<unsigned int>(_mm256_movemask_ps(v_cmp));
+    auto mask = static_cast<unsigned int>(_mm256_movemask_ps(v_cmp));
 
     while (mask != 0) {
       int bit_index = std::countr_zero(mask);

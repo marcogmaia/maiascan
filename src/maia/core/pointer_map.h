@@ -20,9 +20,6 @@ namespace maia::core {
 // Param progress: Value between 0.0 and 1.0 indicating completion percentage.
 using ProgressCallback = std::function<void(float progress)>;
 
-// Packed to ensure consistent 16-byte size across compilers.
-#pragma pack(push, 1)
-
 struct PointerMapEntry {
   uint64_t address;  // Where the pointer lives
   uint64_t value;    // What it points to
@@ -32,8 +29,6 @@ struct PointerMapEntry {
     return value < other.value;
   }
 };
-
-#pragma pack(pop)
 
 static_assert(sizeof(PointerMapEntry) == 16);
 

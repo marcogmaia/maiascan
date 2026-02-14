@@ -27,6 +27,8 @@ struct GameState {
   std::unique_ptr<Player> local_player;
 };
 
+namespace {
+
 // Global pointer to simulate static address scan targets
 std::unique_ptr<GameState> g_game;
 
@@ -64,6 +66,8 @@ std::atomic_flag global_should_close = ATOMIC_FLAG_INIT;
 void SignalHandler(int /*signal*/) {
   global_should_close.test_and_set();
 }
+
+}  // namespace
 
 int main(int argc, char** argv) {
   CLI::App app{"FakeGame - A target for MaiaScan memory scanning"};

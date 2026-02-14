@@ -16,8 +16,11 @@ target_sources(
   base
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS "${MAIA_BASE_DIR}"
-      FILES ./logging.h ./assert.h
+      BASE_DIRS
+        "${MAIA_BASE_DIR}"
+      FILES
+        logging.h
+        assert.h
   PRIVATE
     assert.cpp
 )

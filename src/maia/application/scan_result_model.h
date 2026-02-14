@@ -50,7 +50,7 @@ namespace maia {
 class ScanResultModel {
  public:
   /// \brief Constructs the model with a specific chunk size for memory reading.
-  explicit ScanResultModel(size_t chunk_size = 32 * 1024 * 1024);
+  explicit ScanResultModel(size_t chunk_size = 32uz * 1024 * 1024);
   ~ScanResultModel();
 
   /// \brief Exposes signal sinks for EnTT connections.

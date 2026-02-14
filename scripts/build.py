@@ -1,3 +1,5 @@
+# Copyright (c) Maia
+
 import os
 import sys
 import subprocess
@@ -64,16 +66,16 @@ class ProjectContext:
         print(f"OS:     {platform.system()} {platform.release()}")
         print(f"Preset: {self.preset} | Cores: {self.cpu_count}")
         print("-" * 60)
-        print(f"Tools:")
+        print("Tools:")
         for k, v in self.tools.items():
             print(f"  • {k:<6} : {v}")
         print("=" * 60)
 
     def print_summary(self, success):
         duration = time.time() - self.start_time
-        status = "✨ SUCCESS" if success else "❌ FAILED"
+        status = "✅ SUCCESS" if success else "❌ FAILED"
         print("\n" + "=" * 60)
-        print(f"PIPELINE SUMMARY")
+        print("PIPELINE SUMMARY")
         print(f"Result:   {status}")
         print(f"Duration: {duration:.2f}s")
         print("=" * 60 + "\n")
@@ -301,28 +303,25 @@ def main():
     should_configure = args.reconfigure or is_cache_stale(build_dir, root_dir)
 
     if should_configure:
-        print(f"\n>>> STAGE: CONFIGURE")
+        print("\n>>> STAGE: CONFIGURE")
         # We try once; if it fails, we clean and retry (auto-heal)
         res = run_command(["cmake", "--preset", args.preset], env=env, check=False)
 
         if res.returncode != 0:
             print("[QUIRK] Configuration failed. Attempting clean retry...")
-            try:
-                if build_dir.exists():
-                    shutil.rmtree(build_dir, ignore_errors=True)
-            except:
-                pass
+            if build_dir.exists():
+                shutil.rmtree(build_dir, ignore_errors=True)
             res = run_command(["cmake", "--preset", args.preset], env=env, check=True)
             if res.returncode != 0:
                 ctx.print_summary(False)
                 sys.exit(res.returncode)
     else:
         print(
-            f"\n[CONF] Configuration skipped (Cache is up to date). Use --reconfigure to force."
+            "\n[CONF] Configuration skipped (Cache is up to date). Use --reconfigure to force."
         )
 
     # 6. Build
-    print(f"\n>>> STAGE: BUILD")
+    print("\n>>> STAGE: BUILD")
     # Ninja (default in presets) is parallel by default, but --parallel is safe.
     res = run_command(
         ["cmake", "--build", "--preset", args.preset, "--parallel"],
@@ -337,9 +336,9 @@ def main():
     # 7. Test
     success = True
     if not args.skip_tests:
-        print(f"\n>>> STAGE: TEST")
+        print("\n>>> STAGE: TEST")
         res = run_command(
-            ["ctest", "--preset", args.preset, "--output-on-failure", "-j8"],
+            ["ctest", "--preset", args.preset, "--output-on-failure", "-j16"],
             env=env,
             check=False,
             quiet_tests=True,
@@ -350,7 +349,7 @@ def main():
     if not success:
         sys.exit(1)
 
-    print("✨ PIPELINE SUCCESSFUL ✨")
+    print("✅ PIPELINE SUCCESSFUL ✅")
 
 
 if __name__ == "__main__":

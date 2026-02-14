@@ -21,7 +21,7 @@
 ///    entry data.
 ///
 /// **Key Interactions**:
-///    - Consumed by `CheatTablePresenter`.
+///    - Consumed by `CheatTableViewModel`.
 ///    - Listens to `ProcessModel`.
 
 #pragma once
@@ -121,6 +121,10 @@ struct CheatTableEntry {
 
   // Type and metadata
   ScanValueType type;
+  // TODO(marco): Change this to an optional (I think this would be better than
+  // adding extra semantics to the empty string). If this is nullopt we should
+  // show the "No description" and if this entry entry has base pointer we
+  // should show the base + offsets as description if description is empty.
   std::string description;
   bool show_as_hex = false;
   std::shared_ptr<CheatTableEntryData> data;
@@ -191,17 +195,20 @@ class CheatTableModel {
   /// \brief Toggles the frozen state of an entry.
   void ToggleFreeze(size_t index);
 
-  // TODO: Refactor this interface to accept numbers instead of strings? Well,
-  // strings are flexible enough, think a little bit.
-
   /// \brief Manually sets the value of an entry and writes it to the process.
   void SetValue(size_t index, const std::string& value_str);
 
   /// \brief Saves the cheat table to a file.
   bool Save(const std::filesystem::path& path) const;
 
+  /// \brief Saves the cheat table to an output stream.
+  bool Save(std::ostream& stream) const;
+
   /// \brief Loads the cheat table from a file.
   bool Load(const std::filesystem::path& path);
+
+  /// \brief Loads the cheat table from an input stream.
+  bool Load(std::istream& stream);
 
   /// \brief Periodically called to synchronize values with the target process.
   /// \details Reads current values and reapplies frozen values.
@@ -209,6 +216,12 @@ class CheatTableModel {
 
   /// \brief Sets the target process for memory operations.
   void SetActiveProcess(IProcess* process);
+
+  /// \brief Resolves a dynamic entry to get the final memory address.
+  /// \param entry The cheat table entry containing the address info.
+  /// \return The resolved address, or 0 if resolution failed.
+  [[nodiscard]] MemoryAddress ResolveAddress(
+      const CheatTableEntry& entry) const;
 
  private:
   struct Signals {
@@ -225,12 +238,6 @@ class CheatTableModel {
 
   void AutoUpdateLoop(std::stop_token stop_token);
   void WriteMemory(size_t index, const std::vector<std::byte>& data);
-
-  /// \brief Resolves a dynamic entry to get the final memory address.
-  /// \param entry The cheat table entry containing the address info.
-  /// \return The resolved address, or 0 if resolution failed.
-  [[nodiscard]] MemoryAddress ResolveAddress(
-      const CheatTableEntry& entry) const;
 
   /// \brief Reads memory for an entry, handling both static and dynamic.
   [[nodiscard]] bool ReadEntryValue(const CheatTableEntry& entry,

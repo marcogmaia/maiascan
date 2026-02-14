@@ -1,5 +1,7 @@
 // Copyright (c) Maia
 
+#include "maia/mmem/process_utils.h"
+
 #include <Windows.h>
 
 #include <optional>

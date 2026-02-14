@@ -17,15 +17,16 @@
 
 PYBIND11_MAKE_OPAQUE(std::vector<uintptr_t>);
 
-PYBIND11_MODULE(maiascan, m) {
-  // TODO: Review these
-  using namespace maia;
-  using namespace maia::core;
-  namespace py = pybind11;
+namespace maia::core {
 
+namespace {
+
+namespace py = pybind11;
+
+void BindMaiascan(py::module_& m) {
   m.doc() = "MaiaScan Python Bindings";
 
-  // Enums
+  // Enums.
   py::enum_<ScanValueType>(m, "ScanValueType")
       .value("kInt8", ScanValueType::kInt8)
       .value("kUInt8", ScanValueType::kUInt8)
@@ -69,10 +70,10 @@ PYBIND11_MODULE(maiascan, m) {
       .value("kExecuteReadWrite", mmem::Protection::kExecuteReadWrite)
       .export_values();
 
-  // Opaque Vectors
+  // Opaque Vectors.
   py::bind_vector<std::vector<uintptr_t>>(m, "AddressVector");
 
-  // mmem Types
+  // mmem Types.
   py::class_<mmem::ModuleDescriptor>(m, "ModuleDescriptor")
       .def_readwrite("base", &mmem::ModuleDescriptor::base)
       .def_readwrite("end", &mmem::ModuleDescriptor::end)
@@ -86,7 +87,7 @@ PYBIND11_MODULE(maiascan, m) {
       .def_readwrite("size", &mmem::SegmentDescriptor::size)
       .def_readwrite("protection", &mmem::SegmentDescriptor::protection);
 
-  // Structs
+  // Structs.
   py::class_<ScanConfig>(m, "ScanConfig")
       .def(py::init<>())
       .def_readwrite("value_type", &ScanConfig::value_type)
@@ -168,10 +169,9 @@ PYBIND11_MODULE(maiascan, m) {
         if (self.success) {
           return "<maiascan.ScanResult success=True count=" +
                  std::to_string(self.storage.addresses.size()) + ">";
-        } else {
-          return "<maiascan.ScanResult success=False error='" +
-                 self.error_message + "'>";
         }
+        return "<maiascan.ScanResult success=False error='" +
+               self.error_message + "'>";
       });
 
   // Pointer Scanning Types
@@ -349,4 +349,12 @@ PYBIND11_MODULE(maiascan, m) {
       .def("Clear", &ScanSession::Clear)
       .def("GetResultCount", &ScanSession::GetResultCount)
       .def("HasResults", &ScanSession::HasResults);
+}
+
+}  // namespace
+
+}  // namespace maia::core
+
+PYBIND11_MODULE(maiascan, m) {
+  maia::core::BindMaiascan(m);
 }

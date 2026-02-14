@@ -3,12 +3,11 @@
 #pragma once
 
 #include <array>
-#include <string>
-#include <vector>
 
 #include <entt/signal/sigh.hpp>
 
 #include "maia/core/memory_common.h"
+#include "maia/gui/models/ui_state.h"
 
 namespace maia {
 
@@ -23,7 +22,7 @@ class ProcessSelectorView {
     // Fired when the user clicks the "Refresh" button.
     entt::sigh<void()> refresh_requested;
 
-    // Fired when the selecting a process from the list.
+    // Fired when selecting a process from the list.
     entt::sigh<void(Pid pid)> process_selected_from_list;
 
     // Fired when the "Pick (Drag Me)" button is released.
@@ -45,11 +44,8 @@ class ProcessSelectorView {
     return Sinks{*this};
   }
 
-  // Main render function. The Presenter should call this every frame.
-  void Render(bool* p_open,
-              const std::vector<ProcessInfo>& processes,
-              const std::string& attached_process_name,
-              Pid attached_pid);
+  // Main render function. Renders the window if visible.
+  void Render(gui::ProcessSelectorState& state);
 
   Signals& signals() {
     return signals_;
@@ -62,5 +58,9 @@ class ProcessSelectorView {
   std::array<char, 260> filter_{};
   Signals signals_;
 };
+
+// Renders a compact toolbar for process selection.
+// Returns true if the "Select..." button was clicked.
+[[nodiscard]] bool RenderToolbar(const gui::ProcessSelectorState& state);
 
 }  // namespace maia

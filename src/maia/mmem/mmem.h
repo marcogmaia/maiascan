@@ -171,10 +171,10 @@ std::optional<ModuleDescriptor> FindModule(std::string_view name);
 std::optional<ModuleDescriptor> FindModule(const ProcessDescriptor& process, std::string_view name);
 
 // Loads a module into the current process.
-bool LoadModule(std::string_view path, ModuleDescriptor* module_out = nullptr);
+bool LoadModule(const std::string& path, ModuleDescriptor* module_out = nullptr);
 
 // Loads a module into a specific process (current process only).
-bool LoadModule(const ProcessDescriptor& process, std::string_view path, ModuleDescriptor* module_out = nullptr);
+bool LoadModule(const ProcessDescriptor& process, const std::string& path, ModuleDescriptor* module_out = nullptr);
 
 // Unloads a module from the current process.
 bool UnloadModule(const ModuleDescriptor& module);

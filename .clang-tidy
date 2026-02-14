@@ -1,42 +1,3 @@
----
-# Configure clang-tidy for this project.
-
-# Here is an explanation for why some of the checks are disabled:
-#
-#  -google-readability-namespace-comments: the *_CLIENT_NS is a macro, and
-#      clang-tidy fails to match it against the initial value.
-#
-#  -modernize-use-trailing-return-type: clang-tidy recommends using
-#      `auto Foo() -> std::string { return ...; }`, we think the code is less
-#      readable in this form.
-#
-#  -modernize-return-braced-init-list: We think removing typenames and using
-#      only braced-init can hurt readability.
-#
-#  -modernize-avoid-c-arrays: We only use C arrays when they seem to be the
-#      right tool for the job, such as `char foo[] = "hello"`. In these cases,
-#      avoiding C arrays often makes the code less readable, and std::array is
-#      not a drop-in replacement because it doesn't deduce the size.
-#
-#  -performance-move-const-arg: This warning requires the developer to
-#      know/care more about the implementation details of types/functions than
-#      should be necessary. For example, `A a; F(std::move(a));` will trigger a
-#      warning IFF `A` is a trivial type (and therefore the move is
-#      meaningless). It would also warn if `F` accepts by `const&`, which is
-#      another detail that the caller need not care about.
-#
-#  -readability-redundant-declaration: A friend declaration inside a class
-#      counts as a declaration, so if we also declare that friend outside the
-#      class in order to document it as part of the public API, that will
-#      trigger a redundant declaration warning from this check.
-#
-#  -readability-function-cognitive-complexity: too many false positives with
-#      clang-tidy-12. We need to disable this check in macros, and that setting
-#      only appears in clang-tidy-13.
-#
-#  -bugprone-narrowing-conversions: too many false positives around
-#      `std::size_t`  vs. `*::difference_type`.
-#
 Checks: >
   -*,
   bugprone-*,
@@ -53,6 +14,7 @@ Checks: >
   -google-readability-namespace-comments,
   -google-runtime-references,
   -misc-const-correctness,
+  -misc-include-cleaner,
   -misc-no-recursion,
   -misc-non-private-member-variables-in-classes,
   -misc-unused-parameters,
@@ -60,7 +22,10 @@ Checks: >
   -modernize-return-braced-init-list,
   -modernize-use-nodiscard,
   -modernize-use-trailing-return-type,
+  -performance-enum-size,
   -performance-move-const-arg,
+  -performance-unnecessary-value-param,
+  -portability-avoid-pragma-once,
   -readability-braces-around-statements,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
@@ -68,11 +33,13 @@ Checks: >
   -readability-named-parameter,
   -readability-redundant-declaration,
   -readability-uppercase-literal-suffix,
+  -readability-math-missing-parentheses,
 
 # Turn all the warnings from the checks above into errors.
 # WarningsAsErrors: "*"
 
-HeaderFilterRegex: "(maia/).*\\.hpp$"
+HeaderFilterRegex: src
+ExcludeHeaderFilterRegex: out|external
 
 CheckOptions:
   - { key: readability-identifier-naming.NamespaceCase, value: lower_case }

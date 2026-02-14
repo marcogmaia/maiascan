@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <fstream>
 #include <vector>
 
@@ -14,7 +15,8 @@ namespace maia::core {
 
 namespace {
 
-constexpr size_t kChunkSize = 64 * 1024 * 1024;  // 64 MB chunks
+constexpr size_t kChunkSize =
+    static_cast<const size_t>(64 * 1024 * 1024);  // 64 MB chunks
 
 // File header structure (must match design doc)
 struct FileHeader {
@@ -31,15 +33,12 @@ struct FileHeader {
 // Helper to check if a value points to valid memory
 bool IsValidPointer(uint64_t ptr_val,
                     const std::vector<MemoryRegion>& sorted_regions) {
-  // Use upper_bound to find first region with base > ptr_val.
-  // The previous region (if any) has base <= ptr_val, which correctly
-  // handles the case where ptr_val exactly equals a region's base address.
-  auto it = std::upper_bound(sorted_regions.begin(),
-                             sorted_regions.end(),
-                             ptr_val,
-                             [](uint64_t val, const MemoryRegion& region) {
-                               return val < region.base;
-                             });
+  // Use ranges::upper_bound to find the first region with base > ptr_val.
+  // We project the MemoryRegion to its 'base' member for comparison.
+  // std::less{} is the default comparator, but explicitly passing it allows us
+  // to pass the projection.
+  auto it = std::ranges::upper_bound(
+      sorted_regions, ptr_val, std::less{}, &MemoryRegion::base);
 
   if (it == sorted_regions.begin()) {
     return false;
@@ -63,11 +62,9 @@ std::optional<PointerMap> PointerMap::Generate(
   auto regions = process.GetMemoryRegions();
 
   // Pre-sort regions for efficient validation
-  std::sort(regions.begin(),
-            regions.end(),
-            [](const MemoryRegion& a, const MemoryRegion& b) {
-              return a.base < b.base;
-            });
+  std::ranges::sort(regions, [](const MemoryRegion& a, const MemoryRegion& b) {
+    return a.base < b.base;
+  });
 
   // Calculate total size for progress reporting
   size_t total_bytes = 0;
@@ -107,7 +104,7 @@ std::optional<PointerMap> PointerMap::Generate(
 
       // Read memory
       std::vector<uintptr_t> addr_vec = {region.base + offset};
-      if (!process.ReadMemory(addr_vec, read_size, buffer)) {
+      if (!process.ReadMemory(addr_vec, read_size, buffer, nullptr)) {
         // Failed to read chunk, skip it
         processed_bytes += read_size;
         if (progress_callback) {
@@ -141,8 +138,10 @@ std::optional<PointerMap> PointerMap::Generate(
     }
   }
 
-  // Sort by value to enable binary search
-  std::sort(map.entries_.begin(), map.entries_.end());
+  // TODO(marco): Maybe we should encapsulate this in a class to enforce this
+  // binary-searchable invariance.
+  // Sort by value to enable binary search.
+  std::ranges::sort(map.entries_, std::less{});
 
   return map;
 }
@@ -256,29 +255,16 @@ bool PointerMap::Save(std::ostream& stream) const {
 
 std::span<const PointerMapEntry> PointerMap::FindPointersToRange(
     uint64_t min_value, uint64_t max_value) const {
-  // Binary search for the first entry with value >= min_value
-  auto it_begin =
-      std::lower_bound(entries_.begin(),
-                       entries_.end(),
-                       min_value,
-                       [](const PointerMapEntry& entry, uint64_t val) {
-                         return entry.value < val;
-                       });
+  // Projection: "&PointerMapEntry::value" tells the algorithm to look at that
+  // member.
+  const auto it_begin = std::ranges::lower_bound(
+      entries_, min_value, {}, &PointerMapEntry::value);
 
-  // Binary search for the first entry with value > max_value
-  auto it_end =
-      std::upper_bound(it_begin,
-                       entries_.end(),
-                       max_value,
-                       [](uint64_t val, const PointerMapEntry& entry) {
-                         return val < entry.value;
-                       });
+  // Optimization: Start the second search from 'it_begin' (narrower range).
+  const auto it_end = std::ranges::upper_bound(
+      it_begin, entries_.end(), max_value, {}, &PointerMapEntry::value);
 
-  if (it_begin >= it_end) {
-    return {};
-  }
-
-  return std::span<const PointerMapEntry>(it_begin, it_end);
+  return {it_begin, it_end};
 }
 
 }  // namespace maia::core

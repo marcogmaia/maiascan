@@ -1,5 +1,7 @@
 // Copyright (c) Maia
 
+#include "maia/assert.h"
+
 #include <source_location>
 #include <string_view>
 

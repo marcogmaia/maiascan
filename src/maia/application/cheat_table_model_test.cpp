@@ -1,5 +1,6 @@
 // Copyright (c) Maia
 
+#include <algorithm>
 #include <span>
 
 #include <gmock/gmock.h>
@@ -55,7 +56,7 @@ class CheatTableModelTest : public ::testing::Test {
   testing::NiceMock<MockProcess> mock_process_;
   CheatTableModel model_{std::make_unique<test::NoOpTaskRunner>()};
 
-  void CallWriteMemory(size_t index, const std::vector<std::byte>& data) {
+  void CallWriteMemory(size_t index, const std::vector<std::byte>& /*data*/) {
     // We use "1" here because our entry is kInt32.
     // kInt32 will parse "1" into {0x01, 0x00, 0x00, 0x00}.
     // The test mock expects data of size 4 if we use ReadMemory size... wait.
@@ -226,7 +227,7 @@ TEST_F(CheatTableModelTest, UpdateValuesHandlesLargeEntries) {
                     size_t,
                     std::span<std::byte> out_buffer,
                     auto*) {
-        std::fill(out_buffer.begin(), out_buffer.end(), std::byte{0xFF});
+        std::ranges::fill(out_buffer, std::byte{0xFF});
         return true;
       });
 

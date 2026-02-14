@@ -3,11 +3,13 @@
 #pragma once
 
 #include <imgui.h>
+#include <chrono>
 #include <cstdint>
 #include <entt/signal/sigh.hpp>
 #include <functional>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "maia/application/cheat_table_model.h"
@@ -27,6 +29,10 @@ class PointerScannerView {
   using PathResolver =
       std::function<std::optional<uint64_t>(const core::PointerPath&)>;
 
+  /// \brief Value reader function type for reading values at addresses.
+  using ValueReader =
+      std::function<std::optional<std::vector<std::byte>>(uint64_t address)>;
+
   /// \brief Render the pointer scanner window.
   /// \param is_open Pointer to control window visibility (ImGui pattern).
   /// \param paths The discovered pointer paths.
@@ -38,7 +44,10 @@ class PointerScannerView {
   /// \param cheat_entries Available cheat table entries for target selection.
   /// \param scan_results Available scan results for target selection.
   /// \param available_modules List of loaded modules for filtering.
-  /// \param path_resolver Optional callback to resolve a path's current value.
+  /// \param path_resolver Optional callback to resolve a path's current
+  /// address.
+  /// \param value_reader Optional callback to read values at addresses.
+  /// \param value_type The type of values to display.
   void Render(bool* is_open,
               const std::vector<core::PointerPath>& paths,
               size_t map_entry_count,
@@ -49,7 +58,10 @@ class PointerScannerView {
               const std::vector<CheatTableEntry>& cheat_entries,
               const ScanStorage& scan_results,
               const std::vector<std::string>& available_modules,
-              PathResolver path_resolver = nullptr);
+              PathResolver path_resolver = nullptr,
+              ValueReader value_reader = nullptr,
+              ScanValueType value_type = ScanValueType::kUInt32,
+              bool show_all_results = false);
 
   auto sinks() {
     return Sinks{*this};
@@ -63,6 +75,19 @@ class PointerScannerView {
   void SetSelectedType(ScanValueType type) {
     selected_type_ = type;
   }
+
+  /// \brief Set the target address in the UI (e.g., when resolved from cheat
+  /// table).
+  /// \param address The address to display (will be formatted as hex).
+  void SetTargetAddress(uint64_t address);
+
+  /// \brief Tracks state for visible rows in the results table.
+  struct RowState {
+    std::string last_value;
+    std::chrono::steady_clock::time_point last_change;
+  };
+
+  static constexpr size_t kDefaultMaxDisplayedResults = 100;
 
  private:
   class Signals {
@@ -92,7 +117,7 @@ class PointerScannerView {
     entt::sigh<void()> load_map_pressed;
 
     /// \brief Find paths button pressed.
-    entt::sigh<void()> find_paths_pressed;
+    entt::sigh<void(const core::PointerScanConfig&)> find_paths_pressed;
 
     /// \brief Validate paths button pressed.
     entt::sigh<void()> validate_pressed;
@@ -103,6 +128,9 @@ class PointerScannerView {
     /// \brief Pointer path result double-clicked.
     entt::sigh<void(size_t /* index */)> result_double_clicked;
 
+    /// \brief Request to browse memory at an address.
+    entt::sigh<void(uintptr_t /* address */)> browse_memory_requested;
+
     /// \brief Show all results button pressed.
     entt::sigh<void()> show_all_pressed;
   };
@@ -111,10 +139,10 @@ class PointerScannerView {
     PointerScannerView& view;
 
     // clang-format off
-     auto TargetAddressChanged() { return entt::sink(view.signals_.target_address_changed); }
-     auto TargetAddressInvalid() { return entt::sink(view.signals_.target_address_invalid); }
-     auto TargetTypeChanged() { return entt::sink(view.signals_.target_type_changed); }
-     auto TargetFromCheatSelected() { return entt::sink(view.signals_.target_from_cheat_selected); }
+    auto TargetAddressChanged() { return entt::sink(view.signals_.target_address_changed); }
+    auto TargetAddressInvalid() { return entt::sink(view.signals_.target_address_invalid); }
+    auto TargetTypeChanged() { return entt::sink(view.signals_.target_type_changed); }
+    auto TargetFromCheatSelected() { return entt::sink(view.signals_.target_from_cheat_selected); }
     auto TargetFromScanSelected() { return entt::sink(view.signals_.target_from_scan_selected); }
     auto GenerateMapPressed() { return entt::sink(view.signals_.generate_map_pressed); }
     auto SaveMapPressed() { return entt::sink(view.signals_.save_map_pressed); }
@@ -123,6 +151,7 @@ class PointerScannerView {
     auto ValidatePressed() { return entt::sink(view.signals_.validate_pressed); }
     auto CancelPressed() { return entt::sink(view.signals_.cancel_pressed); }
     auto ResultDoubleClicked() { return entt::sink(view.signals_.result_double_clicked); }
+    auto BrowseMemoryRequested() { return entt::sink(view.signals_.browse_memory_requested); }
     auto ShowAllPressed() { return entt::sink(view.signals_.show_all_pressed); }
 
     // clang-format on
@@ -130,19 +159,28 @@ class PointerScannerView {
 
   void RenderTargetSection(const std::vector<CheatTableEntry>& cheat_entries,
                            const ScanStorage& scan_results);
+
+  void RenderTargetAddressInput();
+  void RenderTypeSelector();
+  void RenderSourceSelector(const std::vector<CheatTableEntry>& cheat_entries,
+                            const ScanStorage& scan_results);
+
   void RenderMapSection(size_t map_entry_count,
                         float map_progress,
-                        bool is_generating_map);
+                        bool is_generating_map) const;
   void RenderConfigSection(const std::vector<std::string>& available_modules);
   void RenderActionSection(bool is_generating_map,
                            bool is_scanning,
                            bool has_paths,
-                           float scan_progress);
+                           float scan_progress) const;
   void RenderResultsSection(const std::vector<core::PointerPath>& paths,
                             bool is_scanning,
-                            PathResolver path_resolver);
-
-  std::string FormatPointerPath(const core::PointerPath& path) const;
+                            PathResolver path_resolver,
+                            ValueReader value_reader,
+                            ScanValueType value_type,
+                            bool show_all_results);
+  void RenderResultsStatus(const std::vector<core::PointerPath>& paths,
+                           bool is_scanning);
 
   Signals signals_;
 
@@ -165,7 +203,10 @@ class PointerScannerView {
 
   // Display
   bool show_all_results_ = false;
-  static constexpr size_t kDefaultMaxDisplayedResults = 100;
+
+  // Row state tracking for value change blinking (keyed by path, not index)
+  std::unordered_map<std::string, RowState> visible_row_states_;
+  const void* last_paths_ptr_ = nullptr;  // To detect when paths vector changes
 };
 
 }  // namespace maia

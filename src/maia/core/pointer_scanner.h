@@ -129,4 +129,10 @@ class PointerScanner {
       const std::vector<mmem::ModuleDescriptor>& modules) const;
 };
 
+/// \brief Formats a PointerPath as a unique, stable string key.
+/// \param path The pointer path to format.
+/// \return A string key suitable for use as a map key (survives scrolling).
+/// \details Format: "module:offset:+off1+off2..." or "0xbase:+off1+off2..."
+[[nodiscard]] std::string FormatPointerPathKey(const PointerPath& path);
+
 }  // namespace maia::core

@@ -12,9 +12,8 @@ namespace maia {
 namespace {
 
 std::string ToLower(std::string str) {
-  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
-    return std::tolower(c);
-  });
+  std::ranges::transform(
+      str, str.begin(), [](unsigned char c) { return std::tolower(c); });
   return str;
 }
 
@@ -33,18 +32,19 @@ void ProcessSelectorView::RenderProcessPickerButton() const {
   }
 }
 
-void ProcessSelectorView::Render(bool* p_open,
-                                 const std::vector<ProcessInfo>& processes,
-                                 const std::string& attached_process_name,
-                                 Pid attached_pid) {
-  ImGui::Begin("Process Selector", p_open);
+void ProcessSelectorView::Render(gui::ProcessSelectorState& state) {
+  if (!state.is_visible) {
+    return;
+  }
+
+  ImGui::Begin("Process Selector", &state.is_visible);
 
   if (ImGui::Button("Refresh List")) {
     signals_.refresh_requested.publish();
   }
 
   ImGui::SameLine();
-  ImGui::Text("%zu processes found.", processes.size());
+  ImGui::Text("%zu processes found.", state.processes.size());
 
   ImGui::SameLine();
 
@@ -57,14 +57,14 @@ void ProcessSelectorView::Render(bool* p_open,
 
   ImGui::Separator();
 
-  ImGui::Text("Selected Process: %s", attached_process_name.c_str());
-  ImGui::Text("Selected PID: %u", attached_pid);
+  ImGui::Text("Selected Process: %s", state.attached_process_name.c_str());
+  ImGui::Text("Selected PID: %u", state.attached_pid);
 
   ImGui::Separator();
 
-  ImGui::BeginChild("ProcessListRegion", ImVec2(0, 0), true);
+  ImGui::BeginChild("ProcessListRegion", ImVec2(0, 0), ImGuiChildFlags_Borders);
 
-  for (const auto& proc : processes) {
+  for (const auto& proc : state.processes) {
     std::string name_lower = ToLower(proc.name);
 
     if (filter_lower.empty() || name_lower.contains(filter_lower)) {
@@ -75,7 +75,7 @@ void ProcessSelectorView::Render(bool* p_open,
                              proc.name.c_str(),
                              proc.pid);
 
-      bool is_selected = (proc.pid == attached_pid);
+      bool is_selected = (proc.pid == state.attached_pid);
       if (ImGui::Selectable(item_label, is_selected)) {
         signals_.process_selected_from_list.publish(proc.pid);
       }
@@ -87,6 +87,18 @@ void ProcessSelectorView::Render(bool* p_open,
 
   ImGui::EndChild();
   ImGui::End();
+}
+
+bool RenderToolbar(const gui::ProcessSelectorState& state) {
+  if (state.attached_pid != 0) {
+    ImGui::Text("Process: %s (PID: %u)",
+                state.attached_process_name.c_str(),
+                state.attached_pid);
+  } else {
+    ImGui::TextDisabled("No Process");
+  }
+  ImGui::SameLine();
+  return ImGui::Button("Select...");
 }
 
 }  // namespace maia

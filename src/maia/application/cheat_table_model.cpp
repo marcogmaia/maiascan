@@ -163,7 +163,7 @@ void CheatTableModel::AddEntry(MemoryAddress address,
   if (active_process_) {
     auto initial_value = entry.data->GetValue();
     active_process_->ReadMemory(
-        {&entry.address, 1}, initial_value.size(), initial_value);
+        {&entry.address, 1}, initial_value.size(), initial_value, nullptr);
     entry.data->UpdateFromProcess(initial_value);
   }
 
@@ -323,30 +323,22 @@ void CheatTableModel::SetValue(size_t index, const std::string& value_str) {
 }
 
 bool CheatTableModel::Save(const std::filesystem::path& path) const {
+  std::ofstream file(path);
+  if (!file.is_open()) {
+    LogError("Failed to open file for saving: {}", path.string());
+    return false;
+  }
+  return Save(file);
+}
+
+bool CheatTableModel::Save(std::ostream& stream) const {
   std::scoped_lock lock(mutex_);
   auto snapshot = entries_.load();
 
   try {
-    nlohmann::json j = nlohmann::json::array();
-    for (const auto& entry : *snapshot) {
-      nlohmann::json entry_json;
-      entry_json["address"] = entry.address;
-      entry_json["pointer_base"] = entry.pointer_base;
-      entry_json["pointer_module"] = entry.pointer_module;
-      entry_json["pointer_module_offset"] = entry.pointer_module_offset;
-      entry_json["pointer_offsets"] = entry.pointer_offsets;
-      entry_json["type"] = entry.type;
-      entry_json["description"] = entry.description;
-      j.push_back(entry_json);
-    }
-
-    std::ofstream file(path);
-    if (!file.is_open()) {
-      LogError("Failed to open file for saving: {}", path.string());
-      return false;
-    }
-    file << j.dump(2);
-    LogInfo("Saved {} entries to {}", snapshot->size(), path.string());
+    nlohmann::json j = *snapshot;
+    stream << j.dump(2);
+    LogInfo("Saved {} entries", snapshot->size());
     return true;
   } catch (const std::exception& e) {
     LogError("Failed to save cheat table: {}", e.what());
@@ -355,36 +347,26 @@ bool CheatTableModel::Save(const std::filesystem::path& path) const {
 }
 
 bool CheatTableModel::Load(const std::filesystem::path& path) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    LogWarning("Failed to open file for loading: {}", path.string());
+    return false;
+  }
+  return Load(file);
+}
+
+bool CheatTableModel::Load(std::istream& stream) {
   std::scoped_lock lock(mutex_);
 
   try {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-      LogWarning("Failed to open file for loading: {}", path.string());
-      return false;
-    }
-
     nlohmann::json j;
-    file >> j;
+    stream >> j;
 
     std::vector<CheatTableEntry> entries;
     entries.reserve(j.size());
 
     for (const auto& entry_json : j) {
-      CheatTableEntry entry;
-      entry.address = entry_json["address"].get<MemoryAddress>();
-      entry.pointer_base = entry_json.value("pointer_base", 0);
-      entry.pointer_module = entry_json.value("pointer_module", "");
-      entry.pointer_module_offset =
-          entry_json.value("pointer_module_offset", 0);
-
-      if (entry_json.contains("pointer_offsets")) {
-        entry.pointer_offsets =
-            entry_json["pointer_offsets"].get<std::vector<int64_t>>();
-      }
-
-      entry.type = entry_json["type"].get<ScanValueType>();
-      entry.description = entry_json["description"].get<std::string>();
+      auto entry = entry_json.get<CheatTableEntry>();
 
       entry.data = std::make_shared<CheatTableEntryData>();
       entry.data->Resize(GetSizeForType(entry.type));
@@ -396,7 +378,7 @@ bool CheatTableModel::Load(const std::filesystem::path& path) {
     entries_.store(new_entries);
     signals_.table_changed.publish();
 
-    LogInfo("Loaded {} entries from {}", entries.size(), path.string());
+    LogInfo("Loaded {} entries", entries.size());
     return true;
   } catch (const std::exception& e) {
     LogError("Failed to load cheat table: {}", e.what());
@@ -500,13 +482,13 @@ MemoryAddress CheatTableModel::ResolveAddress(
   MemoryAddress current = base_address;
 
   // Follow the chain of offsets
-  for (size_t i = 0; i < entry.pointer_offsets.size(); ++i) {
+  for (const auto pointer_offset : entry.pointer_offsets) {
     // Read pointer at current address
     std::array<std::byte, 8> ptr_buffer;
     const size_t ptr_size = active_process_->GetPointerSize();
 
     if (!active_process_->ReadMemory(
-            {&current, 1}, ptr_size, {ptr_buffer.data(), ptr_size})) {
+            {&current, 1}, ptr_size, {ptr_buffer.data(), ptr_size}, nullptr)) {
       return 0;  // Failed to read pointer
     }
 
@@ -525,7 +507,7 @@ MemoryAddress CheatTableModel::ResolveAddress(
     }
 
     // Apply offset (can be negative)
-    current = ptr_value + entry.pointer_offsets[i];
+    current = ptr_value + pointer_offset;
   }
 
   return current;
@@ -549,7 +531,8 @@ bool CheatTableModel::ReadEntryValue(const CheatTableEntry& entry,
     entry.data->SetResolvedAddress(addr);
   }
 
-  return active_process_->ReadMemory({&addr, 1}, out_buffer.size(), out_buffer);
+  return active_process_->ReadMemory(
+      {&addr, 1}, out_buffer.size(), out_buffer, nullptr);
 }
 
 bool CheatTableModel::WriteEntryValue(const CheatTableEntry& entry,

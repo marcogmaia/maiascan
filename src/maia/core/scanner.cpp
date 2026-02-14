@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <array>
 #include <future>
-#include <ranges>
 #include <span>
 #include <thread>
 #include <vector>
@@ -268,7 +267,7 @@ ScanResult Scanner::FirstScan(IProcess& process,
 
       buffer.resize(task.read_size);
       MemoryAddress addr = task.base_address;
-      if (!process.ReadMemory({&addr, 1}, task.read_size, buffer)) {
+      if (!process.ReadMemory({&addr, 1}, task.read_size, buffer, nullptr)) {
         ++processed_tasks;
         if (progress_callback) {
           progress_callback(static_cast<float>(processed_tasks) /
@@ -369,6 +368,7 @@ ScanResult Scanner::FirstScan(IProcess& process,
   return result;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ScanResult Scanner::NextScan(IProcess& process,
                              const ScanConfig& config,
                              const ScanStorage& previous_results,
@@ -586,11 +586,21 @@ std::future<ScanResult> Scanner::FirstScanAsync(
     const ScanConfig& config,
     std::stop_token stop_token,
     ProgressCallback progress_callback) const {
-  return std::async(std::launch::async,
-                    [this, &process, config, stop_token, progress_callback]() {
-                      return FirstScan(
-                          process, config, stop_token, progress_callback);
-                    });
+  return std::async(
+      std::launch::async,
+      [this, &process, config, stop_token, progress_callback]() noexcept {
+        try {
+          return FirstScan(process, config, stop_token, progress_callback);
+        } catch (const std::exception& e) {
+          ScanResult result;
+          result.error_message = e.what();
+          return result;
+        } catch (...) {
+          ScanResult result;
+          result.error_message = "Unknown exception occurred";
+          return result;
+        }
+      });
 }
 
 std::future<ScanResult> Scanner::NextScanAsync(
@@ -606,9 +616,19 @@ std::future<ScanResult> Scanner::NextScanAsync(
        config,
        previous_results,
        stop_token,
-       progress_callback]() {
-        return NextScan(
-            process, config, previous_results, stop_token, progress_callback);
+       progress_callback]() noexcept {
+        try {
+          return NextScan(
+              process, config, previous_results, stop_token, progress_callback);
+        } catch (const std::exception& e) {
+          ScanResult result;
+          result.error_message = e.what();
+          return result;
+        } catch (...) {
+          ScanResult result;
+          result.error_message = "Unknown exception occurred";
+          return result;
+        }
       });
 }
 
