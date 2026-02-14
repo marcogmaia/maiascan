@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <array>
 #include <future>
-#include <ranges>
 #include <span>
 #include <thread>
 #include <vector>

@@ -139,7 +139,9 @@ std::optional<std::filesystem::path> FileDialogs::ShowOpenDialog(
   if (result == NFD_OKAY) {
     NfdPathGuard guard(out_path);
     return ToPath(out_path);
-  } else if (result == NFD_ERROR) {
+  }
+
+  if (result == NFD_ERROR) {
     LogError("NFD Open Error: {}", NFD_GetError());
   }
 
@@ -173,7 +175,9 @@ std::optional<std::filesystem::path> FileDialogs::ShowSaveDialog(
   if (result == NFD_OKAY) {
     NfdPathGuard guard(out_path);
     return ToPath(out_path);
-  } else if (result == NFD_ERROR) {
+  }
+
+  if (result == NFD_ERROR) {
     LogError("NFD Save Error: {}", NFD_GetError());
   }
 

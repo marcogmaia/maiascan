@@ -34,13 +34,13 @@ class GuiSystem {
   // Starts a new ImGui frame.
   //
   // Should be called at the beginning of the render loop iteration.
-  void BeginFrame();
+  void BeginFrame() const;
 
   // Ends the current ImGui frame and renders draw data.
   //
   // Should be called after all ImGui commands are issued and before
   // SwapBuffers.
-  void EndFrame();
+  void EndFrame() const;
 
   // Window management
 
@@ -49,7 +49,7 @@ class GuiSystem {
   bool WindowShouldClose() const;
 
   // Processes pending events.
-  void PollEvents();
+  void PollEvents();  // NOLINT
 
   // Swaps the front and back buffers.
   void SwapBuffers();

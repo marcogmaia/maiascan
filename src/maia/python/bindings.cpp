@@ -19,11 +19,11 @@ PYBIND11_MAKE_OPAQUE(std::vector<uintptr_t>);
 
 namespace maia::core {
 
+namespace {
+
 namespace py = pybind11;
 
 void BindMaiascan(py::module_& m) {
-  namespace py = pybind11;
-
   m.doc() = "MaiaScan Python Bindings";
 
   // Enums
@@ -350,6 +350,8 @@ void BindMaiascan(py::module_& m) {
       .def("GetResultCount", &ScanSession::GetResultCount)
       .def("HasResults", &ScanSession::HasResults);
 }
+
+}  // namespace
 
 }  // namespace maia::core
 

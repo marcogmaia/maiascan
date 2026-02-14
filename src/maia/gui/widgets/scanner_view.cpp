@@ -80,12 +80,12 @@ void ScannerWidget::RenderControls(float progress, bool is_scanning) {
               "##ScanComparison",
               ValueFormatter::GetLabel(
                   kAllScanComparisons[selected_comparison_index_]))) {
-        for (size_t i = 0; i < kAllScanComparisons.size(); i++) {
-          const bool is_selected = (selected_comparison_index_ == i);
+        for (int i = 0; i < kAllScanComparisons.size(); ++i) {
+          const bool is_selected = selected_comparison_index_ == i;
           if (ImGui::Selectable(
                   ValueFormatter::GetLabel(kAllScanComparisons[i]),
                   is_selected)) {
-            selected_comparison_index_ = static_cast<int>(i);
+            selected_comparison_index_ = i;
             EmitSetComparisonSelected();
           }
           if (is_selected) {

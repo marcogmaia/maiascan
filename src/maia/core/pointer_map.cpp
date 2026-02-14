@@ -33,15 +33,12 @@ struct FileHeader {
 // Helper to check if a value points to valid memory
 bool IsValidPointer(uint64_t ptr_val,
                     const std::vector<MemoryRegion>& sorted_regions) {
-  // Use upper_bound to find first region with base > ptr_val.
-  // The previous region (if any) has base <= ptr_val, which correctly
-  // handles the case where ptr_val exactly equals a region's base address.
-  auto it = std::upper_bound(sorted_regions.begin(),
-                             sorted_regions.end(),
-                             ptr_val,
-                             [](uint64_t val, const MemoryRegion& region) {
-                               return val < region.base;
-                             });
+  // Use ranges::upper_bound to find the first region with base > ptr_val.
+  // We project the MemoryRegion to its 'base' member for comparison.
+  // std::less{} is the default comparator, but explicitly passing it allows us
+  // to pass the projection.
+  auto it = std::ranges::upper_bound(
+      sorted_regions, ptr_val, std::less{}, &MemoryRegion::base);
 
   if (it == sorted_regions.begin()) {
     return false;

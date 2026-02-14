@@ -6,6 +6,7 @@
 #include <cctype>
 #include <charconv>
 #include <chrono>
+#include <cstddef>
 
 #include <imgui.h>
 
@@ -173,8 +174,9 @@ void HexView::RenderGrid() {
            ++row_idx) {
         ImGui::TableNextRow();
 
-        uintptr_t row_addr = base_address + row_idx * kBytesPerRow;
-        size_t data_offset = row_idx * kBytesPerRow;
+        uintptr_t row_addr =
+            base_address + static_cast<uintptr_t>(row_idx * kBytesPerRow);
+        size_t data_offset = static_cast<int64_t>(row_idx) * kBytesPerRow;
 
         ImGui::TableSetColumnIndex(0);
         RenderAddress(row_addr);
@@ -213,7 +215,7 @@ void HexView::RenderHexBytes(uintptr_t start_address,
     bool is_valid =
         (data_offset + i < validity.size()) && (validity[data_offset + i] != 0);
 
-    std::byte val = std::byte{0};
+    auto val = std::byte{0};
     bool is_edited = false;
 
     if (auto it = edits.find(byte_addr); it != edits.end()) {
@@ -293,7 +295,7 @@ void HexView::RenderAscii(uintptr_t start_address,
     bool is_valid =
         (data_offset + i < validity.size()) && (validity[data_offset + i] != 0);
 
-    std::byte val = std::byte{0};
+    auto val = std::byte{0};
     bool is_edited = false;
 
     if (auto it = edits.find(byte_addr); it != edits.end()) {
@@ -339,7 +341,7 @@ void HexView::RenderAscii(uintptr_t start_address,
 
     char c = '.';
     if (is_valid) {
-      unsigned char uc = static_cast<unsigned char>(val);
+      auto uc = static_cast<unsigned char>(val);
       if (std::isprint(uc)) {
         c = static_cast<char>(uc);
       }
@@ -425,7 +427,7 @@ void HexView::HandleInput() {
           pending_nibble_ = n;
           pending_nibble_addr_ = selection.start;
         } else {
-          std::byte val = static_cast<std::byte>((pending_nibble_ << 4) | n);
+          auto val = static_cast<std::byte>((pending_nibble_ << 4) | n);
           model_.SetByte(selection.start, val);
           pending_nibble_ = -1;
           // Auto-advance

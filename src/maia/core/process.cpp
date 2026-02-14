@@ -173,7 +173,7 @@ bool Process::ReadMemory(std::span<const MemoryAddress> addresses,
     return true;
   }
 
-  constexpr size_t kMaxBatchSize = static_cast<const size_t>(64 * 1024);
+  constexpr size_t kMaxBatchSize = 64z * 1024z;
   constexpr size_t kMaxGapBytes = 256;
 
   auto indexed_addresses = CreateIndexedAddresses(addresses);

@@ -83,7 +83,7 @@ GuiSystem::GuiSystem(int width, int height) {
     return;
   }
   window_handle_ = *res;
-  GLFWwindow* window = static_cast<GLFWwindow*>(window_handle_);
+  auto* window = static_cast<GLFWwindow*>(window_handle_);
 
   SetWindowIcon(IDI_APP_ICON);
 
@@ -151,7 +151,7 @@ GuiSystem::~GuiSystem() {
   }
 }
 
-void GuiSystem::BeginFrame() {
+void GuiSystem::BeginFrame() const {
   if (IsValid()) {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -159,7 +159,7 @@ void GuiSystem::BeginFrame() {
   }
 }
 
-void GuiSystem::EndFrame() {
+void GuiSystem::EndFrame() const {
   if (IsValid()) {
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -171,7 +171,7 @@ bool GuiSystem::WindowShouldClose() const {
   if (!IsValid()) {
     return true;
   }
-  return glfwWindowShouldClose(static_cast<GLFWwindow*>(window_handle_));
+  return glfwWindowShouldClose(static_cast<GLFWwindow*>(window_handle_)) != 0;
 }
 
 void GuiSystem::PollEvents() {
@@ -190,22 +190,24 @@ void GuiSystem::SetWindowIcon(int resource_id) {
     return;
   }
   HWND hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window_handle_));
-  HINSTANCE hInst = GetModuleHandle(nullptr);
+  HINSTANCE h_inst = GetModuleHandle(nullptr);
 
   // Load the icon for both big and small sizes
-  HICON hIconBig = (HICON)LoadImage(
-      hInst, MAKEINTRESOURCE(resource_id), IMAGE_ICON, 32, 32, LR_SHARED);
-  HICON hIconSmall = (HICON)LoadImage(
-      hInst, MAKEINTRESOURCE(resource_id), IMAGE_ICON, 16, 16, LR_SHARED);
+  auto* h_icon_big = static_cast<HICON>(LoadImage(
+      h_inst, MAKEINTRESOURCE(resource_id), IMAGE_ICON, 32, 32, LR_SHARED));
+  auto* h_icon_small = static_cast<HICON>(LoadImage(
+      h_inst, MAKEINTRESOURCE(resource_id), IMAGE_ICON, 16, 16, LR_SHARED));
 
-  if (hIconBig) {
-    SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+  if (h_icon_big) {
+    SendMessage(
+        hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(h_icon_big));
   }
-  if (hIconSmall) {
-    SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+  if (h_icon_small) {
+    SendMessage(
+        hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(h_icon_small));
   }
 
-  if (!hIconBig && !hIconSmall) {
+  if (!h_icon_big && !h_icon_small) {
     LogWarning("Failed to load icon from resource ID {}", resource_id);
   }
 #endif
@@ -215,7 +217,7 @@ void GuiSystem::ClearWindow(float r, float g, float b, float a) {
   if (!IsValid()) {
     return;
   }
-  GLFWwindow* window = static_cast<GLFWwindow*>(window_handle_);
+  auto* window = static_cast<GLFWwindow*>(window_handle_);
   int display_w;
   int display_h;
   glfwGetFramebufferSize(window, &display_w, &display_h);
