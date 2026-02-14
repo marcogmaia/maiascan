@@ -50,7 +50,7 @@ void HexView::Render() {
 
     if (ImGui::BeginChild("HexGridRegion",
                           ImVec2(0, 0),
-                          false,
+                          ImGuiChildFlags_None,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
       // Handle mouse wheel for scrolling
       if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) {

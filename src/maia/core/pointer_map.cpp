@@ -141,7 +141,7 @@ std::optional<PointerMap> PointerMap::Generate(
   // TODO(marco): Maybe we should encapsulate this in a class to enforce this
   // binary-searchable invariance.
   // Sort by value to enable binary search.
-  std::sort(map.entries_.begin(), map.entries_.end());
+  std::ranges::sort(map.entries_, std::less{});
 
   return map;
 }

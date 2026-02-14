@@ -61,7 +61,7 @@ void ProcessSelectorView::Render(bool* p_open,
 
   ImGui::Separator();
 
-  ImGui::BeginChild("ProcessListRegion", ImVec2(0, 0), true);
+  ImGui::BeginChild("ProcessListRegion", ImVec2(0, 0), ImGuiChildFlags_Borders);
 
   for (const auto& proc : processes) {
     std::string name_lower = ToLower(proc.name);
@@ -88,10 +88,9 @@ void ProcessSelectorView::Render(bool* p_open,
   ImGui::End();
 }
 
-void ProcessSelectorView::RenderToolbar(
-    const std::string& attached_process_name,
-    Pid attached_pid,
-    bool* show_window) {
+void RenderToolbar(const std::string& attached_process_name,
+                   Pid attached_pid,
+                   bool* show_window) {
   if (attached_pid != 0) {
     ImGui::Text(
         "Process: %s (PID: %u)", attached_process_name.c_str(), attached_pid);
