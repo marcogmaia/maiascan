@@ -30,6 +30,7 @@ class MainWindow {
              PointerScannerViewModel& pointer_scanner_vm,
              gui::PointerScannerState& pointer_scanner_state,
              HexViewViewModel& hex_vm,
+             gui::HexViewModel& hex_view_model,
              ScanResultModel& scan_result_model,
              CheatTableModel& cheat_table_model,
              PointerScannerModel& pointer_scanner_model);
@@ -51,6 +52,7 @@ class MainWindow {
   ScanResultModel& scan_result_model_;
   CheatTableModel& cheat_table_model_;
   PointerScannerModel& pointer_scanner_model_;
+  gui::HexViewModel& hex_view_model_;
 
   // UI States
   gui::ProcessSelectorState& process_selector_state_;
@@ -63,6 +65,7 @@ class MainWindow {
   ScannerWidget scanner_view_;
   CheatTableView cheat_table_view_;
   PointerScannerView pointer_scanner_view_;
+  gui::HexView hex_view_;
 
   std::vector<entt::scoped_connection> connections_;
 };

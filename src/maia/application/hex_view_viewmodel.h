@@ -1,19 +1,17 @@
+// Copyright (c) Maia
+
 #pragma once
 
 #include <cstdint>
+
 #include "maia/application/process_model.h"
 #include "maia/gui/models/hex_view_model.h"
-#include "maia/gui/widgets/hex_view.h"
 
 namespace maia {
 
 class HexViewViewModel {
  public:
-  HexViewViewModel(ProcessModel& process_model,
-                   gui::HexViewModel& hex_model,
-                   gui::HexView& hex_view);
-
-  void Render();
+  HexViewViewModel(ProcessModel& process_model, gui::HexViewModel& hex_model);
 
   bool IsVisible() const {
     return is_visible_;
@@ -32,7 +30,6 @@ class HexViewViewModel {
  private:
   ProcessModel& process_model_;
   gui::HexViewModel& hex_model_;
-  gui::HexView& hex_view_;
   bool is_visible_ = false;
 };
 

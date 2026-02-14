@@ -1,9 +1,9 @@
+// Copyright (c) Maia
+
 #pragma once
 
 #include <entt/signal/sigh.hpp>
-#include <functional>
 #include <memory>
-#include <vector>
 
 namespace maia {
 

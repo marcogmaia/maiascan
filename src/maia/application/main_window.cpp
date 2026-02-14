@@ -34,6 +34,7 @@ MainWindow::MainWindow(ProcessSelectorViewModel& process_selector_vm,
                        PointerScannerViewModel& pointer_scanner_vm,
                        gui::PointerScannerState& pointer_scanner_state,
                        HexViewViewModel& hex_vm,
+                       gui::HexViewModel& hex_view_model,
                        ScanResultModel& scan_result_model,
                        CheatTableModel& cheat_table_model,
                        PointerScannerModel& pointer_scanner_model)
@@ -49,10 +50,11 @@ MainWindow::MainWindow(ProcessSelectorViewModel& process_selector_vm,
       scanner_state_(scanner_state),
       cheat_table_state_(cheat_table_state),
       pointer_scanner_state_(pointer_scanner_state),
+      hex_view_model_(hex_view_model),
       process_selector_view_(),
       scanner_view_(),
       cheat_table_view_(),
-      pointer_scanner_view_() {
+      hex_view_(hex_view_model) {
   // === Binder: Connections ===
   // clang-format off
 
@@ -146,7 +148,17 @@ void MainWindow::Render() {
       pointer_scanner_state_.show_all_results);
   pointer_scanner_vm_.SetVisible(ps_visible);
 
-  hex_vm_.Render();
+  if (hex_vm_.IsVisible()) {
+    bool visible = true;
+    if (ImGui::Begin("Memory Viewer", &visible)) {
+      hex_view_.Render();
+    }
+    ImGui::End();
+
+    if (!visible) {
+      hex_vm_.SetVisible(false);
+    }
+  }
 }
 
 void MainWindow::CreateDockSpace() {

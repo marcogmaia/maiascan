@@ -66,12 +66,8 @@ int main() {
                                                    scan_result_model,
                                                    pointer_scanner_state};
 
-  // HexView is slightly special as it currently has its own view instance in
-  // presenter usually but we will let MainWindow own it. We need a temporary
-  // View to satisfy any remaining code, but MainWindow will own the real one.
-  maia::gui::HexView hex_view_internal{hex_view_model};
-  maia::HexViewViewModel hex_vm{
-      process_model, hex_view_model, hex_view_internal};
+  // HexView.
+  maia::HexViewViewModel hex_vm{process_model, hex_view_model};
 
   // === MainWindow (The Binder) ===
   maia::MainWindow main_window{process_selector_vm,
@@ -83,6 +79,7 @@ int main() {
                                pointer_scanner_vm,
                                pointer_scanner_state,
                                hex_vm,
+                               hex_view_model,
                                scan_result_model,
                                cheat_table_model,
                                pointer_scanner_model};
