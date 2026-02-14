@@ -22,6 +22,7 @@ target_sources(
         global_hotkey_manager.h
         hex_view_presenter.h
         file_dialogs.h
+        throttled_value_cache.h
   PRIVATE
     cheat_table_model.cpp
     cheat_table_presenter.cpp
@@ -34,6 +35,7 @@ target_sources(
     scan_result_model.cpp
     hex_view_presenter.cpp
     file_dialogs.cpp
+    throttled_value_cache.cpp
 )
 
 target_link_libraries(
@@ -51,6 +53,7 @@ target_sources(
     cheat_table_model_test.cpp
     pointer_scanner_model_test.cpp
     process_model_test.cpp
+    throttled_value_cache_test.cpp
 )
 target_link_libraries(
   application_test

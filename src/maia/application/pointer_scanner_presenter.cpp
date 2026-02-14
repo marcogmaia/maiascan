@@ -54,7 +54,7 @@ void OnMapGenerated(bool success, size_t entry_count) {
   }
 }
 
-void OnScanComplete(const core::PointerScanResult& result) {
+void OnScanCompleteLog(const core::PointerScanResult& result) {
   if (result.success) {
     LogInfo("Pointer scan complete: {} paths found (evaluated: {})",
             result.paths.size(),
@@ -62,6 +62,11 @@ void OnScanComplete(const core::PointerScanResult& result) {
   } else {
     LogWarning("Pointer scan failed: {}", result.error_message);
   }
+}
+
+void OnValidationCompleteLog(
+    const std::vector<core::PointerPath>& valid_paths) {
+  LogInfo("Validation complete: {} paths remain valid", valid_paths.size());
 }
 
 }  // namespace
@@ -99,7 +104,7 @@ PointerScannerPresenter::PointerScannerPresenter(
 
   // Connect model signals to presenter handlers
   Connect(connections_, pointer_scanner_model_.sinks().MapGenerated(),       Slot<&OnMapGenerated>);
-  Connect(connections_, pointer_scanner_model_.sinks().ScanComplete(),       Slot<&OnScanComplete>);
+  Connect(connections_, pointer_scanner_model_.sinks().ScanComplete(),       this, Slot<&PointerScannerPresenter::OnScanComplete>);
   Connect(connections_, pointer_scanner_model_.sinks().ProgressUpdated(),    this, Slot<&PointerScannerPresenter::OnProgressUpdated>);
   Connect(connections_, pointer_scanner_model_.sinks().PathsUpdated(),       this, Slot<&PointerScannerPresenter::OnPathsUpdated>);
   Connect(connections_, pointer_scanner_model_.sinks().ValidationComplete(), this, Slot<&PointerScannerPresenter::OnValidationComplete>);
@@ -143,18 +148,27 @@ void PointerScannerPresenter::Render() {
       [this](const core::PointerPath& path) {
         return pointer_scanner_model_.ResolvePath(path);
       },
-      [process,
+      [this,
        value_size](uint64_t address) -> std::optional<std::vector<std::byte>> {
-        if (!process || value_size == 0) {
-          return std::nullopt;
-        }
-        std::vector<std::byte> buffer(value_size);
-        std::vector<MemoryAddress> addresses = {
-            static_cast<MemoryAddress>(address)};
-        if (process->ReadMemory(addresses, value_size, buffer, nullptr)) {
-          return buffer;
-        }
-        return std::nullopt;
+        auto now = std::chrono::steady_clock::now();
+
+        return value_cache_.Get(
+            address,
+            [this, value_size](
+                uint64_t addr) -> std::optional<std::vector<std::byte>> {
+              IProcess* process = process_model_.GetActiveProcess();
+              if (!process || value_size == 0) {
+                return std::nullopt;
+              }
+              std::vector<std::byte> buffer(value_size);
+              std::vector<MemoryAddress> addresses = {
+                  static_cast<MemoryAddress>(addr)};
+              if (process->ReadMemory(addresses, value_size, buffer, nullptr)) {
+                return buffer;
+              }
+              return std::nullopt;
+            },
+            now);
       },
       target_type);
 }
@@ -235,8 +249,22 @@ void PointerScannerPresenter::OnValidatePressed() {
   LogInfo("Validation started");
 }
 
+void PointerScannerPresenter::OnScanComplete(
+    const core::PointerScanResult& result) {
+  value_cache_.Clear();  // Clear cache when scan completes
+
+  if (result.success) {
+    LogInfo("Pointer scan complete: {} paths found (evaluated: {})",
+            result.paths.size(),
+            result.paths_evaluated);
+  } else {
+    LogWarning("Pointer scan failed: {}", result.error_message);
+  }
+}
+
 void PointerScannerPresenter::OnValidationComplete(
     const std::vector<core::PointerPath>& valid_paths) {
+  value_cache_.Clear();  // Clear cache when validation completes
   pointer_scanner_model_.SetPaths(valid_paths);
   LogInfo("Validation complete: {} paths remain valid", valid_paths.size());
 }
@@ -260,6 +288,8 @@ void PointerScannerPresenter::OnPathsUpdated() {
 }
 
 void PointerScannerPresenter::OnActiveProcessChanged(IProcess* process) {
+  value_cache_.Clear();  // Clear cache on process switch
+
   if (pointer_scanner_model_.IsBusy()) {
     // Queue the process switch for later
     pending_process_switch_ = process;

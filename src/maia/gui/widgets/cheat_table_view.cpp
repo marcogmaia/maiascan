@@ -5,8 +5,6 @@
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
-#include <chrono>
-#include <cmath>
 #include <cstring>
 #include <functional>
 #include <span>
@@ -16,6 +14,7 @@
 
 #include "maia/core/scan_types.h"
 #include "maia/core/value_formatter.h"
+#include "maia/gui/imgui_effects.h"
 
 namespace maia {
 
@@ -40,13 +39,6 @@ struct TableActions {
 
 // --- Helper Functions ---
 
-ImVec4 LerpColor(const ImVec4& start_color, const ImVec4& end_color, float t) {
-  return ImVec4(std::lerp(start_color.x, end_color.x, t),
-                std::lerp(start_color.y, end_color.y, t),
-                std::lerp(start_color.z, end_color.z, t),
-                std::lerp(start_color.w, end_color.w, t));
-}
-
 std::string FormatAddress(const CheatTableEntry& entry) {
   const MemoryAddress resolved = entry.data->GetResolvedAddress();
   if (!entry.IsDynamicAddress()) {
@@ -70,20 +62,6 @@ std::string FormatAddress(const CheatTableEntry& entry) {
   }
 
   return addr_str + fmt::format(" -> 0x{:X}", resolved);
-}
-
-float CalculateBlinkAlpha(
-    std::chrono::steady_clock::time_point last_change_time) {
-  constexpr float kBlinkDuration = 1.0f;
-  auto now = std::chrono::steady_clock::now();
-  float time_since_change =
-      std::chrono::duration<float>(now - last_change_time).count();
-
-  if (time_since_change < kBlinkDuration &&
-      last_change_time.time_since_epoch().count() > 0) {
-    return 1.0f - (time_since_change / kBlinkDuration);
-  }
-  return 0.0f;
 }
 
 // --- Stateless Rendering Functions ---
@@ -183,23 +161,13 @@ void RenderRow(const CheatTableEntry& entry,
 
   std::string val_str = ValueFormatter::Format(
       entry.data->GetValue(), entry.type, entry.show_as_hex);
-  float blink_alpha = CalculateBlinkAlpha(entry.data->GetLastChangeTime());
 
-  if (blink_alpha > 0.0f) {
-    ImVec4 default_color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-    const auto color_red = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
-    ImVec4 blink_color = LerpColor(default_color, color_red, blink_alpha);
-    ImGui::PushStyleColor(ImGuiCol_Text, blink_color);
-  }
-
-  if (ImGui::InputText(
-          "##value", &val_str, ImGuiInputTextFlags_EnterReturnsTrue)) {
-    actions.on_value_changed(index, val_str);
-  }
-
-  if (blink_alpha > 0.0f) {
-    ImGui::PopStyleColor();
-  }
+  gui::DrawWithBlinkEffect(entry.data->GetLastChangeTime(), [&]() {
+    if (ImGui::InputText(
+            "##value", &val_str, ImGuiInputTextFlags_EnterReturnsTrue)) {
+      actions.on_value_changed(index, val_str);
+    }
+  });
   RenderRowInteractions(entry);
 
   // Context Menu

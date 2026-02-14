@@ -8,6 +8,7 @@ target_sources(
     FILE_SET HEADERS
       BASE_DIRS "${MAIA_BASE_DIR}"
       FILES
+        imgui_effects.h
         imgui_extensions.h
         layout.h
         widgets/cheat_table_view.h
@@ -20,6 +21,7 @@ target_sources(
         widgets/hex_cell_styler.h
         models/hex_view_model.h
   PRIVATE
+    imgui_effects.cpp
     imgui_extensions.cpp
     layout.cpp
     widgets/cheat_table_view.cpp

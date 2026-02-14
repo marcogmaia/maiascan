@@ -97,4 +97,9 @@ TEST(StringUtilsTest, ToHexStringUppercase) {
   EXPECT_EQ(ToHexString(0xDEADBEEF, true), "DEADBEEF");
 }
 
+TEST(StringUtilsTest, FormatAddressHex) {
+  EXPECT_EQ(FormatAddressHex(0xFFFFFF), "0x00FFFFFF");
+  EXPECT_EQ(FormatAddressHex(0xFFDEADBEEF), "0x000000FFDEADBEEF");
+}
+
 }  // namespace maia::core

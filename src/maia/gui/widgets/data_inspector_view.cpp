@@ -18,7 +18,7 @@ template <typename T>
 void DrawRow(const char* label, const HexViewModel& model, uintptr_t address) {
   ImGui::TableNextRow();
   ImGui::TableNextColumn();
-  ImGui::Text("%s", label);
+  ImGui::TextUnformatted(label);
   ImGui::TableNextColumn();
 
   std::array<std::byte, sizeof(T)> buffer;

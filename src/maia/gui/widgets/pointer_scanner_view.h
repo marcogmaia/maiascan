@@ -80,6 +80,14 @@ class PointerScannerView {
   /// \param address The address to display (will be formatted as hex).
   void SetTargetAddress(uint64_t address);
 
+  /// \brief Tracks state for visible rows in the results table.
+  struct RowState {
+    std::string last_value;
+    std::chrono::steady_clock::time_point last_change;
+  };
+
+  static constexpr size_t kDefaultMaxDisplayedResults = 100;
+
  private:
   class Signals {
    public:
@@ -165,16 +173,10 @@ class PointerScannerView {
                             PathResolver path_resolver,
                             ValueReader value_reader,
                             ScanValueType value_type);
+  void RenderResultsStatus(const std::vector<core::PointerPath>& paths,
+                           bool is_scanning);
 
   Signals signals_;
-
-  /// \brief Tracks state for visible rows in the results table.
-  struct RowState {
-    // Previous value string
-    std::string last_value;
-    // When value last changed
-    std::chrono::steady_clock::time_point last_change;
-  };
 
   // UI State
   std::string target_address_str_;
@@ -195,7 +197,6 @@ class PointerScannerView {
 
   // Display
   bool show_all_results_ = false;
-  static constexpr size_t kDefaultMaxDisplayedResults = 100;
 
   // Row state tracking for value change blinking (keyed by path, not index)
   std::unordered_map<std::string, RowState> visible_row_states_;

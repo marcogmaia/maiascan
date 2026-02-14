@@ -4,6 +4,8 @@
 
 #include <fmt/core.h>
 
+#include "maia/gui/imgui_effects.h"
+
 namespace maia::gui {
 
 HexCellStyles HexCellStyler::GetStyles(const HexCellState& state) {
@@ -28,11 +30,9 @@ HexCellStyles HexCellStyler::GetStyles(const HexCellState& state) {
     // Apply fade if changed recently and not edited/selected
     if (state.time_since_last_change < 2.0 && !state.is_selected) {
       auto t = static_cast<float>(state.time_since_last_change / 2.0);
-      // Lerp from Red (1,0,0) to White (1,1,1)
-      // Red: 1, 0, 0
-      // Target: 1, 1, 1
-      styles.text_color.y = t;  // 0 -> 1
-      styles.text_color.z = t;  // 0 -> 1
+      constexpr auto kRed = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+      constexpr auto kWhite = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+      styles.text_color = LerpColor(kRed, kWhite, t);
     }
   }
 

@@ -6,6 +6,7 @@
 #include "maia/application/pointer_scanner_model.h"
 #include "maia/application/process_model.h"
 #include "maia/application/scan_result_model.h"
+#include "maia/application/throttled_value_cache.h"
 #include "maia/gui/widgets/pointer_scanner_view.h"
 
 namespace maia {
@@ -54,6 +55,7 @@ class PointerScannerPresenter {
   void OnResultDoubleClicked(size_t index);
 
   // Model signal handlers
+  void OnScanComplete(const core::PointerScanResult& result);
   void OnProgressUpdated(float progress, const std::string& operation);
   void OnPathsUpdated();
   void OnValidationComplete(const std::vector<core::PointerPath>& valid_paths);
@@ -75,6 +77,9 @@ class PointerScannerPresenter {
   bool is_visible_ = false;
   IProcess* pending_process_switch_ = nullptr;
   std::vector<entt::scoped_connection> connections_;
+
+  // Value cache for throttled memory reading (100ms refresh)
+  ThrottledValueCache value_cache_;
 };
 
 }  // namespace maia
