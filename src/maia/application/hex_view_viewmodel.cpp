@@ -1,9 +1,9 @@
-#include "maia/application/hex_view_presenter.h"
+#include "maia/application/hex_view_viewmodel.h"
 #include <imgui.h>
 
 namespace maia {
 
-HexViewPresenter::HexViewPresenter(ProcessModel& process_model,
+HexViewViewModel::HexViewViewModel(ProcessModel& process_model,
                                    gui::HexViewModel& hex_model,
                                    gui::HexView& hex_view)
     : process_model_(process_model),
@@ -14,7 +14,7 @@ HexViewPresenter::HexViewPresenter(ProcessModel& process_model,
       .connect<&gui::HexViewModel::SetProcess>(hex_model_);
 }
 
-void HexViewPresenter::Render() {
+void HexViewViewModel::Render() {
   if (!is_visible_) {
     return;
   }
@@ -25,7 +25,7 @@ void HexViewPresenter::Render() {
   ImGui::End();
 }
 
-void HexViewPresenter::GoToAddress(uintptr_t address) {
+void HexViewViewModel::GoToAddress(uintptr_t address) {
   is_visible_ = true;
   hex_model_.GoTo(address);
 }

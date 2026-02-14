@@ -1,70 +1,23 @@
 // Copyright (c) Maia
 
-// #include <numeric>
-
 #include <fmt/core.h>
 #include <imgui.h>
 #include <entt/signal/dispatcher.hpp>
 
-#include "application/scanner_presenter.h"
 #include "maia/application/cheat_table_model.h"
-#include "maia/application/cheat_table_presenter.h"
+#include "maia/application/cheat_table_viewmodel.h"
 #include "maia/application/global_hotkey_manager.h"
-#include "maia/application/hex_view_presenter.h"
+#include "maia/application/hex_view_viewmodel.h"
+#include "maia/application/main_window.h"
 #include "maia/application/pointer_scanner_model.h"
-#include "maia/application/pointer_scanner_presenter.h"
-#include "maia/application/process_selector_presenter.h"
+#include "maia/application/pointer_scanner_viewmodel.h"
+#include "maia/application/process_selector_viewmodel.h"
 #include "maia/application/scan_result_model.h"
+#include "maia/application/scanner_viewmodel.h"
 #include "maia/gui/imgui_extensions.h"
-#include "maia/gui/layout.h"
 #include "maia/gui/models/hex_view_model.h"
-#include "maia/gui/widgets/cheat_table_view.h"
-#include "maia/gui/widgets/hex_view.h"
-#include "maia/gui/widgets/pointer_scanner_view.h"
-#include "maia/gui/widgets/process_selector_view.h"
-#include "maia/gui/widgets/scanner_view.h"
+#include "maia/gui/models/ui_state.h"
 #include "maia/logging.h"
-
-namespace maia {
-
-namespace {
-
-void CreateDockSpace() {
-  ImGuiViewport* viewport = ImGui::GetMainViewport();
-  ImGui::SetNextWindowPos(viewport->WorkPos);
-  ImGui::SetNextWindowSize(viewport->WorkSize);
-  ImGui::SetNextWindowViewport(viewport->ID);
-
-  ImGuiWindowFlags host_window_flags = 0;
-  host_window_flags |= ImGuiWindowFlags_NoTitleBar;
-  host_window_flags |= ImGuiWindowFlags_NoCollapse;
-  host_window_flags |= ImGuiWindowFlags_NoResize;
-  host_window_flags |= ImGuiWindowFlags_NoMove;
-  host_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
-  host_window_flags |= ImGuiWindowFlags_NoNavFocus;
-  host_window_flags |= ImGuiWindowFlags_NoBackground;  // Make it transparent
-
-  // We must push style vars to remove padding/borders.
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-  ImGui::Begin("MaiaScan Host", nullptr, host_window_flags);
-
-  ImGui::PopStyleVar(3);
-
-  // Create the dockspace.
-  ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-
-  // Apply default layout if needed.
-  gui::MakeDefaultLayout(dockspace_id);
-  ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-  ImGui::End();
-}
-
-}  // namespace
-
-}  // namespace maia
 
 int main() {
   maia::LogInstallFormat();
@@ -77,45 +30,62 @@ int main() {
 
   ImVec4 clear_color = ImVec4(0.06f, 0.06f, 0.08f, 1.0f);
 
+  // === Models ===
   maia::ProcessModel process_model{};
-  maia::ProcessSelectorView proc_selector_view{};
-  maia::ProcessSelectorPresenter process_selector{process_model,
-                                                  proc_selector_view};
-
   maia::ScanResultModel scan_result_model{};
   maia::CheatTableModel cheat_table_model{};
+  maia::PointerScannerModel pointer_scanner_model{};
+  maia::gui::HexViewModel hex_view_model{};
 
   // Create global hotkey manager.
   auto hotkey_manager =
       maia::GlobalHotkeyManager::Create(gui_system.window_handle());
 
-  maia::ScannerWidget scanner_widget{};
-  maia::ScannerPresenter scanner{scan_result_model,
-                                 process_model,
-                                 cheat_table_model,
-                                 scanner_widget,
-                                 *hotkey_manager};
+  // === UI States ===
+  maia::gui::ProcessSelectorState process_selector_state{};
+  maia::gui::ScannerState scanner_state{};
+  maia::gui::CheatTableState cheat_table_state{};
+  maia::gui::PointerScannerState pointer_scanner_state{};
 
-  maia::CheatTableView cheat_table_view{};
-  maia::CheatTablePresenter cheat_table{cheat_table_model, cheat_table_view};
+  // === ViewModels ===
+  maia::ProcessSelectorViewModel process_selector_vm{process_model,
+                                                     process_selector_state};
 
-  // Pointer Scanner.
-  maia::PointerScannerModel pointer_scanner_model{};
-  maia::PointerScannerView pointer_scanner_view{};
-  maia::PointerScannerPresenter pointer_scanner{pointer_scanner_model,
-                                                process_model,
-                                                cheat_table_model,
-                                                scan_result_model,
-                                                pointer_scanner_view};
+  maia::ScannerViewModel scanner_vm{scan_result_model,
+                                    process_model,
+                                    cheat_table_model,
+                                    *hotkey_manager,
+                                    scanner_state};
 
-  maia::gui::HexViewModel hex_view_model{};
-  maia::gui::HexView hex_view{hex_view_model};
-  maia::HexViewPresenter hex_presenter{process_model, hex_view_model, hex_view};
+  maia::CheatTableViewModel cheat_table_vm{
+      cheat_table_model, process_model, cheat_table_state};
 
-  // Wire scanner to hex view.
-  scanner.sinks()
-      .BrowseMemoryRequested()
-      .connect<&maia::HexViewPresenter::GoToAddress>(hex_presenter);
+  maia::PointerScannerViewModel pointer_scanner_vm{pointer_scanner_model,
+                                                   process_model,
+                                                   cheat_table_model,
+                                                   scan_result_model,
+                                                   pointer_scanner_state};
+
+  // HexView is slightly special as it currently has its own view instance in
+  // presenter usually but we will let MainWindow own it. We need a temporary
+  // View to satisfy any remaining code, but MainWindow will own the real one.
+  maia::gui::HexView hex_view_internal{hex_view_model};
+  maia::HexViewViewModel hex_vm{
+      process_model, hex_view_model, hex_view_internal};
+
+  // === MainWindow (The Binder) ===
+  maia::MainWindow main_window{process_selector_vm,
+                               process_selector_state,
+                               scanner_vm,
+                               scanner_state,
+                               cheat_table_vm,
+                               cheat_table_state,
+                               pointer_scanner_vm,
+                               pointer_scanner_state,
+                               hex_vm,
+                               scan_result_model,
+                               cheat_table_model,
+                               pointer_scanner_model};
 
   while (!gui_system.WindowShouldClose()) {
     gui_system.PollEvents();
@@ -127,47 +97,7 @@ int main() {
 
     gui_system.BeginFrame();
 
-    // Main menu bar.
-    if (ImGui::BeginMainMenuBar()) {
-      if (ImGui::BeginMenu("Tools")) {
-        bool is_open = pointer_scanner.IsVisible();
-        if (ImGui::MenuItem("Pointer Scanner", "Ctrl+Shift+P", &is_open)) {
-          pointer_scanner.SetVisible(is_open);
-        }
-
-        bool hex_open = hex_presenter.IsVisible();
-        if (ImGui::MenuItem("Memory Viewer", "Ctrl+H", &hex_open)) {
-          hex_presenter.SetVisible(hex_open);
-        }
-        ImGui::EndMenu();
-      }
-
-      // TODO(marco): This is a little unorganized, find a way to draw the
-      // entire toolbar in an orderly manner.
-      //
-      // Process selector in the menu bar
-      ImGui::Separator();
-      process_selector.RenderToolbar();
-
-      ImGui::EndMainMenuBar();
-    }
-
-    // Keyboard shortcut for pointer scanner
-    ImGuiIO& io = ImGui::GetIO();
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_P)) {
-      pointer_scanner.ToggleVisibility();
-    }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_H)) {
-      hex_presenter.ToggleVisibility();
-    }
-
-    maia::CreateDockSpace();
-
-    process_selector.Render();
-    scanner.Render();
-    cheat_table.Render();
-    pointer_scanner.Render();
-    hex_presenter.Render();
+    main_window.Render();
 
     gui_system.ClearWindow(clear_color.x * clear_color.w,
                            clear_color.y * clear_color.w,

@@ -21,7 +21,7 @@
 ///    entry data.
 ///
 /// **Key Interactions**:
-///    - Consumed by `CheatTablePresenter`.
+///    - Consumed by `CheatTableViewModel`.
 ///    - Listens to `ProcessModel`.
 
 #pragma once

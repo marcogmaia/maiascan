@@ -245,11 +245,12 @@ void DrawValueCell(ValueReader value_reader,
 
 void RenderResultRow(const core::PointerPath& path,
                      int row_index,
-                     PathResolver path_resolver,
-                     ValueReader value_reader,
+                     PointerScannerView::PathResolver path_resolver,
+                     PointerScannerView::ValueReader value_reader,
                      ScanValueType value_type,
                      std::unordered_map<std::string, RowState>& row_states,
                      std::function<void(int)> on_double_click,
+                     std::function<void(uintptr_t)> on_browse,
                      std::chrono::steady_clock::time_point now) {
   ImGui::TableNextRow();
   ImGui::PushID(row_index);
@@ -258,13 +259,33 @@ void RenderResultRow(const core::PointerPath& path,
   DrawModuleCell(
       path, [on_double_click, row_index]() { on_double_click(row_index); });
 
+  std::optional<uintptr_t> resolved_address;
+  if (path_resolver) {
+    resolved_address = path_resolver(path);
+  }
+
+  if (ImGui::BeginPopupContextItem("RowContextMenu")) {
+    if (ImGui::MenuItem("Add to Cheat Table")) {
+      on_double_click(row_index);
+    }
+    if (resolved_address) {
+      if (ImGui::MenuItem("Browse Memory")) {
+        on_browse(*resolved_address);
+      }
+    }
+    ImGui::EndPopup();
+  }
+
   ImGui::TableSetColumnIndex(1);
   DrawPathCell(path);
 
-  std::optional<uint64_t> resolved_address;
   if (path_resolver) {
     ImGui::TableSetColumnIndex(2);
-    DrawAddressCell(path_resolver, path, resolved_address);
+    if (resolved_address) {
+      ImGui::TextUnformatted(core::FormatAddressHex(*resolved_address).c_str());
+    } else {
+      ImGui::TextDisabled("???");
+    }
   }
 
   if (value_reader) {
@@ -282,11 +303,12 @@ void RenderResultRow(const core::PointerPath& path,
 
 void RenderResultsTable(const std::vector<core::PointerPath>& paths,
                         bool show_all_results,
-                        PathResolver path_resolver,
-                        ValueReader value_reader,
+                        PointerScannerView::PathResolver path_resolver,
+                        PointerScannerView::ValueReader value_reader,
                         ScanValueType value_type,
                         std::unordered_map<std::string, RowState>& row_states,
-                        std::function<void(int)> on_double_click) {
+                        std::function<void(int)> on_double_click,
+                        std::function<void(uintptr_t)> on_browse) {
   int column_count = CalculateResultsColumnCount(path_resolver, value_reader);
   ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                           ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
@@ -316,6 +338,7 @@ void RenderResultsTable(const std::vector<core::PointerPath>& paths,
                       value_type,
                       row_states,
                       on_double_click,
+                      on_browse,
                       now);
     }
   }
@@ -369,12 +392,11 @@ void PointerScannerView::Render(
     const std::vector<std::string>& available_modules,
     PointerScannerView::PathResolver path_resolver,
     PointerScannerView::ValueReader value_reader,
-    ScanValueType value_type) {
-  if (!is_open || !*is_open) {
+    ScanValueType value_type,
+    bool show_all_results) {
+  if (!*is_open) {
     return;
   }
-
-  ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Pointer Scanner", is_open)) {
     RenderTargetSection(cheat_entries, scan_results);
@@ -386,8 +408,12 @@ void PointerScannerView::Render(
     RenderActionSection(
         is_generating_map, is_scanning, !paths.empty(), scan_progress);
     ImGui::Separator();
-    RenderResultsSection(
-        paths, is_scanning, path_resolver, value_reader, value_type);
+    RenderResultsSection(paths,
+                         is_scanning,
+                         path_resolver,
+                         value_reader,
+                         value_type,
+                         show_all_results);
   }
   ImGui::End();
 }
@@ -669,7 +695,7 @@ void PointerScannerView::RenderActionSection(bool is_generating_map,
   }
 
   if (ImGui::Button("Find Paths", ImVec2(120, 0))) {
-    signals_.find_paths_pressed.publish();
+    signals_.find_paths_pressed.publish(GetScanConfig());
   }
   if (ImGui::BeginItemTooltip()) {
     ImGui::Text("Search for pointer paths from static addresses to target.");
@@ -721,7 +747,8 @@ void PointerScannerView::RenderResultsSection(
     bool is_scanning,
     PointerScannerView::PathResolver path_resolver,
     PointerScannerView::ValueReader value_reader,
-    ScanValueType value_type) {
+    ScanValueType value_type,
+    bool show_all_results) {
   if (paths.empty() && !is_scanning) {
     return;
   }
@@ -735,12 +762,15 @@ void PointerScannerView::RenderResultsSection(
 
   RenderResultsTable(
       paths,
-      show_all_results_,
+      show_all_results,
       path_resolver,
       value_reader,
       value_type,
       visible_row_states_,
-      [this](int i) { signals_.result_double_clicked.publish(i); });
+      [this](int i) { signals_.result_double_clicked.publish(i); },
+      [this](uintptr_t addr) {
+        signals_.browse_memory_requested.publish(addr);
+      });
 }
 
 void PointerScannerView::RenderResultsStatus(

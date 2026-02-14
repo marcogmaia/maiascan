@@ -7,9 +7,9 @@
 
 namespace maia {
 
-class HexViewPresenter {
+class HexViewViewModel {
  public:
-  HexViewPresenter(ProcessModel& process_model,
+  HexViewViewModel(ProcessModel& process_model,
                    gui::HexViewModel& hex_model,
                    gui::HexView& hex_view);
 

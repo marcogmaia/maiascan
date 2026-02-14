@@ -19,7 +19,9 @@ target_sources(
         widgets/results_table_logic.h
         widgets/hex_view.h
         widgets/hex_cell_styler.h
+        widgets/scanner_view.h
         models/hex_view_model.h
+        models/ui_state.h
   PRIVATE
     imgui_effects.cpp
     imgui_extensions.cpp

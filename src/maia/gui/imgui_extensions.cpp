@@ -174,6 +174,7 @@ bool GuiSystem::WindowShouldClose() const {
   return glfwWindowShouldClose(static_cast<GLFWwindow*>(window_handle_)) != 0;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void GuiSystem::PollEvents() {
   glfwPollEvents();
 }

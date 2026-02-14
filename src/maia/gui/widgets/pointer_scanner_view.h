@@ -60,7 +60,8 @@ class PointerScannerView {
               const std::vector<std::string>& available_modules,
               PathResolver path_resolver = nullptr,
               ValueReader value_reader = nullptr,
-              ScanValueType value_type = ScanValueType::kUInt32);
+              ScanValueType value_type = ScanValueType::kUInt32,
+              bool show_all_results = false);
 
   auto sinks() {
     return Sinks{*this};
@@ -116,7 +117,7 @@ class PointerScannerView {
     entt::sigh<void()> load_map_pressed;
 
     /// \brief Find paths button pressed.
-    entt::sigh<void()> find_paths_pressed;
+    entt::sigh<void(const core::PointerScanConfig&)> find_paths_pressed;
 
     /// \brief Validate paths button pressed.
     entt::sigh<void()> validate_pressed;
@@ -126,6 +127,9 @@ class PointerScannerView {
 
     /// \brief Pointer path result double-clicked.
     entt::sigh<void(size_t /* index */)> result_double_clicked;
+
+    /// \brief Request to browse memory at an address.
+    entt::sigh<void(uintptr_t /* address */)> browse_memory_requested;
 
     /// \brief Show all results button pressed.
     entt::sigh<void()> show_all_pressed;
@@ -147,6 +151,7 @@ class PointerScannerView {
     auto ValidatePressed() { return entt::sink(view.signals_.validate_pressed); }
     auto CancelPressed() { return entt::sink(view.signals_.cancel_pressed); }
     auto ResultDoubleClicked() { return entt::sink(view.signals_.result_double_clicked); }
+    auto BrowseMemoryRequested() { return entt::sink(view.signals_.browse_memory_requested); }
     auto ShowAllPressed() { return entt::sink(view.signals_.show_all_pressed); }
 
     // clang-format on
@@ -172,7 +177,8 @@ class PointerScannerView {
                             bool is_scanning,
                             PathResolver path_resolver,
                             ValueReader value_reader,
-                            ScanValueType value_type);
+                            ScanValueType value_type,
+                            bool show_all_results);
   void RenderResultsStatus(const std::vector<core::PointerPath>& paths,
                            bool is_scanning);
 
