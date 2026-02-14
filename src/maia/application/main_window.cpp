@@ -55,7 +55,6 @@ MainWindow::MainWindow(ProcessSelectorViewModel& process_selector_vm,
       scanner_view_(),
       cheat_table_view_(),
       hex_view_(hex_view_model) {
-  // === Binder: Connections ===
   // clang-format off
 
   // ProcessSelector
@@ -72,9 +71,9 @@ MainWindow::MainWindow(ProcessSelectorViewModel& process_selector_vm,
   Connect(connections_, scanner_view_.sinks().ValueTypeSelected(),            &scanner_vm_, Slot<&ScannerViewModel::OnValueTypeSelected>);
   Connect(connections_, scanner_view_.sinks().AutoUpdateChanged(),            &scanner_vm_, Slot<&ScannerViewModel::OnAutoUpdateChanged>);
   Connect(connections_, scanner_view_.sinks().PauseWhileScanningChanged(),    &scanner_vm_, Slot<&ScannerViewModel::OnPauseWhileScanningChanged>);
-  Connect(connections_, scanner_view_.sinks().FastScanChanged(),               &scanner_vm_, Slot<&ScannerViewModel::OnFastScanChanged>);
+  Connect(connections_, scanner_view_.sinks().FastScanChanged(),              &scanner_vm_, Slot<&ScannerViewModel::OnFastScanChanged>);
   Connect(connections_, scanner_view_.sinks().EntryDoubleClicked(),           &scanner_vm_, Slot<&ScannerViewModel::OnEntryDoubleClicked>);
-  Connect(connections_, scanner_view_.sinks().ReinterpretTypeRequested(),      &scanner_vm_, Slot<&ScannerViewModel::OnReinterpretTypeRequested>);
+  Connect(connections_, scanner_view_.sinks().ReinterpretTypeRequested(),     &scanner_vm_, Slot<&ScannerViewModel::OnReinterpretTypeRequested>);
   Connect(connections_, scanner_view_.sinks().BrowseMemoryRequested(),        &scanner_vm_, Slot<&ScannerViewModel::OnBrowseMemoryRequested>);
   Connect(connections_, scanner_vm_.sinks().BrowseMemoryRequested(),          &hex_vm_,    Slot<&HexViewViewModel::GoToAddress>);
 
@@ -83,7 +82,7 @@ MainWindow::MainWindow(ProcessSelectorViewModel& process_selector_vm,
   Connect(connections_, cheat_table_view_.sinks().DescriptionChanged(),       &cheat_table_vm_, Slot<&CheatTableViewModel::OnDescriptionChanged>);
   Connect(connections_, cheat_table_view_.sinks().HexDisplayToggled(),        &cheat_table_vm_, Slot<&CheatTableViewModel::OnHexDisplayToggled>);
   Connect(connections_, cheat_table_view_.sinks().ValueChanged(),             &cheat_table_vm_, Slot<&CheatTableViewModel::OnValueChanged>);
-  Connect(connections_, cheat_table_view_.sinks().TypeChangeRequested(),       &cheat_table_vm_, Slot<&CheatTableViewModel::OnTypeChangeRequested>);
+  Connect(connections_, cheat_table_view_.sinks().TypeChangeRequested(),      &cheat_table_vm_, Slot<&CheatTableViewModel::OnTypeChangeRequested>);
   Connect(connections_, cheat_table_view_.sinks().DeleteRequested(),          &cheat_table_vm_, Slot<&CheatTableViewModel::OnDeleteRequested>);
   Connect(connections_, cheat_table_view_.sinks().SaveRequested(),            &cheat_table_vm_, Slot<&CheatTableViewModel::OnSaveRequested>);
   Connect(connections_, cheat_table_view_.sinks().LoadRequested(),            &cheat_table_vm_, Slot<&CheatTableViewModel::OnLoadRequested>);
@@ -94,7 +93,7 @@ MainWindow::MainWindow(ProcessSelectorViewModel& process_selector_vm,
   Connect(connections_, pointer_scanner_view_.sinks().TargetTypeChanged(),       &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnTargetTypeChanged>);
   Connect(connections_, pointer_scanner_view_.sinks().TargetFromCheatSelected(), &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnTargetFromCheatSelected>);
   Connect(connections_, pointer_scanner_view_.sinks().TargetFromScanSelected(),  &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnTargetFromScanSelected>);
-  Connect(connections_, pointer_scanner_view_.sinks().TargetAddressInvalid(),    &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnCancelPressed>); // Just cancel current op if invalid? Or just ignore
+  Connect(connections_, pointer_scanner_view_.sinks().TargetAddressInvalid(),    &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnCancelPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().GenerateMapPressed(),      &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnGenerateMapPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().SaveMapPressed(),          &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnSaveMapPressed>);
   Connect(connections_, pointer_scanner_view_.sinks().LoadMapPressed(),          &pointer_scanner_vm_, Slot<&PointerScannerViewModel::OnLoadMapPressed>);

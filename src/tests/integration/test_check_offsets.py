@@ -1,6 +1,6 @@
+# Copyright (c) Maia
+
 import struct
-import pytest
-import maiascan
 
 
 def test_verify_offsets(fake_game, process):

@@ -214,7 +214,7 @@ class ProjectContext:
         print(f"Root:     {self.root_dir}")
         print(f"Cores:    {self.cpu_count}")
         print(f"{'-' * 60}")
-        print(f"Tools:")
+        print("Tools:")
         for k, v in self.toolchain.tools.items():
             print(f" • {k:<12} : {v}")
         print(f"{'=' * 60}{COLOR_RESET}\n")
@@ -222,7 +222,7 @@ class ProjectContext:
     def print_summary(self, success: bool, issue_count: int):
         duration = time.time() - self.start_time
         status = (
-            f"{COLOR_GREEN}✨ SUCCESS{COLOR_RESET}"
+            f"{COLOR_GREEN}✅ SUCCESS{COLOR_RESET}"
             if success
             else f"{COLOR_RED}❌ FAILED{COLOR_RESET}"
         )

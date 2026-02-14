@@ -22,22 +22,12 @@ PointerScannerViewModel::PointerScannerViewModel(
       scan_result_model_(scan_result_model),
       state_(state) {
   // Connect Model signals
-  Connect(connections_,
-          pointer_scanner_model_.sinks().ProgressUpdated(),
-          this,
-          Slot<&PointerScannerViewModel::OnProgressUpdated>);
-  Connect(connections_,
-          pointer_scanner_model_.sinks().PathsUpdated(),
-          this,
-          Slot<&PointerScannerViewModel::OnPathsUpdated>);
-  Connect(connections_,
-          pointer_scanner_model_.sinks().ValidationComplete(),
-          this,
-          Slot<&PointerScannerViewModel::OnValidationComplete>);
-  Connect(connections_,
-          process_model_.sinks().ActiveProcessChanged(),
-          this,
-          Slot<&PointerScannerViewModel::OnActiveProcessChanged>);
+  // clang-format off
+  Connect(connections_, pointer_scanner_model_.sinks().ProgressUpdated(),    this, Slot<&PointerScannerViewModel::OnProgressUpdated>);
+  Connect(connections_, pointer_scanner_model_.sinks().PathsUpdated(),       this, Slot<&PointerScannerViewModel::OnPathsUpdated>);
+  Connect(connections_, pointer_scanner_model_.sinks().ValidationComplete(), this, Slot<&PointerScannerViewModel::OnValidationComplete>);
+  Connect(connections_, process_model_.sinks().ActiveProcessChanged(),       this, Slot<&PointerScannerViewModel::OnActiveProcessChanged>);
+  // clang-format on
 }
 
 void PointerScannerViewModel::Update() {

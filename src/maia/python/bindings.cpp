@@ -26,7 +26,7 @@ namespace py = pybind11;
 void BindMaiascan(py::module_& m) {
   m.doc() = "MaiaScan Python Bindings";
 
-  // Enums
+  // Enums.
   py::enum_<ScanValueType>(m, "ScanValueType")
       .value("kInt8", ScanValueType::kInt8)
       .value("kUInt8", ScanValueType::kUInt8)
@@ -70,10 +70,10 @@ void BindMaiascan(py::module_& m) {
       .value("kExecuteReadWrite", mmem::Protection::kExecuteReadWrite)
       .export_values();
 
-  // Opaque Vectors
+  // Opaque Vectors.
   py::bind_vector<std::vector<uintptr_t>>(m, "AddressVector");
 
-  // mmem Types
+  // mmem Types.
   py::class_<mmem::ModuleDescriptor>(m, "ModuleDescriptor")
       .def_readwrite("base", &mmem::ModuleDescriptor::base)
       .def_readwrite("end", &mmem::ModuleDescriptor::end)
@@ -87,7 +87,7 @@ void BindMaiascan(py::module_& m) {
       .def_readwrite("size", &mmem::SegmentDescriptor::size)
       .def_readwrite("protection", &mmem::SegmentDescriptor::protection);
 
-  // Structs
+  // Structs.
   py::class_<ScanConfig>(m, "ScanConfig")
       .def(py::init<>())
       .def_readwrite("value_type", &ScanConfig::value_type)

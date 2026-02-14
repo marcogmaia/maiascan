@@ -53,7 +53,7 @@ std::optional<ParsedAddress> ParseAddressExpression(std::string_view input,
 
     // If we didn't find it in process (or no process), but it looks like a
     // module (contains dot), assume it is one.
-    if (!first_is_module && first_term.find('.') != std::string_view::npos) {
+    if (!first_is_module && first_term.contains('.')) {
       first_is_module = true;
       result.module_name = std::string(first_term);
       base_addr = 0;  // Can't resolve yet

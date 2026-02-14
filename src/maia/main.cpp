@@ -30,7 +30,7 @@ int main() {
 
   ImVec4 clear_color = ImVec4(0.06f, 0.06f, 0.08f, 1.0f);
 
-  // === Models ===
+  // Models.
   maia::ProcessModel process_model{};
   maia::ScanResultModel scan_result_model{};
   maia::CheatTableModel cheat_table_model{};
@@ -41,13 +41,13 @@ int main() {
   auto hotkey_manager =
       maia::GlobalHotkeyManager::Create(gui_system.window_handle());
 
-  // === UI States ===
+  // UI States.
   maia::gui::ProcessSelectorState process_selector_state{};
   maia::gui::ScannerState scanner_state{};
   maia::gui::CheatTableState cheat_table_state{};
   maia::gui::PointerScannerState pointer_scanner_state{};
 
-  // === ViewModels ===
+  // ViewModels.
   maia::ProcessSelectorViewModel process_selector_vm{process_model,
                                                      process_selector_state};
 
@@ -66,10 +66,8 @@ int main() {
                                                    scan_result_model,
                                                    pointer_scanner_state};
 
-  // HexView.
   maia::HexViewViewModel hex_vm{process_model, hex_view_model};
 
-  // === MainWindow (The Binder) ===
   maia::MainWindow main_window{process_selector_vm,
                                process_selector_state,
                                scanner_vm,

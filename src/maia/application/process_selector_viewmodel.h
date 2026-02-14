@@ -6,7 +6,6 @@
 
 #include "maia/application/process_model.h"
 #include "maia/gui/models/ui_state.h"
-#include "maia/gui/widgets/process_selector_view.h"
 
 namespace maia {
 

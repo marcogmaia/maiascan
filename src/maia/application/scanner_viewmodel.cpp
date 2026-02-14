@@ -51,25 +51,17 @@ ScannerViewModel::ScannerViewModel(ScanResultModel& scan_result_model,
   using Mod = KeyModifier;
   const auto ctrl_shift = Mod::kControl | Mod::kShift;
   using enum GlobalHotkeyId;
-
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyChanged), ctrl_shift, Key::kC);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyUnchanged), ctrl_shift, Key::kU);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyIncreased), ctrl_shift, Key::kPlus);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyIncreased), ctrl_shift, Key::kNumpadAdd);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyDecreased), ctrl_shift, Key::kMinus);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyDecreased), ctrl_shift, Key::kNumpadSubtract);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyExact), ctrl_shift, Key::kE);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyNextScan), Mod::kControl, Key::kReturn);
-  global_hotkey_manager_.Register(
-      static_cast<int>(kHotkeyNewScan), Mod::kControl, Key::kN);
+  // clang-format off
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyChanged),   ctrl_shift,    Key::kC);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyUnchanged), ctrl_shift,    Key::kU);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyIncreased), ctrl_shift,    Key::kPlus);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyIncreased), ctrl_shift,    Key::kNumpadAdd);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyDecreased), ctrl_shift,    Key::kMinus);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyDecreased), ctrl_shift,    Key::kNumpadSubtract);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyExact),     ctrl_shift,    Key::kE);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyNextScan),  Mod::kControl, Key::kReturn);
+  global_hotkey_manager_.Register(static_cast<int>(kHotkeyNewScan),   Mod::kControl, Key::kN);
+  // clang-format on
 }
 
 void ScannerViewModel::Update() {
@@ -133,6 +125,7 @@ void ScannerViewModel::OnReinterpretTypeRequested(ScanValueType type) {
   scan_result_model_.ChangeResultType(type);
 }
 
+// NOLINTNEXTLINE
 void ScannerViewModel::OnBrowseMemoryRequested(uintptr_t address) {
   signals_.browse_memory_requested.publish(address);
 }

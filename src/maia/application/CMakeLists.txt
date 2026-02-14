@@ -9,7 +9,8 @@ target_sources(
   application
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS "${MAIA_BASE_DIR}"
+      BASE_DIRS
+        "${MAIA_BASE_DIR}"
       FILES
         cheat_table_model.h
         cheat_table_viewmodel.h
@@ -53,6 +54,7 @@ target_sources(
   PRIVATE
     scan_result_model_test.cpp
     cheat_table_model_test.cpp
+    cheat_table_model_serialization_test.cpp
     pointer_scanner_model_test.cpp
     process_model_test.cpp
     throttled_value_cache_test.cpp

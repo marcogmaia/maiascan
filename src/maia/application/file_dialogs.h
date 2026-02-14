@@ -1,3 +1,5 @@
+// Copyright (c) Maia
+
 #pragma once
 
 #include <filesystem>

@@ -207,6 +207,7 @@ class PointerScannerModel {
   void Update();
 
  private:
+  // TODO(marco): Review these.
   friend struct MapResultHandler;
   friend struct ScanResultHandler;
   friend struct ValidationResultHandler;

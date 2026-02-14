@@ -2,7 +2,6 @@
 
 #include "maia/application/process_selector_viewmodel.h"
 
-#include "maia/core/signal_utils.h"
 #include "maia/mmem/mmem.h"
 #include "maia/mmem/process_utils.h"
 

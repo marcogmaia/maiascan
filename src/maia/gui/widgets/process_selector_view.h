@@ -3,8 +3,6 @@
 #pragma once
 
 #include <array>
-#include <string>
-#include <vector>
 
 #include <entt/signal/sigh.hpp>
 

@@ -1,8 +1,6 @@
 # MaiaScan
 
-A fast memory scanner for Windows and Linux.
-
-> Find. Monitor. Freeze.
+A fast memory scanner for Windows and Linux (Upcoming).
 
 ## What is MaiaScan?
 

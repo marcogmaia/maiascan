@@ -6,7 +6,8 @@ target_sources(
   gui
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS "${MAIA_BASE_DIR}"
+      BASE_DIRS
+        "${MAIA_BASE_DIR}"
       FILES
         imgui_effects.h
         imgui_extensions.h

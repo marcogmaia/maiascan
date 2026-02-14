@@ -17,7 +17,7 @@ namespace {
 class ScanResultModelTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    Init(1024, static_cast<size_t>(32 * 1024 * 1024));
+    Init(1024, 32z * 1024z * 1024z);
   }
 
   void TearDown() override {
@@ -141,8 +141,7 @@ class ScanResultModelLogicTest : public ScanResultModelTest {
 class ScanResultModelChunkedTest : public ScanResultModelTest {
  protected:
   void SetUp() override {
-    Init(static_cast<size_t>(40 * 1024 * 1024),
-         static_cast<size_t>(32 * 1024 * 1024));
+    Init((40z * 1024 * 1024), (32z * 1024 * 1024));
   }
 };
 
@@ -405,7 +404,7 @@ TEST_F(ScanResultModelLogicTest, UnknownScanSnapshotsAcrossChunks) {
 // --- Chunked Tests ---
 
 TEST_F(ScanResultModelChunkedTest, FindsMatchCrossingChunkBoundary) {
-  constexpr auto kChunkSize = static_cast<size_t>(32 * 1024 * 1024);
+  constexpr auto kChunkSize = 32z * 1024 * 1024;
   const size_t near_boundary_offset = kChunkSize - 4;
   const uint32_t magic_value = 0xDEADBEEF;
 

@@ -121,6 +121,10 @@ struct CheatTableEntry {
 
   // Type and metadata
   ScanValueType type;
+  // TODO(marco): Change this to an optional (I think this would be better than
+  // adding extra semantics to the empty string). If this is nullopt we should
+  // show the "No description" and if this entry entry has base pointer we
+  // should show the base + offsets as description if description is empty.
   std::string description;
   bool show_as_hex = false;
   std::shared_ptr<CheatTableEntryData> data;
@@ -197,8 +201,14 @@ class CheatTableModel {
   /// \brief Saves the cheat table to a file.
   bool Save(const std::filesystem::path& path) const;
 
+  /// \brief Saves the cheat table to an output stream.
+  bool Save(std::ostream& stream) const;
+
   /// \brief Loads the cheat table from a file.
   bool Load(const std::filesystem::path& path);
+
+  /// \brief Loads the cheat table from an input stream.
+  bool Load(std::istream& stream);
 
   /// \brief Periodically called to synchronize values with the target process.
   /// \details Reads current values and reapplies frozen values.
