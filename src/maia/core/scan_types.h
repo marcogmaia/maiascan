@@ -128,7 +128,12 @@ constexpr bool IsValidForFirstScan(ScanComparison type) {
     case ScanComparison::kBetween:
     case ScanComparison::kNotBetween:
       return true;
-    default:
+    case ScanComparison::kChanged:
+    case ScanComparison::kUnchanged:
+    case ScanComparison::kIncreased:
+    case ScanComparison::kDecreased:
+    case ScanComparison::kIncreasedBy:
+    case ScanComparison::kDecreasedBy:
       return false;
   }
 }

@@ -36,6 +36,7 @@ std::optional<OperationType> GetBlockingOperation(ScannerState state) {
       // While cancelling, we treat it as if the operation is still blocking
       // To keep it simple and safe, we'll map it to kScan as a generic busy
       return OperationType::kScan;
+    case ScannerState::kIdle:
     default:
       return std::nullopt;
   }

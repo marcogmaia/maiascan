@@ -63,6 +63,8 @@ inline std::vector<std::byte> ParseStringByType(std::string_view str,
       std::memcpy(bytes.data(), str.data(), str.size());
       return bytes;
     }
+    case ScanValueType::kWString:
+    case ScanValueType::kArrayOfBytes:
     default:
       return {};
   }

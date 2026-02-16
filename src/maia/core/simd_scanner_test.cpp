@@ -8,6 +8,8 @@
 
 namespace maia::core {
 
+namespace {
+
 class SimdScannerTest : public ::testing::Test {
  protected:
   std::vector<size_t> found_offsets_;
@@ -451,5 +453,7 @@ TEST_F(SimdScannerTest, ScanBufferMaskedFirstByteWildcard) {
   ASSERT_EQ(found_offsets_.size(), 1);
   EXPECT_EQ(found_offsets_[0], 10);
 }
+
+}  // namespace
 
 }  // namespace maia::core

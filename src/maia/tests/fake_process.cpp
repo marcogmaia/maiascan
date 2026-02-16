@@ -56,7 +56,7 @@ bool FakeProcess::ReadMemory(std::span<const MemoryAddress> addresses,
                         chunk.begin());
     }
 
-    if (success_mask && i < success_mask->size()) {
+    if (success_mask && std::cmp_less(i, success_mask->size())) {
       (*success_mask)[i] = success ? 1 : 0;
     }
     all_success = all_success && success;
@@ -81,7 +81,9 @@ bool FakeProcess::WriteMemory(uintptr_t address,
     return false;
   }
 
-  std::ranges::copy(buffer, memory_.begin() + offset);
+  using DiffType = std::iter_difference_t<decltype(memory_.begin())>;
+  std::ranges::copy(buffer,
+                    std::next(memory_.begin(), static_cast<DiffType>(offset)));
   return true;
 }
 
@@ -148,8 +150,10 @@ void FakeProcess::SetValid(bool valid) {
 
 void FakeProcess::WriteRawMemory(size_t offset,
                                  std::span<const std::byte> data) {
+  using DiffType = std::iter_difference_t<decltype(memory_.begin())>;
   Assert((offset + data.size()) <= memory_.size());
-  std::ranges::copy(data, memory_.begin() + offset);
+  std::ranges::copy(data,
+                    std::next(memory_.begin(), static_cast<DiffType>(offset)));
 }
 
 }  // namespace maia::test

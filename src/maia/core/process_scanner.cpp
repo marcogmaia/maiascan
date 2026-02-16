@@ -30,10 +30,13 @@ std::optional<uintptr_t> ScanData(const mmem::ProcessDescriptor& process,
     return std::nullopt;
   }
 
+  using DiffType = std::iter_difference_t<decltype(buffer.begin())>;
+
   // Adjust search range to avoid reading past the buffer.
-  auto end_it = buffer.begin() + bytes_read;
+  auto end_it = std::next(buffer.begin(), static_cast<DiffType>(bytes_read));
   if (bytes_read >= data.size()) {
-    end_it = buffer.begin() + bytes_read - data.size() + 1;
+    end_it = std::next(buffer.begin(),
+                       static_cast<DiffType>(bytes_read - data.size() + 1));
   }
 
   auto it = std::search(buffer.begin(), end_it, data.begin(), data.end());

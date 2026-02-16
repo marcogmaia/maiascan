@@ -484,8 +484,10 @@ void PointerScannerView::RenderTypeSelector() {
   }
 
   ImGui::PushItemWidth(100);
-  if (ImGui::Combo(
-          "Type", &current_type_idx, type_names.data(), type_names.size())) {
+  if (ImGui::Combo("Type",
+                   &current_type_idx,
+                   type_names.data(),
+                   static_cast<int>(type_names.size()))) {
     selected_type_ = types[current_type_idx];
     signals_.target_type_changed.publish(selected_type_);
   }

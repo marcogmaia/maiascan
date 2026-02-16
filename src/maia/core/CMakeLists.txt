@@ -59,6 +59,7 @@ add_executable(
   pattern_parser_test.cpp
   pointer_map_test.cpp
   pointer_scanner_test.cpp
+  scanner_test.cpp
   simd_scanner_test.cpp
   string_utils_test.cpp
   value_parser_test.cpp

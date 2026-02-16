@@ -56,8 +56,6 @@ class PointerScannerViewModel {
   }
 
  private:
-  void OnProgressUpdated(float progress, const std::string& operation);
-  void OnPathsUpdated();
   void OnValidationComplete(const std::vector<core::PointerPath>& valid_paths);
   void OnActiveProcessChanged(IProcess* process);
 

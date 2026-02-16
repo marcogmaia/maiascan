@@ -131,10 +131,15 @@ class Toolchain:
                 env=self.env,
                 shell=(os.name == "nt"),
             )
-            output = res.stderr if stderr else res.stdout
-            if not output and not stderr:
-                output = res.stderr
-            return output.splitlines()[0] if output else "Unknown"
+
+            output = (res.stderr if stderr else res.stdout) or res.stderr or ""
+            lines = [line.strip() for line in output.splitlines() if line.strip()]
+
+            for line in lines:
+                if "version" in line.lower():
+                    return line
+            return lines[0] if lines else "Unknown"
+
         except (FileNotFoundError, PermissionError):
             return "Not found"
 

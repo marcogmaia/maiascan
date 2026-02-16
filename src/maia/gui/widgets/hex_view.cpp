@@ -10,6 +10,7 @@
 
 #include <imgui.h>
 
+#include "maia/core/string_utils.h"
 #include "maia/gui/widgets/hex_cell_styler.h"
 
 namespace maia::gui {
@@ -19,7 +20,7 @@ namespace {
 void RenderAddress(uintptr_t address) {
   ImGui::PushStyleColor(ImGuiCol_Text,
                         ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-  ImGui::Text("%016llX", static_cast<unsigned long long>(address));
+  ImGui::TextUnformatted(core::FormatAddressHex(address).c_str());
   ImGui::PopStyleColor();
 }
 
@@ -418,8 +419,6 @@ void HexView::HandleInput() {
   // Editing
   if (single_selection) {
     for (int n = 0; n < 16; n++) {
-      char c = (n < 10) ? ('0' + n) : ('A' + n - 10);
-      char c2 = (n < 10) ? ('0' + n) : ('a' + n - 10);
       if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_0 + n)) ||
           (n >= 10 &&
            (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_A + n - 10))))) {

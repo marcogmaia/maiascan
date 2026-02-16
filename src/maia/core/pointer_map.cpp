@@ -3,9 +3,12 @@
 #include "maia/core/pointer_map.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstring>
 #include <fstream>
+#include <span>
 #include <vector>
 
 #include "maia/logging.h"
@@ -17,6 +20,26 @@ namespace {
 
 constexpr size_t kChunkSize =
     static_cast<const size_t>(64 * 1024 * 1024);  // 64 MB chunks
+
+// Binary serialization helpers using char buffers.
+template <typename T>
+  requires std::is_trivially_copyable_v<T>
+bool ReadPOD(std::istream& stream, T& value) {
+  std::array<char, sizeof(T)> buffer{};
+  if (!stream.read(buffer.data(), sizeof(T))) {
+    return false;
+  }
+  std::memcpy(&value, buffer.data(), sizeof(T));
+  return true;
+}
+
+template <typename T>
+  requires std::is_trivially_copyable_v<T>
+bool WritePOD(std::ostream& stream, const T& value) {
+  std::array<char, sizeof(T)> buffer{};
+  std::memcpy(buffer.data(), &value, sizeof(T));
+  return stream.write(buffer.data(), sizeof(T)).good();
+}
 
 // File header structure (must match design doc)
 struct FileHeader {
@@ -119,11 +142,7 @@ std::optional<PointerMap> PointerMap::Generate(
 
       for (size_t i = 0; i <= limit; i += step) {
         uint64_t ptr_val = 0;
-        if (map.pointer_size_ == 8) {
-          ptr_val = *reinterpret_cast<const uint64_t*>(&buffer[i]);
-        } else {
-          ptr_val = *reinterpret_cast<const uint32_t*>(&buffer[i]);
-        }
+        std::memcpy(&ptr_val, &buffer[i], map.pointer_size_);
 
         if (IsValidPointer(ptr_val, regions)) {
           map.entries_.push_back(
@@ -162,7 +181,7 @@ std::optional<PointerMap> PointerMap::Load(std::istream& stream) {
   stream.seekg(0, std::ios::beg);
 
   FileHeader header;
-  if (!stream.read(reinterpret_cast<char*>(&header), sizeof(header))) {
+  if (!ReadPOD(stream, header)) {
     return std::nullopt;
   }
 
@@ -195,7 +214,8 @@ std::optional<PointerMap> PointerMap::Load(std::istream& stream) {
   map.process_name_.resize(header.process_name_len);
 
   if (header.process_name_len > 0) {
-    if (!stream.read(map.process_name_.data(), header.process_name_len)) {
+    if (!stream.read(map.process_name_.data(),
+                     static_cast<std::streamsize>(header.process_name_len))) {
       return std::nullopt;
     }
   }
@@ -203,16 +223,19 @@ std::optional<PointerMap> PointerMap::Load(std::istream& stream) {
   // Read padding
   size_t current_pos = sizeof(FileHeader) + header.process_name_len;
   size_t padding = (8 - (current_pos % 8)) % 8;
-  stream.seekg(padding, std::ios::cur);
+  stream.seekg(static_cast<std::streamoff>(padding), std::ios::cur);
 
   // Read entries
   try {
     map.entries_.resize(header.entry_count);
-    if (!stream.read(reinterpret_cast<char*>(map.entries_.data()),
-                     header.entry_count * sizeof(PointerMapEntry))) {
+    const auto entries_bytes = header.entry_count * sizeof(PointerMapEntry);
+    std::vector<char> buffer(entries_bytes);
+    if (!stream.read(buffer.data(),
+                     static_cast<std::streamsize>(entries_bytes))) {
       maia::LogError("Failed to read pointer map entries (unexpected EOF)");
       return std::nullopt;
     }
+    std::memcpy(map.entries_.data(), buffer.data(), entries_bytes);
   } catch (const std::bad_alloc&) {
     maia::LogError("Failed to allocate memory for {} pointer map entries",
                    header.entry_count);
@@ -237,18 +260,31 @@ bool PointerMap::Save(std::ostream& stream) const {
   header.timestamp = timestamp_;
   header.process_name_len = static_cast<uint32_t>(process_name_.size());
 
-  stream.write(reinterpret_cast<const char*>(&header), sizeof(header));
-  stream.write(process_name_.data(), process_name_.size());
+  if (!WritePOD(stream, header)) {
+    return false;
+  }
+
+  if (!stream.write(process_name_.data(),
+                    static_cast<std::streamsize>(process_name_.size()))) {
+    return false;
+  }
 
   // Padding
   size_t current_pos = sizeof(FileHeader) + process_name_.size();
   size_t padding = (8 - (current_pos % 8)) % 8;
-  const char zeros[8] = {0};
-  stream.write(zeros, padding);
+  const std::array<char, 8> zeros{};
+  if (!stream.write(zeros.data(), static_cast<std::streamsize>(padding))) {
+    return false;
+  }
 
   // Entries
-  stream.write(reinterpret_cast<const char*>(entries_.data()),
-               entries_.size() * sizeof(PointerMapEntry));
+  const auto entries_bytes = entries_.size() * sizeof(PointerMapEntry);
+  std::vector<char> buffer(entries_bytes);
+  std::memcpy(buffer.data(), entries_.data(), entries_bytes);
+  if (!stream.write(buffer.data(),
+                    static_cast<std::streamsize>(entries_bytes))) {
+    return false;
+  }
 
   return stream.good();
 }

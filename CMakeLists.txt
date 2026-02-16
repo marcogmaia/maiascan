@@ -19,7 +19,21 @@ set(
   CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
   "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
 )
-cmake_policy(SET CMP0141 NEW)
+
+if(MSVC)
+  add_compile_options(
+    /W4
+    /WX
+    # /Wall
+    # Enable
+    /we4061
+    /we4062
+    # Disable
+    /wd4710
+    /wd4820
+    /wd4365
+  )
+endif()
 
 find_package(GTest CONFIG REQUIRED)
 

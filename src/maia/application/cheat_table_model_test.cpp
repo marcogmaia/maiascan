@@ -140,7 +140,6 @@ TEST_F(CheatTableModelTest, FrozenValueIsReappliedWhenProcessChangesIt) {
 
   model_.SetActiveProcess(&mock_process_);
   model_.AddEntry(0x1000, ScanValueType::kInt32, "Health");
-  const auto& entry = *model_.entries();
 
   // Set Value to 100.
   model_.SetValue(0, "100");

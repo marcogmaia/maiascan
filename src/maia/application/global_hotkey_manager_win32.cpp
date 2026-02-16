@@ -222,7 +222,8 @@ UINT ToWin32KeyCode(KeyCode key) {
       return VK_RETURN;
     case KeyCode::kNumpadDecimal:
       return VK_DECIMAL;
-
+    case KeyCode::kUnknown:
+      return 0;
     default:
       return 0;
   }

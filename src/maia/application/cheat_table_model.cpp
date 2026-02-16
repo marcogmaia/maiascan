@@ -220,7 +220,7 @@ void CheatTableModel::RemoveEntry(size_t index) {
   if (index < current_snapshot->size()) {
     auto new_entries =
         std::make_shared<std::vector<CheatTableEntry>>(*current_snapshot);
-    new_entries->erase(new_entries->begin() + index);
+    new_entries->erase(new_entries->begin() + static_cast<int>(index));
     entries_.store(std::move(new_entries));
     signals_.table_changed.publish();
   }
@@ -484,7 +484,7 @@ MemoryAddress CheatTableModel::ResolveAddress(
   // Follow the chain of offsets
   for (const auto pointer_offset : entry.pointer_offsets) {
     // Read pointer at current address
-    std::array<std::byte, 8> ptr_buffer;
+    std::array<std::byte, 8> ptr_buffer{};
     const size_t ptr_size = active_process_->GetPointerSize();
 
     if (!active_process_->ReadMemory(
@@ -495,7 +495,7 @@ MemoryAddress CheatTableModel::ResolveAddress(
     // Extract pointer value.
     uint64_t ptr_value = 0;
     if (ptr_size == 4) {
-      std::array<std::byte, 4> temp;
+      std::array<std::byte, 4> temp{};
       std::ranges::copy(std::span(ptr_buffer.begin(), 4), temp.begin());
       ptr_value = std::bit_cast<uint32_t>(temp);
     } else if (ptr_size == 8) {
@@ -519,7 +519,7 @@ bool CheatTableModel::ReadEntryValue(const CheatTableEntry& entry,
     return false;
   }
 
-  MemoryAddress addr;
+  MemoryAddress addr{};
   if (entry.IsDynamicAddress()) {
     addr = ResolveAddress(entry);
     entry.data->SetResolvedAddress(addr);
@@ -541,7 +541,7 @@ bool CheatTableModel::WriteEntryValue(const CheatTableEntry& entry,
     return false;
   }
 
-  MemoryAddress addr;
+  MemoryAddress addr{};
   if (entry.IsDynamicAddress()) {
     addr = ResolveAddress(entry);
     entry.data->SetResolvedAddress(addr);

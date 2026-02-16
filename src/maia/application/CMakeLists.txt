@@ -56,6 +56,7 @@ target_sources(
     cheat_table_model_test.cpp
     cheat_table_model_serialization_test.cpp
     pointer_scanner_model_test.cpp
+    pointer_scanner_viewmodel_test.cpp
     process_model_test.cpp
     throttled_value_cache_test.cpp
 )

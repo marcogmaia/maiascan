@@ -23,8 +23,6 @@ PointerScannerViewModel::PointerScannerViewModel(
       state_(state) {
   // Connect Model signals
   // clang-format off
-  Connect(connections_, pointer_scanner_model_.sinks().ProgressUpdated(),    this, Slot<&PointerScannerViewModel::OnProgressUpdated>);
-  Connect(connections_, pointer_scanner_model_.sinks().PathsUpdated(),       this, Slot<&PointerScannerViewModel::OnPathsUpdated>);
   Connect(connections_, pointer_scanner_model_.sinks().ValidationComplete(), this, Slot<&PointerScannerViewModel::OnValidationComplete>);
   Connect(connections_, process_model_.sinks().ActiveProcessChanged(),       this, Slot<&PointerScannerViewModel::OnActiveProcessChanged>);
   // clang-format on
@@ -117,11 +115,18 @@ void PointerScannerViewModel::OnCancelPressed() {
 void PointerScannerViewModel::OnResultDoubleClicked(size_t index) {
   auto paths = pointer_scanner_model_.GetPaths();
   if (index < paths.size()) {
-    auto resolved = pointer_scanner_model_.ResolvePath(paths[index]);
+    const auto& path = paths[index];
+    auto resolved = pointer_scanner_model_.ResolvePath(path);
     if (resolved) {
-      cheat_table_model_.AddEntry(*resolved,
-                                  pointer_scanner_model_.GetTargetType(),
-                                  "Pointer Path Result");
+      // Add as pointer chain entry to preserve the full path information
+      // for dynamic resolution on subsequent process launches.
+      cheat_table_model_.AddPointerChainEntry(
+          path.base_address,
+          path.offsets,
+          path.module_name,
+          path.module_offset,
+          pointer_scanner_model_.GetTargetType(),
+          "Pointer Path Result");
     }
   }
 }
@@ -146,15 +151,6 @@ std::optional<std::vector<std::byte>> PointerScannerViewModel::GetValue(
     }
     return std::optional<std::vector<std::byte>>{std::nullopt};
   });
-}
-
-void PointerScannerViewModel::OnProgressUpdated(float progress,
-                                                const std::string& operation) {
-  // Logic to handle progress updates if needed
-}
-
-void PointerScannerViewModel::OnPathsUpdated() {
-  // Notification that paths changed
 }
 
 void PointerScannerViewModel::OnValidationComplete(
